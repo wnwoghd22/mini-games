@@ -13,6 +13,11 @@ const CONFIG = {
         '#eab308', // Yellow
         '#a855f7'  // Purple
     ],
+    extraColors: [
+        { color: '#f97316', unlockScore: 500 },   // Orange
+        { color: '#ec4899', unlockScore: 1500 },  // Pink
+        { color: '#06b6d4', unlockScore: 3000 }   // Cyan
+    ],
     bg: '#0f172a',
     hexBg: '#1e293b',
     lineColor: '#ffffff',
@@ -125,9 +130,14 @@ class HexGame {
         this.isDragging = false;
         this.score = 0;
         this.scoreElement = document.getElementById('score-val');
+        this.pendingRefill = null;
+        this.isResolving = false;
+        this.isGameOver = false;
 
+        this.updateColorPool();
         this.initGrid();
         this.bindEvents();
+        this.checkGameOver();
         this.loop();
     }
 
@@ -156,7 +166,15 @@ class HexGame {
     }
 
     randomColor() {
-        return CONFIG.colors[Math.floor(Math.random() * CONFIG.colors.length)];
+        const pool = this.activeColors && this.activeColors.length ? this.activeColors : CONFIG.colors;
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    updateColorPool() {
+        const unlocked = CONFIG.extraColors
+            .filter(ec => this.score >= ec.unlockScore)
+            .map(ec => ec.color);
+        this.activeColors = [...CONFIG.colors, ...unlocked];
     }
 
     bindEvents() {
@@ -192,6 +210,8 @@ class HexGame {
     }
 
     handleInputStart(e) {
+        if (this.isResolving || this.isGameOver) return;
+
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
@@ -205,7 +225,7 @@ class HexGame {
     }
 
     handleInputMove(e) {
-        if (!this.isDragging) return;
+        if (!this.isDragging || this.isResolving || this.isGameOver) return;
 
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -238,10 +258,10 @@ class HexGame {
     }
 
     handleInputEnd(e) {
-        if (!this.isDragging) return;
+        if (!this.isDragging || this.isGameOver) return;
         this.isDragging = false;
 
-        if (this.selection.length >= 2) {
+        if (this.selection.length >= 3) {
             this.processMatch(this.selection);
         }
 
@@ -253,99 +273,91 @@ class HexGame {
         const count = matchChain.length;
         this.score += count * 10 * count;
         this.scoreElement.innerText = this.score.toLocaleString();
+        this.updateColorPool();
 
         const removedKeys = new Set(matchChain.map(c => c.hex.toString()));
-        removedKeys.forEach(key => this.grid.delete(key));
+        const now = Date.now();
 
-        this.applyGravity(removedKeys);
+        // Shrink matched tiles, then queue refill once the shrink finishes
+        removedKeys.forEach(key => {
+            const cell = this.grid.get(key);
+            if (!cell) return;
+            cell.anim = {
+                type: 'shrink',
+                start: now,
+                duration: 220,
+                startScale: cell.scale ?? 1,
+                endScale: 0
+            };
+        });
+
+        this.pendingRefill = {
+            keys: removedKeys,
+            start: now,
+            duration: 220
+        };
+        this.isResolving = true;
     }
 
-    applyGravity(removedKeys) {
-        // We need to process each column (q) affected.
-        // For Pointy Top, columns are roughly 'q'.
-        // Actually, in Pointy Top: x = f(q, r), y = f(r).
-        // Since y depends ONLY on r, 'r' creates the horizontal rows.
-        // But columns are diagonal.
-        // This is tricky. In Pointy Top, usually gravity works along the vertical axis,
-        // but the grid lines are diagonal.
-
-        // HOWEVER, we can just treat it as: "For every empty spot, try to pull from properties above."
-        // "Above" neighbors for (q, r):
-        // Top-Left: (q, r-1)
-        // Top-Right: (q+1, r-1)
-
-        // Simpler Gravity: "Vertical Drop".
-        // Since y = 1.5 * size * r.
-        // Increasing r is down.
-        // Decreasing r is up.
-        // We want to fill (q, r) with (q, r-1)??
-        // Wait, (q, r-1) is physically Top-Left.
-        // There is no (q, r-1) directly above in X.
-        // The "directly above" geometry is between (q, r-1) and (q+1, r-1).
-
-        // Let's implement a simpler "Refill from Top" where new tiles just appear/fall 
-        // into the empty spots, instead of complex sliding, to save complexity risk.
-        // AND ensure they ACTUALLY appear.
-
+    refillGrid(removedKeys) {
         const now = Date.now();
 
         removedKeys.forEach(key => {
             const [q, r, s] = key.split(',').map(Number);
             const hex = new Hex(q, r, s);
-            const pixel = this.layout.hexToPixel(hex);
 
-            // Create new tile
+            // Create new tile with scale 0
             const cell = {
                 hex: hex,
                 color: this.randomColor(),
-                scale: 1,
+                scale: 0,
                 anim: {
+                    type: 'grow',
                     start: now,
-                    duration: 600,
-                    fromY: -500 // Relative offset from current position? No, absolute.
+                    duration: 400,
+                    startScale: 0,
+                    endScale: 1
                 }
             };
-
-            // Logic for 'fromY':
-            // If we want it to start at screen top (y=0) and go to 'pixel.y'.
-            // The drawing logic uses: py = center.y + yOff.
-            // If yOff is calculated, let's say we want:
-            // Start: py = -50 (offscreen).
-            // End: py = pixel.y.
-            // yOff = (Start - End) * (1-ease).
-            // So StartOffset = -50 - pixel.y.
-
-            cell.anim.startOffset = -50 - pixel.y; // If pixel.y is 500, off is -550.
 
             this.grid.set(key, cell);
         });
     }
 
     drawHex(cell, isSelected) {
-        const center = this.layout.hexToPixel(cell.hex);
-        let yOff = 0;
-
+        // Handle Animation
         if (cell.anim) {
             const now = Date.now();
             const progress = (now - cell.anim.start) / cell.anim.duration;
 
             if (progress < 1) {
-                const ease = 1 - Math.pow(1 - progress, 3);
-                // We want: at prog=0, off=startOffset. At prog=1, off=0.
-                yOff = cell.anim.startOffset * (1 - ease);
+                // Elastic/BackOut easing for "pop" effect
+                // c3 = 2.70158
+                // 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+                // Let's use simple easeOutBack
+                const c1 = 1.70158;
+                const c3 = c1 + 1;
+                const x = progress - 1;
+                const ease = 1 + c3 * Math.pow(x, 3) + c1 * Math.pow(x, 2);
+
+                cell.scale = cell.anim.startScale + (cell.anim.endScale - cell.anim.startScale) * ease;
             } else {
+                cell.scale = cell.anim.endScale;
                 delete cell.anim;
             }
         }
 
-        const size = (this.layout.size - 2) * (cell.scale || 1);
+        const center = this.layout.hexToPixel(cell.hex);
+        const size = (this.layout.size - 2) * (cell.scale);
+
+        if (size <= 0) return;
 
         this.ctx.beginPath();
         for (let i = 0; i < 6; i++) {
             const angle_deg = 60 * i + 30;
             const angle_rad = Math.PI / 180 * angle_deg;
             const px = center.x + size * Math.cos(angle_rad);
-            const py = center.y + yOff + size * Math.sin(angle_rad);
+            const py = center.y + size * Math.sin(angle_rad);
             if (i === 0) this.ctx.moveTo(px, py);
             else this.ctx.lineTo(px, py);
         }
@@ -361,7 +373,96 @@ class HexGame {
         }
     }
 
+    updatePendingRefill() {
+        if (!this.pendingRefill) return;
+
+        const elapsed = Date.now() - this.pendingRefill.start;
+        if (elapsed < this.pendingRefill.duration) return;
+
+        this.pendingRefill.keys.forEach(key => this.grid.delete(key));
+        this.refillGrid(this.pendingRefill.keys);
+
+        this.pendingRefill = null;
+        this.isResolving = false;
+        this.checkGameOver();
+    }
+
+    drawConnectionLine() {
+        if (this.selection.length < 2) return;
+
+        this.ctx.strokeStyle = CONFIG.lineColor;
+        this.ctx.lineWidth = CONFIG.lineWidth;
+        this.ctx.lineJoin = 'round';
+        this.ctx.lineCap = 'round';
+
+        this.ctx.beginPath();
+        this.selection.forEach((cell, idx) => {
+            const { x, y } = this.layout.hexToPixel(cell.hex);
+            if (idx === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+        });
+        this.ctx.stroke();
+    }
+
+    checkGameOver() {
+        // If any same-color connected component has size >= 3, game continues
+        const visited = new Set();
+        for (const [key, cell] of this.grid) {
+            if (visited.has(key)) continue;
+
+            const color = cell.color;
+            const stack = [cell.hex];
+            let componentSize = 0;
+            const localVisited = new Set();
+
+            while (stack.length) {
+                const h = stack.pop();
+                const hKey = h.toString();
+                if (localVisited.has(hKey)) continue;
+                localVisited.add(hKey);
+                componentSize += 1;
+
+                for (let dir = 0; dir < 6; dir++) {
+                    const nHex = h.neighbor(dir);
+                    const nKey = nHex.toString();
+                    if (localVisited.has(nKey)) continue;
+                    const neighbor = this.grid.get(nKey);
+                    if (neighbor && neighbor.color === color) {
+                        stack.push(neighbor.hex);
+                    }
+                }
+            }
+
+            localVisited.forEach(k => visited.add(k));
+            if (componentSize >= 3) {
+                this.isGameOver = false;
+                return false;
+            }
+        }
+
+        this.isGameOver = true;
+        return true;
+    }
+
+    drawGameOverOverlay() {
+        this.ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.font = 'bold 48px Inter, sans-serif';
+        this.ctx.fillText('No moves left', this.canvas.width / 2, this.canvas.height / 2 - 10);
+        this.ctx.font = '24px Inter, sans-serif';
+        this.ctx.fillText('Refresh to restart', this.canvas.width / 2, this.canvas.height / 2 + 32);
+    }
+
     draw() {
+        this.updatePendingRefill();
+
         this.ctx.fillStyle = CONFIG.bg;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -373,6 +474,10 @@ class HexGame {
 
         // Draw connector
         this.drawConnectionLine();
+
+        if (this.isGameOver) {
+            this.drawGameOverOverlay();
+        }
 
         // Request next frame for animation
         requestAnimationFrame(() => this.draw());
