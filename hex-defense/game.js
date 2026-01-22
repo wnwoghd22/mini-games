@@ -301,9 +301,19 @@ class Game {
         this.lives = 20;
 
         // Wave Logic
+        this.waveState = 'preparing'; // 'preparing' | 'active'
+        this.waveCountdown = 5.0; // seconds before wave starts
+        this.prepareTime = 5.0; // default prepare time
         this.spawnTimer = 0;
-        this.enemiesToSpawn = 10;
         this.spawnInterval = 1.0;
+
+        // Current wave stats (calculated at wave start)
+        this.waveEnemyCount = 0;
+        this.waveEnemiesSpawned = 0;
+        this.waveEnemyHp = 0;
+        this.waveEnemySpeed = 0;
+
+        this.setupWave(this.wave);
 
         this.updateUI();
 
@@ -312,6 +322,7 @@ class Game {
         this.bindEvents();
 
         this.hoverHex = null;
+        this.lastTime = performance.now();
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -326,6 +337,9 @@ class Game {
         this.canvas.addEventListener('mousedown', (e) => this.handleInputStart(e));
         window.addEventListener('mousemove', (e) => this.handleInputMove(e)); // Global move
         window.addEventListener('mouseup', (e) => this.handleInputEnd(e));
+
+        // Right-click long press to sell turrets
+        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     }
 
     handleInputStart(e) {
@@ -336,99 +350,134 @@ class Game {
         const y = e.clientY - rect.top;
         const hex = this.layout.pixelToHex({ x, y });
 
-        // Check Turret
+        // Right-click: Start sell hold
+        if (e.button === 2) {
+            const turret = this.turrets.find(t => t.hex.equals(hex));
+            if (turret) {
+                this.sellingTurret = turret;
+                this.sellStartTime = performance.now();
+                this.sellDuration = 800; // ms to hold for sell
+            }
+            return;
+        }
+
+        // Left-click: Start chain
         const turret = this.turrets.find(t => t.hex.equals(hex));
         if (turret) {
-            this.draggingTurret = turret;
-            this.draggingTurretOrigin = hex;
-
-            // Create visual
-            this.dragHtmlElement = document.createElement('div');
-            this.dragHtmlElement.style.width = '40px';
-            this.dragHtmlElement.style.height = '40px';
-            this.dragHtmlElement.style.borderRadius = '50%';
-
-            let color = CONFIG.colors.turretRed;
-            if (turret.type === 'green') color = CONFIG.colors.turretGreen;
-            if (turret.type === 'blue') color = CONFIG.colors.turretBlue;
-
-            this.dragHtmlElement.style.backgroundColor = color;
-            this.dragHtmlElement.style.position = 'absolute';
-            this.dragHtmlElement.style.pointerEvents = 'none';
-            this.dragHtmlElement.style.zIndex = '100';
-            this.dragHtmlElement.style.transform = 'translate(-50%, -50%)';
-            document.body.appendChild(this.dragHtmlElement);
-
-            this.handleInputMove(e);
+            this.chainTurrets = [turret];
+            this.chainType = turret.type;
         }
     }
 
     handleInputMove(e) {
-        // Helper for both shop drag and board drag
-        if (this.dragHtmlElement) {
-            this.dragHtmlElement.style.left = e.clientX + 'px';
-            this.dragHtmlElement.style.top = e.clientY + 'px';
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const hex = this.layout.pixelToHex({ x, y });
+
+        // Track hover for turret info
+        this.hoverTurret = this.turrets.find(t => t.hex.equals(hex)) || null;
+
+        // Chain connect: add adjacent same-type turrets
+        if (this.chainTurrets && this.chainTurrets.length > 0) {
+            const turret = this.turrets.find(t => t.hex.equals(hex));
+            if (turret && turret.type === this.chainType && !this.chainTurrets.includes(turret)) {
+                // Check if adjacent to last turret in chain
+                const lastTurret = this.chainTurrets[this.chainTurrets.length - 1];
+                const dist = lastTurret.hex.distance(turret.hex);
+                if (dist === 1) {
+                    this.chainTurrets.push(turret);
+                }
+            }
+        }
+
+        // Cancel sell if mouse moves off turret
+        if (this.sellingTurret) {
+            const stillOnTurret = this.turrets.find(t => t.hex.equals(hex));
+            if (stillOnTurret !== this.sellingTurret) {
+                this.sellingTurret = null;
+                this.sellStartTime = null;
+            }
         }
     }
 
     handleInputEnd(e) {
-        if (this.draggingTurret) {
-            // End Board Drag
-            const rect = this.canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const targetHex = this.layout.pixelToHex({ x, y });
-
-            // Logic:
-            // 1. If target is same as origin -> Click/Select (do nothing for now)
-            // 2. If target has turret -> Check Merge
-            // 3. If target empty -> Move (Allow for now)
-
-            const targetTurret = this.turrets.find(t => t.hex.equals(targetHex));
-
-            if (targetTurret && targetTurret !== this.draggingTurret) {
-                // Merge Check
-                if (targetTurret.type === this.draggingTurret.type) {
-                    this.mergeTurrets(targetTurret, this.draggingTurret);
-                }
-            } else if (!targetTurret) {
-                // Move Check: Must be empty and valid
-                const cell = this.map.get(targetHex.toString());
-                if (cell && cell.type === 'empty') {
-                    // Move
-                    // Update Map
-                    const oldKey = this.draggingTurretOrigin.toString();
-                    if (this.map.get(oldKey)) this.map.get(oldKey).type = 'empty';
-
-                    cell.type = 'turret';
-                    this.draggingTurret.hex = targetHex;
-                }
-            }
-
-            // Cleanup
-            if (this.dragHtmlElement) this.dragHtmlElement.remove();
-            this.dragHtmlElement = null;
-            this.draggingTurret = null;
-            this.draggingTurretOrigin = null;
+        // Right-click release: cancel sell (if not completed in update)
+        if (e.button === 2) {
+            this.sellingTurret = null;
+            this.sellStartTime = null;
+            return;
         }
+
+        // Left-click release: complete chain
+        if (this.chainTurrets && this.chainTurrets.length >= 3) {
+            this.mergeChain(this.chainTurrets);
+        }
+
+        // Cleanup
+        this.chainTurrets = null;
+        this.chainType = null;
     }
 
-    mergeTurrets(target, source) {
-        // Upgrade target
-        target.range += 1;
-        target.maxCooldown *= 0.8; // Faster
+    getTurretSellPrice(turret) {
+        // Base 5g + bonus for upgrades
+        return 5 + Math.floor((turret.range - 4) * 2);
+    }
 
-        // Remove source
-        // 1. Remove from array
-        const idx = this.turrets.indexOf(source);
+    getTurretDamage(turret) {
+        if (turret.type === 'red') return 2;
+        if (turret.type === 'green') return 5;
+        return 1; // blue
+    }
+
+    sellTurret(turret) {
+        // Refund gold based on turret stats
+        const refund = this.getTurretSellPrice(turret);
+        this.gold += refund;
+        this.updateUI();
+
+        // Remove turret
+        const idx = this.turrets.indexOf(turret);
         if (idx > -1) this.turrets.splice(idx, 1);
 
-        // 2. Clear map cell
-        const key = source.hex.toString();
+        // Clear map cell
+        const key = turret.hex.toString();
         const cell = this.map.get(key);
         if (cell) cell.type = 'empty';
 
-        // Visual Feedback (Flash?)
+        // Recalculate path
+        this.generatePath();
+        for (const enemy of this.enemies) {
+            this.updateEnemyPath(enemy);
+        }
+    }
+
+    mergeChain(chain) {
+        if (chain.length < 3) return;
+
+        const target = chain[0];
+        const bonusMultiplier = 1 + (chain.length - 2) * 0.5; // 3개: 1.5x, 4개: 2x, ...
+
+        // Upgrade target based on chain length
+        target.range += chain.length - 1;
+        target.maxCooldown *= Math.pow(0.8, chain.length - 1);
+
+        // Remove all others
+        for (let i = 1; i < chain.length; i++) {
+            const source = chain[i];
+            const idx = this.turrets.indexOf(source);
+            if (idx > -1) this.turrets.splice(idx, 1);
+
+            const key = source.hex.toString();
+            const cell = this.map.get(key);
+            if (cell) cell.type = 'empty';
+        }
+
+        // Recalculate path
+        this.generatePath();
+        for (const enemy of this.enemies) {
+            this.updateEnemyPath(enemy);
+        }
     }
 
     updateUI() {
@@ -473,7 +522,12 @@ class Game {
         this.dragHtmlElement.style.left = (e.clientX - 60) + 'px';
         this.dragHtmlElement.style.top = (e.clientY - 60) + 'px';
 
-        // Highlight grid?
+        // Update hoverHex for preview
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        this.hoverHex = this.layout.pixelToHex({ x, y });
+        this.hoverValid = this.draggingItem ? this.canPlaceItem(this.draggingItem, this.hoverHex) : false;
     }
 
     handleDragEnd(e) {
@@ -499,15 +553,50 @@ class Game {
 
     canPlaceItem(item, centerHex) {
         // Check bounds and overlapping
+        const hexesToPlace = [];
         for (const t of item.turrets) {
             const h = centerHex.add(new Hex(t.q, t.r, t.s));
             const key = h.toString();
             const cell = this.map.get(key);
 
-            // Limit: Must be free, not path, not wall
-            if (!cell || cell.type !== 'empty') return false;
+            // Must be free (empty or path, but not turret/wall)
+            if (!cell || cell.type === 'turret' || cell.type === 'wall') return false;
+            hexesToPlace.push(key);
         }
-        return true;
+
+        // Check if path would still exist after placement (maze building validation)
+        return this.hasValidPath(hexesToPlace);
+    }
+
+    hasValidPath(blockedKeys = []) {
+        // BFS to check if path exists from start to end, treating blockedKeys as obstacles
+        const frontier = [this.startHex];
+        const visited = new Set();
+        visited.add(this.startHex.toString());
+
+        while (frontier.length > 0) {
+            const current = frontier.shift();
+
+            if (current.equals(this.endHex)) return true;
+
+            for (let i = 0; i < 6; i++) {
+                const next = current.neighbor(i);
+                const key = next.toString();
+
+                if (visited.has(key)) continue;
+                if (!this.map.has(key)) continue;
+
+                const cell = this.map.get(key);
+                // Skip existing turrets/walls and simulated blocked cells
+                if (cell.type === 'turret' || cell.type === 'wall') continue;
+                if (blockedKeys.includes(key)) continue;
+
+                visited.add(key);
+                frontier.push(next);
+            }
+        }
+
+        return false; // No path found
     }
 
     placeItem(item, centerHex) {
@@ -531,30 +620,91 @@ class Game {
                 maxCooldown: t.type === 'red' ? 0.2 : 1.0
             });
         }
+
+        // Recalculate path (maze building)
+        this.generatePath();
+
+        // Update existing enemies to use new path
+        for (const enemy of this.enemies) {
+            this.updateEnemyPath(enemy);
+        }
+    }
+
+    updateEnemyPath(enemy) {
+        // Find closest path node ahead of enemy's current position
+        const enemyHex = new Hex(Math.round(enemy.q), Math.round(enemy.r), Math.round(enemy.s));
+
+        let bestIndex = -1;
+        let bestDist = Infinity;
+
+        for (let i = 0; i < this.path.length; i++) {
+            const dist = enemyHex.distance(this.path[i]);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIndex = i;
+            }
+        }
+
+        if (bestIndex >= 0) {
+            // Create new path starting from current position
+            enemy.path = this.path.slice(bestIndex);
+            enemy.pathIndex = 0;
+        }
+    }
+
+    setupWave(waveNum) {
+        // Calculate wave stats
+        this.waveEnemyCount = 10 + waveNum * 2;
+        this.waveEnemiesSpawned = 0;
+        this.waveEnemyHp = 10 + (waveNum * 5);
+        this.waveEnemySpeed = 2 + (waveNum * 0.1);
+        this.spawnInterval = Math.max(0.2, 1.0 - waveNum * 0.05);
+        this.spawnTimer = 0;
+
+        // Reset to preparing state
+        this.waveState = 'preparing';
+        this.waveCountdown = this.prepareTime;
     }
 
     spawnEnemy() {
         if (!this.path || this.path.length === 0) return;
-        const speed = 2 + (this.wave * 0.1);
-        const hp = 10 + (this.wave * 5);
-        this.enemies.push(new Enemy(this.path, speed, hp));
+        this.enemies.push(new Enemy(this.path, this.waveEnemySpeed, this.waveEnemyHp));
+        this.waveEnemiesSpawned++;
     }
 
     update(dt) {
-        // Spawning
-        if (this.enemiesToSpawn > 0) {
-            this.spawnTimer -= dt;
-            if (this.spawnTimer <= 0) {
-                this.spawnEnemy();
-                this.enemiesToSpawn--;
-                this.spawnTimer = this.spawnInterval;
+        // Check sell progress
+        if (this.sellingTurret && this.sellStartTime) {
+            const elapsed = performance.now() - this.sellStartTime;
+            if (elapsed >= this.sellDuration) {
+                // Sell complete
+                this.sellTurret(this.sellingTurret);
+                this.sellingTurret = null;
+                this.sellStartTime = null;
             }
-        } else if (this.enemies.length === 0) {
-            // Wave Clear
-            this.wave++;
-            this.enemiesToSpawn = 10 + this.wave * 2;
-            this.spawnInterval = Math.max(0.2, 1.0 - this.wave * 0.05);
-            this.updateUI();
+        }
+
+        // Wave State Machine
+        if (this.waveState === 'preparing') {
+            this.waveCountdown -= dt;
+            if (this.waveCountdown <= 0) {
+                this.waveState = 'active';
+                this.waveCountdown = 0;
+            }
+        } else if (this.waveState === 'active') {
+            // Spawning
+            if (this.waveEnemiesSpawned < this.waveEnemyCount) {
+                this.spawnTimer -= dt;
+                if (this.spawnTimer <= 0) {
+                    this.spawnEnemy();
+                    this.spawnTimer = this.spawnInterval;
+                }
+            } else if (this.enemies.length === 0) {
+                // Wave Clear - next wave
+                this.wave++;
+                this.updateUI();
+                this.setupWave(this.wave);
+            }
         }
 
         // Update Enemies
@@ -676,8 +826,9 @@ class Game {
                 const key = next.toString();
 
                 if (this.map.has(key) && !cameFrom.has(key)) {
-                    // Check if obstacle (future logic)
-                    // if (this.map.get(key).type === 'wall') continue;
+                    const cell = this.map.get(key);
+                    // Skip turrets and walls (maze building)
+                    if (cell.type === 'turret' || cell.type === 'wall') continue;
 
                     frontier.push(next);
                     cameFrom.set(key, current);
@@ -709,6 +860,11 @@ class Game {
         // Draw Map
         for (const [key, cell] of this.map) {
             this.drawHex(cell);
+        }
+
+        // Draw Turrets
+        for (const turret of this.turrets) {
+            this.drawTurret(turret);
         }
 
         // Draw Start/End Markers
@@ -771,6 +927,189 @@ class Game {
                 this.ctx.stroke();
             });
         }
+
+        // Draw Chain Connect visual
+        if (this.chainTurrets && this.chainTurrets.length > 0) {
+            // Draw lines connecting chain
+            this.ctx.strokeStyle = '#fbbf24'; // Yellow/gold
+            this.ctx.lineWidth = 4;
+            this.ctx.beginPath();
+
+            for (let i = 0; i < this.chainTurrets.length; i++) {
+                const pos = this.layout.hexToPixel(this.chainTurrets[i].hex);
+                if (i === 0) this.ctx.moveTo(pos.x, pos.y);
+                else this.ctx.lineTo(pos.x, pos.y);
+            }
+            this.ctx.stroke();
+
+            // Highlight chained turrets
+            for (const turret of this.chainTurrets) {
+                const center = this.layout.hexToPixel(turret.hex);
+                this.ctx.beginPath();
+                this.ctx.arc(center.x, center.y, this.layout.size * 0.6, 0, Math.PI * 2);
+                this.ctx.strokeStyle = this.chainTurrets.length >= 3 ? '#22c55e' : '#fbbf24';
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+            }
+
+            // Show chain count
+            if (this.chainTurrets.length >= 2) {
+                const lastTurret = this.chainTurrets[this.chainTurrets.length - 1];
+                const pos = this.layout.hexToPixel(lastTurret.hex);
+                this.ctx.fillStyle = this.chainTurrets.length >= 3 ? '#22c55e' : '#fbbf24';
+                this.ctx.font = 'bold 16px sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(`x${this.chainTurrets.length}`, pos.x, pos.y - this.layout.size - 10);
+            }
+        }
+
+        // Draw Sell Gauge (right-click hold)
+        if (this.sellingTurret && this.sellStartTime) {
+            const pos = this.layout.hexToPixel(this.sellingTurret.hex);
+            const elapsed = performance.now() - this.sellStartTime;
+            const progress = Math.min(elapsed / this.sellDuration, 1);
+            const radius = this.layout.size + 8;
+
+            // Background circle
+            this.ctx.beginPath();
+            this.ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            this.ctx.lineWidth = 6;
+            this.ctx.stroke();
+
+            // Progress arc (clockwise from top)
+            this.ctx.beginPath();
+            this.ctx.arc(pos.x, pos.y, radius, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+            this.ctx.strokeStyle = progress >= 1 ? '#22c55e' : '#ef4444';
+            this.ctx.lineWidth = 6;
+            this.ctx.stroke();
+
+            // Sell price text
+            const sellPrice = this.getTurretSellPrice(this.sellingTurret);
+            this.ctx.fillStyle = '#fbbf24';
+            this.ctx.font = 'bold 18px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(`+${sellPrice}g`, pos.x, pos.y - radius - 15);
+        }
+
+        // Draw Turret Info (hover)
+        if (this.hoverTurret && !this.sellingTurret && !this.chainTurrets) {
+            const turret = this.hoverTurret;
+            const pos = this.layout.hexToPixel(turret.hex);
+
+            // Info panel background
+            const panelX = pos.x + this.layout.size + 10;
+            const panelY = pos.y - 40;
+            const panelW = 90;
+            const panelH = 65;
+
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            this.ctx.fillRect(panelX, panelY, panelW, panelH);
+            this.ctx.strokeStyle = '#475569';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+            // Info text
+            this.ctx.font = '12px sans-serif';
+            this.ctx.textAlign = 'left';
+            this.ctx.textBaseline = 'top';
+
+            const damage = this.getTurretDamage(turret);
+            const dps = (damage / turret.maxCooldown).toFixed(1);
+
+            this.ctx.fillStyle = '#ef4444';
+            this.ctx.fillText(`DMG: ${damage}`, panelX + 8, panelY + 8);
+
+            this.ctx.fillStyle = '#3b82f6';
+            this.ctx.fillText(`RNG: ${turret.range}`, panelX + 8, panelY + 24);
+
+            this.ctx.fillStyle = '#22c55e';
+            this.ctx.fillText(`DPS: ${dps}`, panelX + 8, panelY + 40);
+        }
+
+        // Draw Wave Info Panel (top-left)
+        this.drawWaveInfo();
+    }
+
+    drawWaveInfo() {
+        const panelX = 20;
+        const panelY = 80;
+        const panelW = 160;
+        const panelH = this.waveState === 'preparing' ? 100 : 80;
+
+        // Panel background
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.fillRect(panelX, panelY, panelW, panelH);
+        this.ctx.strokeStyle = '#475569';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+        this.ctx.textAlign = 'left';
+        this.ctx.textBaseline = 'top';
+
+        if (this.waveState === 'preparing') {
+            // Countdown display
+            this.ctx.font = 'bold 14px sans-serif';
+            this.ctx.fillStyle = '#fbbf24';
+            this.ctx.fillText(`WAVE ${this.wave} INCOMING`, panelX + 10, panelY + 10);
+
+            // Big countdown number
+            this.ctx.font = 'bold 32px sans-serif';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(Math.ceil(this.waveCountdown).toString(), panelX + panelW / 2, panelY + 32);
+
+            // Enemy preview
+            this.ctx.font = '12px sans-serif';
+            this.ctx.textAlign = 'left';
+            this.ctx.fillStyle = '#94a3b8';
+            this.ctx.fillText(`Enemies: ${this.waveEnemyCount}`, panelX + 10, panelY + 72);
+            this.ctx.fillText(`HP: ${this.waveEnemyHp}`, panelX + 90, panelY + 72);
+        } else {
+            // Active wave info
+            this.ctx.font = 'bold 14px sans-serif';
+            this.ctx.fillStyle = '#ef4444';
+            this.ctx.fillText(`WAVE ${this.wave}`, panelX + 10, panelY + 10);
+
+            const remaining = this.waveEnemyCount - this.waveEnemiesSpawned + this.enemies.length;
+
+            this.ctx.font = '12px sans-serif';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText(`Remaining: ${remaining}`, panelX + 10, panelY + 32);
+
+            this.ctx.fillStyle = '#94a3b8';
+            this.ctx.fillText(`HP: ${this.waveEnemyHp}`, panelX + 10, panelY + 50);
+            this.ctx.fillText(`Speed: ${this.waveEnemySpeed.toFixed(1)}`, panelX + 80, panelY + 50);
+        }
+
+        // Draw countdown overlay in center when preparing
+        if (this.waveState === 'preparing' && this.waveCountdown > 0) {
+            const centerX = this.canvas.width / 2;
+            const centerY = this.canvas.height / 2 - 100;
+
+            // Semi-transparent background
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Countdown arc
+            const progress = 1 - (this.waveCountdown / this.prepareTime);
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, 55, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+            this.ctx.strokeStyle = '#fbbf24';
+            this.ctx.lineWidth = 6;
+            this.ctx.stroke();
+
+            // Countdown number
+            this.ctx.font = 'bold 48px sans-serif';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(Math.ceil(this.waveCountdown).toString(), centerX, centerY);
+        }
     }
 
     drawMarker(hex, color) {
@@ -813,6 +1152,33 @@ class Game {
         // this.ctx.textAlign = 'center';
         // this.ctx.textBaseline = 'middle';
         // this.ctx.fillText(`${cell.hex.q},${cell.hex.r}`, center.x, center.y);
+    }
+
+    drawTurret(turret) {
+        const center = this.layout.hexToPixel(turret.hex);
+        const size = this.layout.size - 2;
+
+        // Draw hex shape
+        this.ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle_deg = 60 * i + 30;
+            const angle_rad = Math.PI / 180 * angle_deg;
+            const px = center.x + size * Math.cos(angle_rad);
+            const py = center.y + size * Math.sin(angle_rad);
+            if (i === 0) this.ctx.moveTo(px, py);
+            else this.ctx.lineTo(px, py);
+        }
+        this.ctx.closePath();
+
+        // Color based on type
+        if (turret.type === 'red') this.ctx.fillStyle = CONFIG.colors.turretRed;
+        else if (turret.type === 'green') this.ctx.fillStyle = CONFIG.colors.turretGreen;
+        else if (turret.type === 'blue') this.ctx.fillStyle = CONFIG.colors.turretBlue;
+
+        this.ctx.fill();
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
     }
 
     loop() {
