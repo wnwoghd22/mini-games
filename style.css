@@ -23,7 +23,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow-x: hidden;
-    background-image: 
+    background-image:
         radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.1) 0%, transparent 40%),
         radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 40%);
 }
@@ -39,6 +39,7 @@ h1 {
     font-weight: 800;
     background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 1rem;
     letter-spacing: -0.02em;
@@ -80,7 +81,6 @@ main {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    group: game-card;
 }
 
 .game-card::before {
@@ -110,6 +110,7 @@ main {
     margin-bottom: 1.5rem;
     background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
