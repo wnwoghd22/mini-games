@@ -4,15 +4,45 @@
  */
 
 const CONFIG = {
-    hexSize: 30, // Slightly smaller than hex-connect to fit more map
-    gridRadius: 8,
+    hexSize: 25,
+    gridRadius: 6,
     colors: {
-        turretRed: '#ef4444',    // Rapid
-        turretGreen: '#22c55e',  // Slow
-        turretBlue: '#3b82f6',   // Weaken
+        turretYellow: '#fbbf24', // Rapid (속공) - fast attack, low damage
+        turretRed: '#ef4444',    // Heavy (강공) - slow attack, high damage
+        turretBlue: '#3b82f6',   // Slow (둔화) - slows enemies
         bg: '#0b1121',
         hexBg: '#1e293b',
         path: '#334155'
+    },
+    turretTypes: {
+        yellow: {
+            name: 'Rapid',
+            nameKr: '속공',
+            damage: 1,
+            range: 3,
+            cooldown: 0.15,
+            desc: '빠른 공격 속도, 낮은 데미지',
+            mergeBonus: { damage: 0, range: 0.5, cooldown: 0.7 } // cooldown multiplier per merge
+        },
+        red: {
+            name: 'Heavy',
+            nameKr: '강공',
+            damage: 5,
+            range: 4,
+            cooldown: 1.2,
+            desc: '느린 공격 속도, 높은 데미지',
+            mergeBonus: { damage: 3, range: 1, cooldown: 1 } // no cooldown change
+        },
+        blue: {
+            name: 'Slow',
+            nameKr: '둔화',
+            damage: 1,
+            range: 3,
+            cooldown: 0.8,
+            slowAmount: 0.3,
+            desc: '적의 이동 속도 감소',
+            mergeBonus: { damage: 0, range: 0.7, cooldown: 1, slowAmount: 0.5 }
+        }
     }
 };
 
@@ -192,7 +222,7 @@ class TilePoly {
     }
 
     static randomTurretType() {
-        const types = ['red', 'green', 'blue'];
+        const types = ['yellow', 'red', 'blue'];
         return types[Math.floor(Math.random() * types.length)];
     }
 }
@@ -281,7 +311,7 @@ class ShopSystem {
             ctx.closePath();
 
             if (t.type === 'red') ctx.fillStyle = CONFIG.colors.turretRed;
-            else if (t.type === 'green') ctx.fillStyle = CONFIG.colors.turretGreen;
+            else if (t.type === 'yellow') ctx.fillStyle = CONFIG.colors.turretYellow;
             else if (t.type === 'blue') ctx.fillStyle = CONFIG.colors.turretBlue;
 
             ctx.fill();
@@ -427,14 +457,12 @@ class Game {
     }
 
     getTurretSellPrice(turret) {
-        // Base 5g + bonus for upgrades
-        return 5 + Math.floor((turret.range - 4) * 2);
+        // Base 5g + bonus for merge level
+        return 5 + turret.mergeLevel * 5;
     }
 
     getTurretDamage(turret) {
-        if (turret.type === 'red') return 2;
-        if (turret.type === 'green') return 5;
-        return 1; // blue
+        return turret.damage;
     }
 
     sellTurret(turret) {
@@ -464,10 +492,20 @@ class Game {
 
         // Target is the LAST turret in chain (end position)
         const target = chain[chain.length - 1];
+        const mergeCount = chain.length - 1;
+        const bonus = CONFIG.turretTypes[target.type].mergeBonus;
 
-        // Upgrade target based on chain length
-        target.range += chain.length - 1;
-        target.maxCooldown *= Math.pow(0.8, chain.length - 1);
+        // Apply type-specific merge bonuses
+        // Yellow (속공): no damage, small range, big cooldown reduction
+        // Red (강공): no cooldown change, big damage and range
+        // Blue (둔화): no damage/cooldown, medium range, stronger slow
+        target.damage += bonus.damage * mergeCount;
+        target.range += bonus.range * mergeCount;
+        target.maxCooldown *= Math.pow(bonus.cooldown, mergeCount);
+        if (bonus.slowAmount) {
+            target.slowAmount += bonus.slowAmount * mergeCount;
+        }
+        target.mergeLevel += mergeCount;
 
         // Remove all others (except last)
         for (let i = 0; i < chain.length - 1; i++) {
@@ -496,7 +534,9 @@ class Game {
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
-        this.layout = new Layout(CONFIG.hexSize, { x: this.canvas.width / 2, y: this.canvas.height / 2 });
+        // Offset left to make room for right side panel
+        const offsetX = (this.canvas.width - 120) / 2;
+        this.layout = new Layout(CONFIG.hexSize, { x: offsetX, y: this.canvas.height / 2 });
     }
 
     // ... initMap and generatePath ...
@@ -620,15 +660,17 @@ class Game {
             const cell = this.map.get(key);
 
             cell.type = 'turret';
-            // Store turret data (make a Turret class later?)
-            // For now simple object
+            // Get stats from CONFIG
+            const typeConfig = CONFIG.turretTypes[t.type];
             this.turrets.push({
                 hex: h,
                 type: t.type,
-                // Add combat stats later
-                range: 4,
+                damage: typeConfig.damage,
+                range: typeConfig.range,
                 cooldown: 0,
-                maxCooldown: t.type === 'red' ? 0.2 : 1.0
+                maxCooldown: typeConfig.cooldown,
+                slowAmount: typeConfig.slowAmount || 0,
+                mergeLevel: 0
             });
         }
 
@@ -765,24 +807,19 @@ class Game {
                 if (target) {
                     // Fire!
                     t.cooldown = t.maxCooldown;
-                    // Damage
-                    let dmg = 1;
-                    if (t.type === 'red') dmg = 2; // Rapid/Strong
-                    else if (t.type === 'green') dmg = 5; // Slow/Heavy
 
-                    // Effect
-                    if (t.type === 'blue') {
-                        // Apply slow/weaken (TODO)
-                        target.speed *= 0.8;
-                    }
-
-                    target.hp -= dmg;
+                    // Apply damage from turret stats
+                    target.hp -= t.damage;
                     if (target.hp <= 0) target.alive = false;
 
+                    // Apply slow effect (blue turrets)
+                    if (t.type === 'blue' && t.slowAmount > 0) {
+                        // Reduce speed, minimum 0.1
+                        target.speed = Math.max(target.speed - t.slowAmount, 0.1);
+                    }
+
                     // Visual: Store laser line to draw
-                    t.lastTarget = { x: target.q, y: target.r }; // just store hex coords roughly? No, need pixel.
-                    // We'll calculate pixel in draw for simplicity or store here.
-                    // Let's store a timer for drawing the laser
+                    t.lastTarget = { x: target.q, y: target.r };
                     t.fireAnim = 0.1;
                 }
             }
@@ -901,7 +938,7 @@ class Game {
                 this.ctx.lineTo(end.x, end.y);
 
                 let color = CONFIG.colors.turretRed;
-                if (t.type === 'green') color = CONFIG.colors.turretGreen;
+                if (t.type === 'yellow') color = CONFIG.colors.turretYellow;
                 if (t.type === 'blue') color = CONFIG.colors.turretBlue;
 
                 this.ctx.strokeStyle = color;
@@ -1028,16 +1065,22 @@ class Game {
             this.ctx.textBaseline = 'top';
 
             const damage = this.getTurretDamage(turret);
-            const dps = (damage / turret.maxCooldown).toFixed(1);
 
             this.ctx.fillStyle = '#ef4444';
             this.ctx.fillText(`DMG: ${damage}`, panelX + 8, panelY + 8);
 
             this.ctx.fillStyle = '#3b82f6';
-            this.ctx.fillText(`RNG: ${turret.range}`, panelX + 8, panelY + 24);
+            this.ctx.fillText(`RNG: ${turret.range.toFixed(1)}`, panelX + 8, panelY + 24);
 
-            this.ctx.fillStyle = '#22c55e';
-            this.ctx.fillText(`DPS: ${dps}`, panelX + 8, panelY + 40);
+            // Show SLOW for blue turrets, DPS for others
+            if (turret.type === 'blue') {
+                this.ctx.fillStyle = '#38bdf8';
+                this.ctx.fillText(`SLOW: ${turret.slowAmount.toFixed(1)}`, panelX + 8, panelY + 40);
+            } else {
+                const dps = (damage / turret.maxCooldown).toFixed(1);
+                this.ctx.fillStyle = '#22c55e';
+                this.ctx.fillText(`DPS: ${dps}`, panelX + 8, panelY + 40);
+            }
         }
 
         // Draw Wave Info Panel (top-left)
@@ -1183,7 +1226,7 @@ class Game {
 
         // Color based on type
         if (turret.type === 'red') this.ctx.fillStyle = CONFIG.colors.turretRed;
-        else if (turret.type === 'green') this.ctx.fillStyle = CONFIG.colors.turretGreen;
+        else if (turret.type === 'yellow') this.ctx.fillStyle = CONFIG.colors.turretYellow;
         else if (turret.type === 'blue') this.ctx.fillStyle = CONFIG.colors.turretBlue;
 
         this.ctx.fill();

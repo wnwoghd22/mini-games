@@ -28,10 +28,53 @@
             </div>
         </div>
 
-        <!-- Bottom Shop -->
+        <!-- Turret Info Panel (top-right) -->
+        <div class="turret-info-panel">
+            <div class="info-left">
+                <div class="panel-title">터렛 정보</div>
+                <div class="turret-type yellow">
+                    <div class="turret-icon yellow-icon"></div>
+                    <div class="turret-details">
+                        <span class="turret-name">속공 (Rapid)</span>
+                        <span class="turret-desc">빠른 공격, 낮은 데미지</span>
+                        <span class="merge-info">머지: 공속 ↑↑</span>
+                    </div>
+                </div>
+                <div class="turret-type red">
+                    <div class="turret-icon red-icon"></div>
+                    <div class="turret-details">
+                        <span class="turret-name">강공 (Heavy)</span>
+                        <span class="turret-desc">느린 공격, 높은 데미지</span>
+                        <span class="merge-info">머지: 공격력 ↑↑, 범위 ↑</span>
+                    </div>
+                </div>
+                <div class="turret-type blue">
+                    <div class="turret-icon blue-icon"></div>
+                    <div class="turret-details">
+                        <span class="turret-name">둔화 (Slow)</span>
+                        <span class="turret-desc">적 이동 속도 감소</span>
+                        <span class="merge-info">머지: 둔화 ↑↑, 범위 ↑</span>
+                    </div>
+                </div>
+            </div>
+            <div class="info-right">
+                <div class="panel-title">조작법</div>
+                <div class="control-section">
+                    <div class="control-title">체인 머지</div>
+                    <div class="control-desc">같은 색 터렛 3개+<br>드래그로 연결</div>
+                    <div class="control-hint">🖱️ 좌클릭 드래그</div>
+                </div>
+                <div class="control-section">
+                    <div class="control-title">판매</div>
+                    <div class="control-hint">🖱️ 우클릭 홀드</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side Shop -->
         <div class="shop-container">
             <div class="shop-header">
-                <span>Reinforcements</span>
+                <span>타일</span>
                 <button id="reroll-btn" class="btn-secondary">Reroll (10g)</button>
             </div>
             <div id="shop-items" class="shop-items">
