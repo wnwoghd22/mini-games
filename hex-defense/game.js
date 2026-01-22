@@ -311,6 +311,8 @@ class Game {
 
         this.bindEvents();
 
+        this.hoverHex = null;
+
         this.resize();
         window.addEventListener('resize', () => this.resize());
 
@@ -492,6 +494,7 @@ class Game {
         }
 
         this.draggingItem = null;
+        this.hoverHex = null;
     }
 
     canPlaceItem(item, centerHex) {
@@ -740,6 +743,34 @@ class Game {
                 this.ctx.globalAlpha = 1.0;
             }
         });
+
+        // Draw Placement Ghost
+        if (this.draggingItem && this.hoverHex) {
+            const centerHex = this.hoverHex;
+            this.draggingItem.turrets.forEach(t => {
+                const h = centerHex.add(new Hex(t.q, t.r, t.s));
+                // Manually calculate pixel pos
+                const center = this.layout.hexToPixel(h);
+                const size = (this.layout.size - 2);
+
+                this.ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle_deg = 60 * i + 30;
+                    const angle_rad = Math.PI / 180 * angle_deg;
+                    const px = center.x + size * Math.cos(angle_rad);
+                    const py = center.y + size * Math.sin(angle_rad);
+                    if (i === 0) this.ctx.moveTo(px, py);
+                    else this.ctx.lineTo(px, py);
+                }
+                this.ctx.closePath();
+
+                this.ctx.fillStyle = this.hoverValid ? 'rgba(255, 255, 255, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+            });
+        }
     }
 
     drawMarker(hex, color) {
