@@ -1,0 +1,161 @@
+:root {
+    --bg-color: #0b1121;
+    --hex-bg: #1e293b;
+    --accent: #38bdf8;
+    --gold: #fbbf24;
+    --danger: #f87171;
+    --panel-bg: rgba(15, 23, 42, 0.85);
+    --font-main: 'Outfit', sans-serif;
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: var(--bg-color);
+    font-family: var(--font-main);
+    color: white;
+    user-select: none;
+}
+
+canvas {
+    display: block;
+}
+
+#game-ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* Let canvas handle game inputs */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.top-bar {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1.5rem;
+    pointer-events: auto;
+}
+
+.stat-box {
+    background: var(--panel-bg);
+    backdrop-filter: blur(8px);
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.stat-box .label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #94a3b8;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.stat-box .value {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.stat-box .value.yellow {
+    color: var(--gold);
+}
+
+.stat-box .value.red {
+    color: var(--danger);
+}
+
+.shop-container {
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1.5rem;
+    pointer-events: auto;
+    padding-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+}
+
+.shop-header {
+    width: 100%;
+    max-width: 800px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.shop-header span {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #e2e8f0;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.shop-items {
+    display: flex;
+    gap: 1.5rem;
+    height: 120px;
+    width: 100%;
+    max-width: 800px;
+    justify-content: center;
+}
+
+.shop-slot {
+    width: 120px;
+    height: 120px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.shop-slot:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(30, 41, 59, 0.8);
+}
+
+.price-tag {
+    position: absolute;
+    bottom: -10px;
+    background: var(--bg-color);
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}

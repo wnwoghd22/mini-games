@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hex Defense</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div id="game-ui">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="stat-box">
+                <span class="label">Wave</span>
+                <span id="wave-val" class="value">1</span>
+            </div>
+            <div class="stat-box">
+                <span class="label">Gold</span>
+                <span id="gold-val" class="value yellow">100</span>
+            </div>
+            <div class="stat-box">
+                <span class="label">Lives</span>
+                <span id="lives-val" class="value red">20</span>
+            </div>
+        </div>
+
+        <!-- Bottom Shop -->
+        <div class="shop-container">
+            <div class="shop-header">
+                <span>Reinforcements</span>
+                <button id="reroll-btn" class="btn-secondary">Reroll (10g)</button>
+            </div>
+            <div id="shop-items" class="shop-items">
+                <!-- Shop items will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <canvas id="game-canvas"></canvas>
+
+    <script type="module" src="game.js"></script>
+</body>
+
+</html>
