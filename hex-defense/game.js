@@ -493,9 +493,36 @@ class Game {
         // Target is the LAST turret in chain (end position)
         const target = chain[chain.length - 1];
         const mergeCount = chain.length - 1;
-        const bonus = CONFIG.turretTypes[target.type].mergeBonus;
+        const baseStats = CONFIG.turretTypes[target.type];
+        const bonus = baseStats.mergeBonus;
 
-        // Apply type-specific merge bonuses
+        // Collect all upgraded stats from source turrets
+        let inheritedDamage = 0;
+        let inheritedRange = 0;
+        let inheritedCooldownMult = 1;
+        let inheritedSlow = 0;
+        let inheritedMergeLevel = 0;
+
+        for (let i = 0; i < chain.length - 1; i++) {
+            const source = chain[i];
+            // Calculate how much this turret was upgraded above base
+            inheritedDamage += source.damage - baseStats.damage;
+            inheritedRange += source.range - baseStats.range;
+            inheritedCooldownMult *= source.maxCooldown / baseStats.cooldown;
+            if (baseStats.slowAmount) {
+                inheritedSlow += source.slowAmount - baseStats.slowAmount;
+            }
+            inheritedMergeLevel += source.mergeLevel;
+        }
+
+        // Apply inherited stats from consumed turrets
+        target.damage += inheritedDamage;
+        target.range += inheritedRange;
+        target.maxCooldown *= inheritedCooldownMult;
+        target.slowAmount += inheritedSlow;
+        target.mergeLevel += inheritedMergeLevel;
+
+        // Apply type-specific merge bonuses on top
         // Yellow (속공): no damage, small range, big cooldown reduction
         // Red (강공): no cooldown change, big damage and range
         // Blue (둔화): no damage/cooldown, medium range, stronger slow
