@@ -227,22 +227,29 @@ class ShopSystem {
             const slot = document.createElement('div');
             slot.className = 'shop-slot';
 
-            // Create mini canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = 100;
-            canvas.height = 100;
-            slot.appendChild(canvas);
+            if (item === null) {
+                // Empty slot (item already placed)
+                slot.classList.add('empty');
+                slot.style.opacity = '0.3';
+                slot.style.pointerEvents = 'none';
+            } else {
+                // Create mini canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = 100;
+                canvas.height = 100;
+                slot.appendChild(canvas);
 
-            this.drawItem(canvas, item);
+                this.drawItem(canvas, item);
 
-            // Price tag
-            const price = document.createElement('div');
-            price.className = 'price-tag';
-            price.innerText = `${item.cost}g`;
-            slot.appendChild(price);
+                // Price tag
+                const price = document.createElement('div');
+                price.className = 'price-tag';
+                price.innerText = `${item.cost}g`;
+                slot.appendChild(price);
 
-            // Click to Select (Drag start logic will go here)
-            slot.onmousedown = (e) => this.game.handleShopItemStart(e, item);
+                // Click to Select (Drag start logic will go here)
+                slot.onmousedown = (e) => this.game.handleShopItemStart(e, item);
+            }
 
             this.slots.appendChild(slot);
         });
@@ -455,15 +462,15 @@ class Game {
     mergeChain(chain) {
         if (chain.length < 3) return;
 
-        const target = chain[0];
-        const bonusMultiplier = 1 + (chain.length - 2) * 0.5; // 3개: 1.5x, 4개: 2x, ...
+        // Target is the LAST turret in chain (end position)
+        const target = chain[chain.length - 1];
 
         // Upgrade target based on chain length
         target.range += chain.length - 1;
         target.maxCooldown *= Math.pow(0.8, chain.length - 1);
 
-        // Remove all others
-        for (let i = 1; i < chain.length; i++) {
+        // Remove all others (except last)
+        for (let i = 0; i < chain.length - 1; i++) {
             const source = chain[i];
             const idx = this.turrets.indexOf(source);
             if (idx > -1) this.turrets.splice(idx, 1);
@@ -496,13 +503,10 @@ class Game {
 
     handleShopItemStart(e, item) {
         if (this.gold < item.cost) return;
-        // Start dragging logic
+        if (!this.shop.items.includes(item)) return; // Already placed
+
+        // Start dragging logic (no HTML element, only canvas preview)
         this.draggingItem = item;
-        this.dragHtmlElement = e.currentTarget.cloneNode(true);
-        this.dragHtmlElement.style.position = 'absolute';
-        this.dragHtmlElement.style.opacity = '0.8';
-        this.dragHtmlElement.style.pointerEvents = 'none';
-        document.body.appendChild(this.dragHtmlElement);
 
         this.handleDragMove(e);
 
@@ -518,23 +522,18 @@ class Game {
     }
 
     handleDragMove(e) {
-        if (!this.dragHtmlElement) return;
-        this.dragHtmlElement.style.left = (e.clientX - 60) + 'px';
-        this.dragHtmlElement.style.top = (e.clientY - 60) + 'px';
+        if (!this.draggingItem) return;
 
         // Update hoverHex for preview
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         this.hoverHex = this.layout.pixelToHex({ x, y });
-        this.hoverValid = this.draggingItem ? this.canPlaceItem(this.draggingItem, this.hoverHex) : false;
+        this.hoverValid = this.canPlaceItem(this.draggingItem, this.hoverHex);
     }
 
     handleDragEnd(e) {
-        if (this.dragHtmlElement) {
-            this.dragHtmlElement.remove();
-            this.dragHtmlElement = null;
-        }
+        if (!this.draggingItem) return;
 
         // Check drop
         const rect = this.canvas.getBoundingClientRect();
@@ -545,6 +544,18 @@ class Game {
         // Validate and Place
         if (this.canPlaceItem(this.draggingItem, targetHex)) {
             this.placeItem(this.draggingItem, targetHex);
+
+            // Remove item from shop
+            const idx = this.shop.items.indexOf(this.draggingItem);
+            if (idx > -1) {
+                this.shop.items[idx] = null;
+                this.shop.render();
+            }
+
+            // Auto-reroll if all items placed
+            if (this.shop.items.every(item => item === null)) {
+                this.shop.rerollInternal();
+            }
         }
 
         this.draggingItem = null;
