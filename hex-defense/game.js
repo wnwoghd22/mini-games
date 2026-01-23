@@ -337,6 +337,12 @@ class Game {
         this.gold = 100;
         this.lives = 20;
 
+        this.gameState = 'playing';
+
+        // UI References
+        this.startWaveBtn = document.getElementById('start-wave-btn');
+        this.startWaveBtn.onclick = () => this.startWave();
+
         // Wave Logic
         this.waveState = 'preparing'; // 'preparing' | 'active'
         this.waveCountdown = 5.0; // seconds before wave starts
@@ -360,6 +366,8 @@ class Game {
 
         this.hoverHex = null;
         this.lastTime = performance.now();
+
+
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -395,6 +403,12 @@ class Game {
                 this.sellStartTime = performance.now();
                 this.sellDuration = 800; // ms to hold for sell
             }
+            return;
+        }
+
+        // Check Game Over Restart
+        if (this.gameState === 'gameover') {
+            location.reload();
             return;
         }
 
@@ -779,7 +793,14 @@ class Game {
 
         // Reset to preparing state
         this.waveState = 'preparing';
-        this.waveCountdown = this.prepareTime;
+        this.startWaveBtn.style.display = 'block';
+        this.waveCountdown = 0; // Not used for auto-start anymore
+    }
+
+    startWave() {
+        if (this.waveState !== 'preparing') return;
+        this.waveState = 'active';
+        this.startWaveBtn.style.display = 'none';
     }
 
     spawnEnemy() {
@@ -802,11 +823,7 @@ class Game {
 
         // Wave State Machine
         if (this.waveState === 'preparing') {
-            this.waveCountdown -= dt;
-            if (this.waveCountdown <= 0) {
-                this.waveState = 'active';
-                this.waveCountdown = 0;
-            }
+            // Wait for player to click start
         } else if (this.waveState === 'active') {
             // Spawning
             if (this.waveEnemiesSpawned < this.waveEnemyCount) {
@@ -833,8 +850,7 @@ class Game {
                 this.updateUI();
                 this.enemies.splice(i, 1);
                 if (this.lives <= 0) {
-                    alert('Game Over!');
-                    location.reload();
+                    this.gameState = 'gameover';
                 }
             } else if (!e.alive) {
                 this.enemies.splice(i, 1);
@@ -1138,6 +1154,26 @@ class Game {
 
         // Draw Wave Info Panel (top-left)
         this.drawWaveInfo();
+
+        // Game Over Overlay
+        if (this.gameState === 'gameover') {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+            this.ctx.font = 'bold 60px sans-serif';
+            this.ctx.fillStyle = '#ef4444';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2 - 20);
+
+            this.ctx.font = '24px sans-serif';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText('Click to Restart', this.canvas.width / 2, this.canvas.height / 2 + 40);
+
+            this.ctx.font = '16px sans-serif';
+            this.ctx.fillStyle = '#94a3b8';
+            this.ctx.fillText(`Reached Wave ${this.wave}`, this.canvas.width / 2, this.canvas.height / 2 + 80);
+        }
     }
 
     drawWaveInfo() {
@@ -1191,32 +1227,7 @@ class Game {
             this.ctx.fillText(`Speed: ${this.waveEnemySpeed.toFixed(1)}`, panelX + 80, panelY + 50);
         }
 
-        // Draw countdown overlay in center when preparing
-        if (this.waveState === 'preparing' && this.waveCountdown > 0) {
-            const centerX = this.canvas.width / 2;
-            const centerY = this.canvas.height / 2 - 100;
 
-            // Semi-transparent background
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            // Countdown arc
-            const progress = 1 - (this.waveCountdown / this.prepareTime);
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, centerY, 55, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-            this.ctx.strokeStyle = '#fbbf24';
-            this.ctx.lineWidth = 6;
-            this.ctx.stroke();
-
-            // Countdown number
-            this.ctx.font = 'bold 48px sans-serif';
-            this.ctx.fillStyle = '#fff';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(Math.ceil(this.waveCountdown).toString(), centerX, centerY);
-        }
     }
 
     drawMarker(hex, color) {
