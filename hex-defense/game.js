@@ -1193,23 +1193,26 @@ class Game {
         this.ctx.textBaseline = 'top';
 
         if (this.waveState === 'preparing') {
-            // Countdown display
+            // Next Wave Header
             this.ctx.font = 'bold 14px sans-serif';
             this.ctx.fillStyle = '#fbbf24';
-            this.ctx.fillText(`WAVE ${this.wave} INCOMING`, panelX + 10, panelY + 10);
+            this.ctx.fillText(`NEXT WAVE ${this.wave}`, panelX + 10, panelY + 10);
 
-            // Big countdown number
-            this.ctx.font = 'bold 32px sans-serif';
-            this.ctx.fillStyle = '#fff';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(Math.ceil(this.waveCountdown).toString(), panelX + panelW / 2, panelY + 32);
-
-            // Enemy preview
+            // Detailed Stats
             this.ctx.font = '12px sans-serif';
             this.ctx.textAlign = 'left';
-            this.ctx.fillStyle = '#94a3b8';
-            this.ctx.fillText(`Enemies: ${this.waveEnemyCount}`, panelX + 10, panelY + 72);
-            this.ctx.fillText(`HP: ${this.waveEnemyHp}`, panelX + 90, panelY + 72);
+            this.ctx.fillStyle = '#fff';
+
+            // Stats Row 1
+            this.ctx.fillText(`Enemies: ${this.waveEnemyCount}`, panelX + 10, panelY + 35);
+
+            // Stats Row 2
+            this.ctx.fillText(`HP: ${this.waveEnemyHp}`, panelX + 10, panelY + 55);
+            this.ctx.fillStyle = '#94a3b8'; // Label color
+
+            // Stats Row 3
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText(`Speed: ${this.waveEnemySpeed.toFixed(1)}`, panelX + 10, panelY + 75);
         } else {
             // Active wave info
             this.ctx.font = 'bold 14px sans-serif';
