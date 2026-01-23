@@ -596,7 +596,20 @@ class Game {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         this.hoverHex = this.layout.pixelToHex({ x, y });
+
         this.hoverValid = this.canPlaceItem(this.draggingItem, this.hoverHex);
+
+        if (this.hoverValid) {
+            // Calculate blocked keys to find preview path
+            const blockedKeys = [];
+            for (const t of this.draggingItem.turrets) {
+                const h = this.hoverHex.add(new Hex(t.q, t.r, t.s));
+                blockedKeys.push(h.toString());
+            }
+            this.previewPath = this.findPath(blockedKeys);
+        } else {
+            this.previewPath = null;
+        }
     }
 
     handleDragEnd(e) {
@@ -627,6 +640,7 @@ class Game {
 
         this.draggingItem = null;
         this.hoverHex = null;
+        this.previewPath = null;
     }
 
     canPlaceItem(item, centerHex) {
@@ -646,35 +660,57 @@ class Game {
         return this.hasValidPath(hexesToPlace);
     }
 
-    hasValidPath(blockedKeys = []) {
-        // BFS to check if path exists from start to end, treating blockedKeys as obstacles
+    findPath(blockedKeys = []) {
         const frontier = [this.startHex];
-        const visited = new Set();
-        visited.add(this.startHex.toString());
+        const cameFrom = new Map();
+        cameFrom.set(this.startHex.toString(), null);
+
+        let current = null;
+        let found = false;
 
         while (frontier.length > 0) {
-            const current = frontier.shift();
+            current = frontier.shift();
 
-            if (current.equals(this.endHex)) return true;
+            if (current.equals(this.endHex)) {
+                found = true;
+                break;
+            }
 
             for (let i = 0; i < 6; i++) {
                 const next = current.neighbor(i);
                 const key = next.toString();
 
-                if (visited.has(key)) continue;
-                if (!this.map.has(key)) continue;
+                // Check bounds (if map has key) and visited
+                if (this.map.has(key) && !cameFrom.has(key)) {
+                    const cell = this.map.get(key);
+                    // Skip turrets and walls (maze building)
+                    if (cell.type === 'turret' || cell.type === 'wall') continue;
+                    // Skip simulated blocked cells
+                    if (blockedKeys.includes(key)) continue;
 
-                const cell = this.map.get(key);
-                // Skip existing turrets/walls and simulated blocked cells
-                if (cell.type === 'turret' || cell.type === 'wall') continue;
-                if (blockedKeys.includes(key)) continue;
-
-                visited.add(key);
-                frontier.push(next);
+                    frontier.push(next);
+                    cameFrom.set(key, current);
+                }
             }
         }
 
-        return false; // No path found
+        if (!found) return null;
+
+        // Reconstruct path
+        const path = [];
+        current = this.endHex;
+        while (current && !current.equals(this.startHex)) {
+            path.push(current);
+            current = cameFrom.get(current.toString());
+        }
+        path.push(this.startHex);
+        path.reverse();
+
+        return path;
+    }
+
+    hasValidPath(blockedKeys = []) {
+        return this.findPath(blockedKeys) !== null;
     }
 
     placeItem(item, centerHex) {
@@ -881,51 +917,25 @@ class Game {
     }
 
     generatePath() {
-        const frontier = [this.startHex];
-        const cameFrom = new Map();
-        cameFrom.set(this.startHex.toString(), null);
+        const path = this.findPath([]);
 
         // Reset current path markings
         for (const cell of this.map.values()) {
             if (cell.type === 'path') cell.type = 'empty';
         }
 
-        let current = null;
-        while (frontier.length > 0) {
-            current = frontier.shift();
-
-            if (current.equals(this.endHex)) break;
-
-            for (let i = 0; i < 6; i++) {
-                const next = current.neighbor(i);
-                const key = next.toString();
-
-                if (this.map.has(key) && !cameFrom.has(key)) {
-                    const cell = this.map.get(key);
-                    // Skip turrets and walls (maze building)
-                    if (cell.type === 'turret' || cell.type === 'wall') continue;
-
-                    frontier.push(next);
-                    cameFrom.set(key, current);
+        if (path) {
+            this.path = path;
+            for (const hex of this.path) {
+                const key = hex.toString();
+                if (this.map.has(key) && this.map.get(key).type === 'empty') {
+                    this.map.get(key).type = 'path';
                 }
             }
+        } else {
+            // Should not happen if game logic preserves path
+            this.path = [];
         }
-
-        // Reconstruct path
-        current = this.endHex;
-        this.path = [];
-        while (!current.equals(this.startHex)) {
-            this.path.push(current);
-            const key = current.toString();
-            if (this.map.has(key)) {
-                this.map.get(key).type = 'path';
-            }
-            current = cameFrom.get(key);
-            if (!current) break; // Path not found
-        }
-        this.path.push(this.startHex);
-        this.map.get(this.startHex.toString()).type = 'path';
-        this.path.reverse();
     }
 
     draw() {
@@ -974,6 +984,22 @@ class Game {
                 this.ctx.globalAlpha = 1.0;
             }
         });
+
+        // Draw Preview Path
+        if (this.draggingItem && this.previewPath) {
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            this.ctx.lineWidth = 4;
+            this.ctx.setLineDash([10, 10]); // Dashed line
+            this.ctx.beginPath();
+
+            for (let i = 0; i < this.previewPath.length; i++) {
+                const pos = this.layout.hexToPixel(this.previewPath[i]);
+                if (i === 0) this.ctx.moveTo(pos.x, pos.y);
+                else this.ctx.lineTo(pos.x, pos.y);
+            }
+            this.ctx.stroke();
+            this.ctx.setLineDash([]); // Reset
+        }
 
         // Draw Placement Ghost
         if (this.draggingItem && this.hoverHex) {
