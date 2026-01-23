@@ -151,9 +151,17 @@ canvas {
     flex-shrink: 0;
 }
 
-.yellow-icon { background: var(--turret-yellow); }
-.red-icon { background: var(--turret-red); }
-.blue-icon { background: var(--turret-blue); }
+.yellow-icon {
+    background: var(--turret-yellow);
+}
+
+.red-icon {
+    background: var(--turret-red);
+}
+
+.blue-icon {
+    background: var(--turret-blue);
+}
 
 .turret-details {
     display: flex;
@@ -282,4 +290,46 @@ canvas {
     border-radius: 100px;
     font-size: 0.7rem;
     font-weight: 700;
+}
+
+/* Start Wave Button */
+.btn-primary {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-family: var(--font-main);
+    font-weight: 800;
+    font-size: 0.9rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    animation: pulse-btn 2s infinite;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.6);
+    filter: brightness(1.1);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+@keyframes pulse-btn {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
 }

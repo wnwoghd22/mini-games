@@ -337,6 +337,12 @@ class Game {
         this.gold = 100;
         this.lives = 20;
 
+        this.gameState = 'playing';
+
+        // UI References
+        this.startWaveBtn = document.getElementById('start-wave-btn');
+        this.startWaveBtn.onclick = () => this.startWave();
+
         // Wave Logic
         this.waveState = 'preparing'; // 'preparing' | 'active'
         this.waveCountdown = 5.0; // seconds before wave starts
@@ -360,6 +366,8 @@ class Game {
 
         this.hoverHex = null;
         this.lastTime = performance.now();
+
+
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -395,6 +403,12 @@ class Game {
                 this.sellStartTime = performance.now();
                 this.sellDuration = 800; // ms to hold for sell
             }
+            return;
+        }
+
+        // Check Game Over Restart
+        if (this.gameState === 'gameover') {
+            location.reload();
             return;
         }
 
@@ -596,7 +610,20 @@ class Game {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         this.hoverHex = this.layout.pixelToHex({ x, y });
+
         this.hoverValid = this.canPlaceItem(this.draggingItem, this.hoverHex);
+
+        if (this.hoverValid) {
+            // Calculate blocked keys to find preview path
+            const blockedKeys = [];
+            for (const t of this.draggingItem.turrets) {
+                const h = this.hoverHex.add(new Hex(t.q, t.r, t.s));
+                blockedKeys.push(h.toString());
+            }
+            this.previewPath = this.findPath(blockedKeys);
+        } else {
+            this.previewPath = null;
+        }
     }
 
     handleDragEnd(e) {
@@ -627,6 +654,7 @@ class Game {
 
         this.draggingItem = null;
         this.hoverHex = null;
+        this.previewPath = null;
     }
 
     canPlaceItem(item, centerHex) {
@@ -646,35 +674,57 @@ class Game {
         return this.hasValidPath(hexesToPlace);
     }
 
-    hasValidPath(blockedKeys = []) {
-        // BFS to check if path exists from start to end, treating blockedKeys as obstacles
+    findPath(blockedKeys = []) {
         const frontier = [this.startHex];
-        const visited = new Set();
-        visited.add(this.startHex.toString());
+        const cameFrom = new Map();
+        cameFrom.set(this.startHex.toString(), null);
+
+        let current = null;
+        let found = false;
 
         while (frontier.length > 0) {
-            const current = frontier.shift();
+            current = frontier.shift();
 
-            if (current.equals(this.endHex)) return true;
+            if (current.equals(this.endHex)) {
+                found = true;
+                break;
+            }
 
             for (let i = 0; i < 6; i++) {
                 const next = current.neighbor(i);
                 const key = next.toString();
 
-                if (visited.has(key)) continue;
-                if (!this.map.has(key)) continue;
+                // Check bounds (if map has key) and visited
+                if (this.map.has(key) && !cameFrom.has(key)) {
+                    const cell = this.map.get(key);
+                    // Skip turrets and walls (maze building)
+                    if (cell.type === 'turret' || cell.type === 'wall') continue;
+                    // Skip simulated blocked cells
+                    if (blockedKeys.includes(key)) continue;
 
-                const cell = this.map.get(key);
-                // Skip existing turrets/walls and simulated blocked cells
-                if (cell.type === 'turret' || cell.type === 'wall') continue;
-                if (blockedKeys.includes(key)) continue;
-
-                visited.add(key);
-                frontier.push(next);
+                    frontier.push(next);
+                    cameFrom.set(key, current);
+                }
             }
         }
 
-        return false; // No path found
+        if (!found) return null;
+
+        // Reconstruct path
+        const path = [];
+        current = this.endHex;
+        while (current && !current.equals(this.startHex)) {
+            path.push(current);
+            current = cameFrom.get(current.toString());
+        }
+        path.push(this.startHex);
+        path.reverse();
+
+        return path;
+    }
+
+    hasValidPath(blockedKeys = []) {
+        return this.findPath(blockedKeys) !== null;
     }
 
     placeItem(item, centerHex) {
@@ -743,7 +793,14 @@ class Game {
 
         // Reset to preparing state
         this.waveState = 'preparing';
-        this.waveCountdown = this.prepareTime;
+        this.startWaveBtn.style.display = 'block';
+        this.waveCountdown = 0; // Not used for auto-start anymore
+    }
+
+    startWave() {
+        if (this.waveState !== 'preparing') return;
+        this.waveState = 'active';
+        this.startWaveBtn.style.display = 'none';
     }
 
     spawnEnemy() {
@@ -766,11 +823,7 @@ class Game {
 
         // Wave State Machine
         if (this.waveState === 'preparing') {
-            this.waveCountdown -= dt;
-            if (this.waveCountdown <= 0) {
-                this.waveState = 'active';
-                this.waveCountdown = 0;
-            }
+            // Wait for player to click start
         } else if (this.waveState === 'active') {
             // Spawning
             if (this.waveEnemiesSpawned < this.waveEnemyCount) {
@@ -797,8 +850,7 @@ class Game {
                 this.updateUI();
                 this.enemies.splice(i, 1);
                 if (this.lives <= 0) {
-                    alert('Game Over!');
-                    location.reload();
+                    this.gameState = 'gameover';
                 }
             } else if (!e.alive) {
                 this.enemies.splice(i, 1);
@@ -881,51 +933,25 @@ class Game {
     }
 
     generatePath() {
-        const frontier = [this.startHex];
-        const cameFrom = new Map();
-        cameFrom.set(this.startHex.toString(), null);
+        const path = this.findPath([]);
 
         // Reset current path markings
         for (const cell of this.map.values()) {
             if (cell.type === 'path') cell.type = 'empty';
         }
 
-        let current = null;
-        while (frontier.length > 0) {
-            current = frontier.shift();
-
-            if (current.equals(this.endHex)) break;
-
-            for (let i = 0; i < 6; i++) {
-                const next = current.neighbor(i);
-                const key = next.toString();
-
-                if (this.map.has(key) && !cameFrom.has(key)) {
-                    const cell = this.map.get(key);
-                    // Skip turrets and walls (maze building)
-                    if (cell.type === 'turret' || cell.type === 'wall') continue;
-
-                    frontier.push(next);
-                    cameFrom.set(key, current);
+        if (path) {
+            this.path = path;
+            for (const hex of this.path) {
+                const key = hex.toString();
+                if (this.map.has(key) && this.map.get(key).type === 'empty') {
+                    this.map.get(key).type = 'path';
                 }
             }
+        } else {
+            // Should not happen if game logic preserves path
+            this.path = [];
         }
-
-        // Reconstruct path
-        current = this.endHex;
-        this.path = [];
-        while (!current.equals(this.startHex)) {
-            this.path.push(current);
-            const key = current.toString();
-            if (this.map.has(key)) {
-                this.map.get(key).type = 'path';
-            }
-            current = cameFrom.get(key);
-            if (!current) break; // Path not found
-        }
-        this.path.push(this.startHex);
-        this.map.get(this.startHex.toString()).type = 'path';
-        this.path.reverse();
     }
 
     draw() {
@@ -974,6 +1000,22 @@ class Game {
                 this.ctx.globalAlpha = 1.0;
             }
         });
+
+        // Draw Preview Path
+        if (this.draggingItem && this.previewPath) {
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            this.ctx.lineWidth = 4;
+            this.ctx.setLineDash([10, 10]); // Dashed line
+            this.ctx.beginPath();
+
+            for (let i = 0; i < this.previewPath.length; i++) {
+                const pos = this.layout.hexToPixel(this.previewPath[i]);
+                if (i === 0) this.ctx.moveTo(pos.x, pos.y);
+                else this.ctx.lineTo(pos.x, pos.y);
+            }
+            this.ctx.stroke();
+            this.ctx.setLineDash([]); // Reset
+        }
 
         // Draw Placement Ghost
         if (this.draggingItem && this.hoverHex) {
@@ -1112,6 +1154,26 @@ class Game {
 
         // Draw Wave Info Panel (top-left)
         this.drawWaveInfo();
+
+        // Game Over Overlay
+        if (this.gameState === 'gameover') {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+            this.ctx.font = 'bold 60px sans-serif';
+            this.ctx.fillStyle = '#ef4444';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2 - 20);
+
+            this.ctx.font = '24px sans-serif';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText('Click to Restart', this.canvas.width / 2, this.canvas.height / 2 + 40);
+
+            this.ctx.font = '16px sans-serif';
+            this.ctx.fillStyle = '#94a3b8';
+            this.ctx.fillText(`Reached Wave ${this.wave}`, this.canvas.width / 2, this.canvas.height / 2 + 80);
+        }
     }
 
     drawWaveInfo() {
@@ -1131,23 +1193,26 @@ class Game {
         this.ctx.textBaseline = 'top';
 
         if (this.waveState === 'preparing') {
-            // Countdown display
+            // Next Wave Header
             this.ctx.font = 'bold 14px sans-serif';
             this.ctx.fillStyle = '#fbbf24';
-            this.ctx.fillText(`WAVE ${this.wave} INCOMING`, panelX + 10, panelY + 10);
+            this.ctx.fillText(`NEXT WAVE ${this.wave}`, panelX + 10, panelY + 10);
 
-            // Big countdown number
-            this.ctx.font = 'bold 32px sans-serif';
-            this.ctx.fillStyle = '#fff';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(Math.ceil(this.waveCountdown).toString(), panelX + panelW / 2, panelY + 32);
-
-            // Enemy preview
+            // Detailed Stats
             this.ctx.font = '12px sans-serif';
             this.ctx.textAlign = 'left';
-            this.ctx.fillStyle = '#94a3b8';
-            this.ctx.fillText(`Enemies: ${this.waveEnemyCount}`, panelX + 10, panelY + 72);
-            this.ctx.fillText(`HP: ${this.waveEnemyHp}`, panelX + 90, panelY + 72);
+            this.ctx.fillStyle = '#fff';
+
+            // Stats Row 1
+            this.ctx.fillText(`Enemies: ${this.waveEnemyCount}`, panelX + 10, panelY + 35);
+
+            // Stats Row 2
+            this.ctx.fillText(`HP: ${this.waveEnemyHp}`, panelX + 10, panelY + 55);
+            this.ctx.fillStyle = '#94a3b8'; // Label color
+
+            // Stats Row 3
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText(`Speed: ${this.waveEnemySpeed.toFixed(1)}`, panelX + 10, panelY + 75);
         } else {
             // Active wave info
             this.ctx.font = 'bold 14px sans-serif';
@@ -1165,32 +1230,7 @@ class Game {
             this.ctx.fillText(`Speed: ${this.waveEnemySpeed.toFixed(1)}`, panelX + 80, panelY + 50);
         }
 
-        // Draw countdown overlay in center when preparing
-        if (this.waveState === 'preparing' && this.waveCountdown > 0) {
-            const centerX = this.canvas.width / 2;
-            const centerY = this.canvas.height / 2 - 100;
 
-            // Semi-transparent background
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            // Countdown arc
-            const progress = 1 - (this.waveCountdown / this.prepareTime);
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, centerY, 55, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-            this.ctx.strokeStyle = '#fbbf24';
-            this.ctx.lineWidth = 6;
-            this.ctx.stroke();
-
-            // Countdown number
-            this.ctx.font = 'bold 48px sans-serif';
-            this.ctx.fillStyle = '#fff';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(Math.ceil(this.waveCountdown).toString(), centerX, centerY);
-        }
     }
 
     drawMarker(hex, color) {
