@@ -169,7 +169,16 @@ class Game {
         this.updateTilePosition(tile, x, y);
 
         this.ui.gridContainer.appendChild(tile);
-        this.grid.push({ x, y, element: tile });
+
+        const tileObj = { x, y, element: tile, ready: false };
+        this.grid.push(tileObj);
+
+        // Mark as ready after animation
+        setTimeout(() => {
+            if (this.grid.includes(tileObj)) {
+                tileObj.ready = true;
+            }
+        }, 500);
     }
 
     updateTilePosition(element, x, y) {
@@ -246,8 +255,20 @@ class Game {
         const startX = this.player.x;
         const startY = this.player.y;
 
-        this.player.x += dx;
-        this.player.y += dy;
+        const targetX = startX + dx;
+        const targetY = startY + dy;
+
+        // Check Bounds
+        // Top bound: Prevent moving into the spawn row (y = -range)
+        const range = Math.floor(GRID_SIZE / 2) + 2;
+        // The safe zone starts from -range + 1
+        if (targetY <= -range) return;
+
+        // Also check if moving into a falling tile (optional, but good for feel)
+        // If targetY > range, it's a death move, but we allow it so they can die.
+
+        this.player.x = targetX;
+        this.player.y = targetY;
         this.playTone(300 + Math.random() * 100, 'triangle', 0.05);
         this.startRollAnimation(dx, dy, startX, startY);
     }
@@ -450,36 +471,47 @@ class Game {
     }
 
     cullGrid() {
-        // Remove tiles that have drifted too far from the fixed world center
-        const range = Math.floor(GRID_SIZE / 2) + 3;
+        // Remove tiles that have drifted too far
+        // VISUAL RANGE: The grid typically extends from -range to +range.
+        // We want tiles to start falling exactly when they pass the visual edge.
+
+        const range = Math.floor(GRID_SIZE / 2) + 2; // Matches fillGrid range
         const centerY = 0;
 
         for (let i = this.grid.length - 1; i >= 0; i--) {
             const t = this.grid[i];
             const dy = t.y - centerY;
-            const dx = t.x; // Player X is usually near 0, but if player moves side to side?
-            // Actually, player.x can be anything. We should cull relative to player X too.
-            // But if player goes too far X, they die anyway.
+            const dx = t.x;
 
-            if (Math.abs(dx) > range || Math.abs(dy) > range) {
-                t.element.classList.remove('tile-enter');
-                t.element.classList.add('tile-exit');
+            // If tile is beyond the visual range (bottom), trigger exit animation
+            if (dy > range) {
+                if (!t.element.classList.contains('tile-exit')) {
+                    t.element.classList.remove('tile-enter');
+                    t.element.classList.add('tile-exit');
+                }
+            }
 
-                // Remove from DOM after animation
-                setTimeout(() => {
-                    t.element.remove();
-                }, 500);
+            // Actually remove grid data only when it's further down or far X
+            // This buffer ensures the tile object exists ("solid") until the logic says "you fell off the world"
+            // Wait, if it exists, checkCollision says "safe".
+            // So we need checkCollision to know about the range too.
 
+            if (dy > range + 5 || Math.abs(dx) > range + 2) {
+                t.element.remove();
                 this.grid.splice(i, 1);
             }
         }
     }
 
     checkCollision() {
-        // Check if player is on a tile
-        const onTile = this.grid.some(t => t.x === this.player.x && t.y === this.player.y);
+        // Check if player is on a tile AND tile is ready
+        const onTile = this.grid.some(t => t.x === this.player.x && t.y === this.player.y && t.ready);
 
-        if (!onTile) {
+        // Also check global bounds - if player is visibly off the bottom edge, they fall regardless of tile existence
+        const range = Math.floor(GRID_SIZE / 2) + 2;
+        const outOfBounds = this.player.y > range;
+
+        if (!onTile || outOfBounds) {
             // Fall animation
             this.isMoving = false;
             this.ui.player.style.transition = 'transform 0.5s ease-in';
@@ -526,6 +558,7 @@ class Game {
             while (this.yOffset >= fullTile) {
                 this.yOffset -= fullTile;
                 this.shiftLogic();
+                if (!this.isRunning) return; // Stop updates if game over triggered in shiftLogic
             }
         }
 
@@ -549,7 +582,34 @@ class Game {
 
     shiftLogic() {
         // This is called when we have scrolled 1 full tile Down (+Y).
-        // 1. Shift all logical coordinates +1 Y ??
+        const range = Math.floor(GRID_SIZE / 2) + 2;
+
+        // Check if next position would be out of bounds BEFORE shifting
+        if (this.player.y + 1 > range) {
+            // Trigger exit animation on tiles at current player position
+            const currentPlayerY = this.player.y;
+            this.grid.forEach(t => {
+                if (t.y === currentPlayerY) {
+                    t.element.classList.remove('tile-enter');
+                    t.element.classList.add('tile-exit');
+                }
+            });
+
+            // Trigger player fall and game over
+            this.player.y++; // Move player to out of bounds position
+            this.checkCollision();
+            return;
+        }
+
+        // Check if player is on a valid tile at current position
+        const onTile = this.grid.some(t => t.x === this.player.x && t.y === this.player.y && t.ready);
+        if (!onTile) {
+            // Player is on a hole - fall before shifting
+            this.checkCollision();
+            return;
+        }
+
+        // 1. Shift all logical coordinates +1 Y
         //    If we shift tile.y += 1, and reset offset to 0...
         //    Old Visual: y*size + size = (y+1)*size.
         //    New Visual: (y+1)*size + 0.
@@ -570,9 +630,9 @@ class Game {
         //    So things with high Y fall off bottom.
         //    Things at low Y (top) need to be spawned.
 
-        //    We define the "Visible Range" relative to the Player? 
+        //    We define the "Visible Range" relative to the Player?
         //    Or relative to 0?
-        //    Let's keep Player centered-ish. 
+        //    Let's keep Player centered-ish.
         //    If Player moves UP (-1 Y) to survive, Player Y stays near 0.
         //    So we cull/spawn around Y=0.
 
@@ -581,9 +641,6 @@ class Game {
 
         this.score++;
         this.ui.score.innerText = this.score;
-
-        // Check collision after shift (did I ride into a hole?)
-        this.checkCollision();
     }
 
     updateMovement(time) {
