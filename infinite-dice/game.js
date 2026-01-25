@@ -635,8 +635,8 @@ class Game {
                     if (!hasReachableTile) {
                         console.log(`[WASM] ⚠️ CHUNK BOUNDARY BROKEN! No reachable tiles.`);
                         console.log(`[WASM] Previous row: [${prevLastRowPositions.join(', ')}]`);
-                        console.log(`[WASM] Reachable: [${[...reachable].sort((a,b) => a-b).join(', ')}]`);
-                        console.log(`[WASM] Current row: [${firstRowXPositions.sort((a,b) => a-b).join(', ')}]`);
+                        console.log(`[WASM] Reachable: [${[...reachable].sort((a, b) => a - b).join(', ')}]`);
+                        console.log(`[WASM] Current row: [${firstRowXPositions.sort((a, b) => a - b).join(', ')}]`);
 
                         // Add a guaranteed bridge tile
                         const reachableArray = [...reachable];
@@ -666,7 +666,7 @@ class Game {
             const rowTiles = chunk.tiles.filter(t => t.y === worldY);
 
             console.log(`[WASM] Row worldY=${worldY} has ${rowTiles.length} tiles at X positions:`,
-                        rowTiles.map(t => t.x).sort((a,b) => a-b));
+                rowTiles.map(t => t.x).sort((a, b) => a - b));
 
             for (const tileData of rowTiles) {
                 const exists = this.grid.some(t => t.x === tileData.x && t.y === screenY);
@@ -801,6 +801,9 @@ class Game {
     }
 
     handleBonusTile(tile) {
+        // Check if tile is already used
+        if (tile.used) return;
+
         // Bonus tile: check if BOTTOM face (touching the tile) matches required face
         const requiredFace = tile.metadata?.requiredFace;
         console.log(`[BONUS] Required: ${requiredFace}, Bottom face: ${this.currentBottomFace}, Top face: ${this.currentTopFace}`);
@@ -812,7 +815,23 @@ class Game {
             this.playTone(600, 'sine', 0.2);
             console.log(`[BONUS] ✓ Success! +${bonusPoints} points`);
 
+            // Mark as used
+            tile.used = true;
+
             // Visual feedback
+            tile.element.classList.add('tile-inactive');
+
+            // Create and append effect ring
+            const ring = document.createElement('div');
+            ring.className = 'effect-ring';
+            tile.element.appendChild(ring);
+
+            // Cleanup ring after animation
+            setTimeout(() => {
+                ring.remove();
+            }, 600);
+
+            // Bounce effect
             tile.element.style.transform = 'scale(1.2)';
             setTimeout(() => {
                 tile.element.style.transform = 'scale(1)';
@@ -1096,7 +1115,7 @@ class Game {
         // This tracks which dice face is in which orientation
         const a = this.axisState;
 
-        switch(direction) {
+        switch (direction) {
             case 'UP':  // dy=-1
                 // U→F→D→B→U cycle
                 const tempUp = a[0];

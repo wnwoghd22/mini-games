@@ -304,7 +304,8 @@ button:active {
 }
 
 .tile-bonus::after {
-    display: none; /* Hide the dot when showing number */
+    display: none;
+    /* Hide the dot when showing number */
 }
 
 .tile-conditional {
@@ -368,10 +369,52 @@ button:active {
 }
 
 @keyframes teleportPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 20px rgba(138, 43, 226, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
     }
+
     50% {
         box-shadow: 0 0 40px rgba(138, 43, 226, 0.8), inset 0 0 30px rgba(0, 0, 0, 0.2);
     }
+}
+
+/* Effect Ring */
+.effect-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    background: transparent;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    animation: ripple 0.6s ease-out forwards;
+    z-index: 20;
+}
+
+@keyframes ripple {
+    0% {
+        width: 20px;
+        height: 20px;
+        opacity: 1;
+        border-width: 4px;
+    }
+
+    100% {
+        width: 150px;
+        height: 150px;
+        opacity: 0;
+        border-width: 0px;
+    }
+}
+
+/* Inactive Tile */
+.tile-inactive {
+    filter: grayscale(100%);
+    opacity: 0.5;
+    box-shadow: none !important;
 }
