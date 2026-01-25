@@ -219,7 +219,7 @@ class Game {
     async initWasm() {
         try {
             console.log("Attempting to load WASM map generator...");
-            const wasm = await import('./wasm-mapgen/pkg/infinite_dice_mapgen.js');
+            const wasm = await import('./wasm/infinite_dice_mapgen.js');
             await wasm.default();
 
             // Create generator with random seed
