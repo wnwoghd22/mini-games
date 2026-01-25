@@ -10,6 +10,16 @@ const GRID_SIZE = 7; // Keep it odd to center easily
 const MOVE_SPEED = 200; // ms per move
 const SCROLL_SPEED = 1000; // ms per grid shift (initial)
 
+// Dice face normals (initial orientation before any rotation)
+const FACE_NORMALS = {
+    1: { x: 0, y: 0, z: 1 },   // front
+    6: { x: 0, y: 0, z: -1 },  // back
+    3: { x: 1, y: 0, z: 0 },   // right
+    4: { x: -1, y: 0, z: 0 },  // left
+    5: { x: 0, y: 1, z: 0 },   // top (initial)
+    2: { x: 0, y: -1, z: 0 }   // bottom
+}
+
 // --- Minimal Quaternion helpers (column-major convention for CSS matrix) ---
 const quatIdentity = () => ({ x: 0, y: 0, z: 0, w: 1 });
 const quatNormalize = (q) => {
@@ -24,6 +34,37 @@ const quatMultiply = (a, b) => ({
     z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
 });
 const quatConjugate = (q) => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
+
+// Rotate a vector by a quaternion using q * v * q^(-1)
+const rotateVectorByQuat = (vec, quat) => {
+    const vecQuat = { x: vec.x, y: vec.y, z: vec.z, w: 0 };
+    const qInv = quatConjugate(quat);
+    const temp = quatMultiply(quat, vecQuat);
+    const result = quatMultiply(temp, qInv);
+    return { x: result.x, y: result.y, z: result.z };
+};
+
+// Determine which die face is currently on top (1-6)
+const getTopFaceNumber = (quaternion) => {
+    const WORLD_UP = { x: 0, y: 1, z: 0 };
+    let bestDot = -Infinity;
+    let topFace = 1;
+
+    for (const [faceNum, normal] of Object.entries(FACE_NORMALS)) {
+        const rotatedNormal = rotateVectorByQuat(normal, quaternion);
+        const dot = rotatedNormal.x * WORLD_UP.x +
+                    rotatedNormal.y * WORLD_UP.y +
+                    rotatedNormal.z * WORLD_UP.z;
+
+        if (dot > bestDot) {
+            bestDot = dot;
+            topFace = parseInt(faceNum);
+        }
+    }
+
+    return topFace;
+};
+
 const quatFromAxisAngle = (axis, angleRad) => {
     const half = angleRad / 2;
     const s = Math.sin(half);
@@ -113,6 +154,7 @@ class Game {
         this.moveDirection = null;
         this.moveStart = 0;
         this.moveDuration = MOVE_SPEED;
+        this.currentTopFace = 5; // Initial top face
 
         // Audio
         this.audioCtx = null;
@@ -161,16 +203,39 @@ class Game {
         }
     }
 
-    spawnTile(x, y) {
+    spawnTile(x, y, type = 'normal', metadata = null) {
         const tile = document.createElement('div');
         tile.className = 'tile tile-enter';
+
+        // Add special tile type classes
+        if (type === 'bonus') {
+            tile.classList.add('tile-bonus');
+        } else if (type === 'conditional') {
+            tile.classList.add('tile-conditional');
+        } else if (type === 'teleport') {
+            tile.classList.add('tile-teleport');
+        } else if (type === 'lock') {
+            tile.classList.add('tile-lock');
+            if (metadata && metadata.isKey) {
+                tile.classList.add('key');
+            } else {
+                tile.classList.add('door');
+            }
+        }
 
         // Position visually
         this.updateTilePosition(tile, x, y);
 
         this.ui.gridContainer.appendChild(tile);
 
-        const tileObj = { x, y, element: tile, ready: false };
+        const tileObj = {
+            x,
+            y,
+            element: tile,
+            ready: false,
+            type: type,
+            metadata: metadata
+        };
         this.grid.push(tileObj);
 
         // Mark as ready after animation
@@ -179,6 +244,8 @@ class Game {
                 tileObj.ready = true;
             }
         }, 500);
+
+        return tileObj;
     }
 
     updateTilePosition(element, x, y) {
@@ -222,6 +289,7 @@ class Game {
         this.orientation = quatIdentity();
         this.startQuat = quatIdentity();
         this.targetQuat = quatIdentity();
+        this.currentTopFace = 5; // Reset to initial top face
         this.isMoving = false;
 
         // Clear any death animation transitions
@@ -503,28 +571,114 @@ class Game {
         }
     }
 
+    handleBonusTile(tile) {
+        // Bonus tile: requires face 6 for +10 points
+        if (this.currentTopFace === 6) {
+            const bonusPoints = tile.metadata?.bonusPoints || 10;
+            this.score += bonusPoints;
+            this.ui.score.innerText = this.score;
+            this.playTone(600, 'sine', 0.2);
+            // Visual feedback
+            tile.element.style.transform = 'scale(1.2)';
+            setTimeout(() => {
+                tile.element.style.transform = 'scale(1)';
+            }, 200);
+        }
+    }
+
+    handleConditionalTile(tile) {
+        // Conditional tile: only allows specific faces
+        const allowedFaces = tile.metadata?.allowedFaces || [3, 4, 5];
+        if (!allowedFaces.includes(this.currentTopFace)) {
+            // Wrong face - trigger fall
+            this.triggerFall();
+            return false;
+        }
+        return true;
+    }
+
+    handleTeleportTile(tile) {
+        // Teleport tile: requires face 1 to warp
+        if (this.currentTopFace === 1 && tile.metadata?.destination) {
+            const dest = tile.metadata.destination;
+            this.player.x = dest.x;
+            this.player.y = dest.y;
+            this.playTone(800, 'square', 0.3);
+            this.updatePlayerVisual();
+        }
+    }
+
+    handleLockTile(tile) {
+        // Lock tile: key (face 2) opens door and spawns new path
+        if (tile.metadata?.isKey && this.currentTopFace === 2) {
+            // Find and unlock paired door
+            if (tile.metadata.pairId) {
+                const door = this.grid.find(t =>
+                    t.type === 'lock' &&
+                    !t.metadata?.isKey &&
+                    t.metadata?.pairId === tile.metadata.pairId
+                );
+                if (door) {
+                    door.element.classList.add('unlocked');
+                    this.playTone(500, 'triangle', 0.3);
+                    // Spawn linked tiles
+                    if (tile.metadata.linkedTiles) {
+                        tile.metadata.linkedTiles.forEach(pos => {
+                            if (!this.grid.some(t => t.x === pos.x && t.y === pos.y)) {
+                                this.spawnTile(pos.x, pos.y);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    triggerFall() {
+        // Fall animation
+        this.isMoving = false;
+        this.ui.player.style.transition = 'transform 0.5s ease-in';
+        const size = STEP_SIZE;
+        const xPos = this.player.x * size;
+        const yPos = this.player.y * size + this.yOffset;
+
+        const mat = matrixFromQuatAndPos(this.orientation, { x: xPos, y: yPos, z: -1000 });
+        this.ui.player.style.transform = `matrix3d(${mat.join(',')})`;
+
+        // Wait a bit then game over
+        setTimeout(() => this.gameOver(), 500);
+        this.isRunning = false;
+    }
+
     checkCollision() {
-        // Check if player is on a tile AND tile is ready
-        const onTile = this.grid.some(t => t.x === this.player.x && t.y === this.player.y && t.ready);
+        // Find the tile at player position
+        const currentTile = this.grid.find(t => t.x === this.player.x && t.y === this.player.y && t.ready);
 
         // Also check global bounds - if player is visibly off the bottom edge, they fall regardless of tile existence
         const range = Math.floor(GRID_SIZE / 2) + 2;
         const outOfBounds = this.player.y > range;
 
-        if (!onTile || outOfBounds) {
-            // Fall animation
-            this.isMoving = false;
-            this.ui.player.style.transition = 'transform 0.5s ease-in';
-            const size = STEP_SIZE;
-            const xPos = this.player.x * size;
-            const yPos = this.player.y * size + this.yOffset;
+        if (!currentTile || outOfBounds) {
+            this.triggerFall();
+            return;
+        }
 
-            const mat = matrixFromQuatAndPos(this.orientation, { x: xPos, y: yPos, z: -1000 });
-            this.ui.player.style.transform = `matrix3d(${mat.join(',')})`;
-
-            // Wait a bit then game over
-            setTimeout(() => this.gameOver(), 500);
-            this.isRunning = false;
+        // Handle special tile types
+        switch (currentTile.type) {
+            case 'bonus':
+                this.handleBonusTile(currentTile);
+                break;
+            case 'conditional':
+                if (!this.handleConditionalTile(currentTile)) {
+                    return; // Already triggered fall
+                }
+                break;
+            case 'teleport':
+                this.handleTeleportTile(currentTile);
+                break;
+            case 'lock':
+                this.handleLockTile(currentTile);
+                break;
         }
     }
 
@@ -711,6 +865,8 @@ class Game {
     finishMoveAnimation() {
         this.isMoving = false;
         this.orientation = quatNormalize(this.targetQuat);
+        this.currentTopFace = getTopFaceNumber(this.orientation);
+        console.log('Top face:', this.currentTopFace); // Debug output
         this.updatePlayerVisual();
         this.checkCollision();
     }

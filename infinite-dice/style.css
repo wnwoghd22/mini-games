@@ -281,3 +281,85 @@ button:active {
 .tile-exit {
     animation: tileExit 0.5s ease-in forwards;
 }
+
+/* Special Tile Types */
+.tile-bonus {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.9) 0%, rgba(218, 165, 32, 0.9) 100%);
+    border-color: rgba(255, 215, 0, 0.6);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.tile-bonus::after {
+    background: rgba(255, 215, 0, 0.8);
+    width: 30%;
+    height: 30%;
+}
+
+.tile-conditional {
+    background: linear-gradient(135deg, rgba(30, 144, 255, 0.9) 0%, rgba(0, 100, 200, 0.9) 100%);
+    border-color: rgba(30, 144, 255, 0.6);
+    box-shadow: 0 0 20px rgba(30, 144, 255, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.tile-conditional::after {
+    background: rgba(30, 144, 255, 0.8);
+    width: 30%;
+    height: 30%;
+}
+
+.tile-teleport {
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.9) 0%, rgba(75, 0, 130, 0.9) 100%);
+    border-color: rgba(138, 43, 226, 0.6);
+    box-shadow: 0 0 20px rgba(138, 43, 226, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+    animation: teleportPulse 2s ease-in-out infinite;
+}
+
+.tile-teleport::after {
+    background: rgba(138, 43, 226, 0.8);
+    width: 40%;
+    height: 40%;
+}
+
+.tile-lock.key {
+    background: linear-gradient(135deg, rgba(50, 205, 50, 0.9) 0%, rgba(34, 139, 34, 0.9) 100%);
+    border-color: rgba(50, 205, 50, 0.6);
+    box-shadow: 0 0 20px rgba(50, 205, 50, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.tile-lock.key::after {
+    background: rgba(50, 205, 50, 0.8);
+    width: 30%;
+    height: 30%;
+}
+
+.tile-lock.door {
+    background: linear-gradient(135deg, rgba(220, 20, 60, 0.9) 0%, rgba(178, 34, 34, 0.9) 100%);
+    border-color: rgba(220, 20, 60, 0.6);
+    box-shadow: 0 0 20px rgba(220, 20, 60, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.tile-lock.door::after {
+    background: rgba(220, 20, 60, 0.8);
+    width: 30%;
+    height: 30%;
+}
+
+.tile-lock.door.unlocked {
+    background: linear-gradient(135deg, rgba(50, 205, 50, 0.9) 0%, rgba(34, 139, 34, 0.9) 100%);
+    border-color: rgba(50, 205, 50, 0.6);
+    box-shadow: 0 0 20px rgba(50, 205, 50, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.tile-lock.door.unlocked::after {
+    background: rgba(50, 205, 50, 0.8);
+}
+
+@keyframes teleportPulse {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(138, 43, 226, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(138, 43, 226, 0.8), inset 0 0 30px rgba(0, 0, 0, 0.2);
+    }
+}
