@@ -208,10 +208,17 @@ class Game {
     resetPlayer() {
         // Reset player logic pos
         this.player = { x: 0, y: 0 };
+        this.yOffset = 0; // Reset scroll offset
         this.orientation = quatIdentity();
         this.startQuat = quatIdentity();
         this.targetQuat = quatIdentity();
         this.isMoving = false;
+
+        // Clear any death animation transitions
+        this.ui.player.style.transition = 'none';
+        // Force reflow to ensure transition removal takes effect if we were to re-add it immediately (though we don't here)
+        this.ui.player.offsetHeight;
+
         this.updatePlayerVisual();
     }
 
@@ -419,10 +426,10 @@ class Game {
 
         const range = Math.floor(GRID_SIZE / 2) + 2;
 
-        // Center the loops around the player's current logical Y
-        const centerY = this.player ? this.player.y : 0;
+        // Center the loops around the fixed world center (0,0) to create a treadmill effect
+        const centerY = 0;
 
-        for (let x = -range; x <= range; x++) { // X is usually centered on 0 unless player strays
+        for (let x = -range; x <= range; x++) {
             for (let y = centerY - range; y <= centerY + range; y++) {
                 // Check if tile exists at x,y
                 const exists = this.grid.some(t => t.x === x && t.y === y);
@@ -442,9 +449,9 @@ class Game {
     }
 
     cullGrid() {
-        // Remove tiles far from player
+        // Remove tiles that have drifted too far from the fixed world center
         const range = Math.floor(GRID_SIZE / 2) + 3;
-        const centerY = this.player ? this.player.y : 0;
+        const centerY = 0;
 
         for (let i = this.grid.length - 1; i >= 0; i--) {
             const t = this.grid[i];
@@ -519,8 +526,8 @@ class Game {
         this.updateMovement(time);
 
         // Basic Speed Up
-        if (this.scrollInterval > 200) {
-            this.scrollInterval -= 0.05 * dt; // Slow generic speedup
+        if (this.scrollInterval > 300) {
+            this.scrollInterval -= 0.01 * dt; // Slower generic speedup
         }
 
         requestAnimationFrame(this.update);
@@ -540,7 +547,10 @@ class Game {
         //    New Visual: (y+1)*size + 0.
         //    Perfect match.
 
-        this.grid.forEach(t => t.y++);
+        this.grid.forEach(t => {
+            t.y++;
+            this.updateTilePosition(t.element, t.x, t.y);
+        });
         this.player.y++; // Player moves with the floor due to friction/physics
         if (this.isMoving) {
             this.moveFrom.y += 1;
