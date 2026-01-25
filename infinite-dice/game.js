@@ -18,6 +18,10 @@ class Game {
         this.lastTime = 0;
         this.scrollTimer = 0;
         this.scrollInterval = SCROLL_SPEED;
+        this.yOffset = 0;
+
+        // Audio
+        this.audioCtx = null;
 
         // DOM Elements
         this.ui = {
@@ -88,6 +92,7 @@ class Game {
     }
 
     start() {
+        this.initAudio();
         this.isRunning = true;
         this.score = 0;
         this.scrollInterval = SCROLL_SPEED;
@@ -98,6 +103,8 @@ class Game {
         this.lastTime = performance.now();
         requestAnimationFrame(this.update);
     }
+    // ...
+
 
     reset() {
         this.init(); // Rebuild grid
@@ -143,6 +150,7 @@ class Game {
     movePlayer(dx, dy) {
         this.player.x += dx;
         this.player.y += dy;
+        this.playTone(300 + Math.random() * 100, 'triangle', 0.05);
         this.updatePlayerVisual();
 
         this.checkCollision();
@@ -317,20 +325,24 @@ class Game {
     }
 
     fillGrid() {
-        // Ensure standard grid area has tiles
-        const range = Math.floor(GRID_SIZE / 2) + 2; // +2 buffer for edge spawning
+        // Ensure standard grid area has tiles relative to PLAYER
+        // Player Y increases indefinitely as they ride the belt.
+        // We want tiles in range [player.y - range, player.y + range]
 
-        for (let x = -range; x <= range; x++) {
-            for (let y = -range; y <= range; y++) {
+        const range = Math.floor(GRID_SIZE / 2) + 2;
+
+        // Center the loops around the player's current logical Y
+        const centerY = this.player ? this.player.y : 0;
+
+        for (let x = -range; x <= range; x++) { // X is usually centered on 0 unless player strays
+            for (let y = centerY - range; y <= centerY + range; y++) {
                 // Check if tile exists at x,y
                 const exists = this.grid.some(t => t.x === x && t.y === y);
                 if (!exists) {
                     // Procedural Generation Logic
-                    // Safe zone around 0,0 initially during first few spawns?
-                    // We use a safe margin.
-
+                    // ... (same as before)
                     let chance = 0.9;
-                    if (this.score < 20) chance = 1.0; // Safe start
+                    if (this.score < 20) chance = 1.0;
                     else if (this.score > 20) chance = 0.9;
 
                     if (Math.random() < chance) {
@@ -342,11 +354,18 @@ class Game {
     }
 
     cullGrid() {
+        // Remove tiles far from player
         const range = Math.floor(GRID_SIZE / 2) + 3;
+        const centerY = this.player ? this.player.y : 0;
 
         for (let i = this.grid.length - 1; i >= 0; i--) {
             const t = this.grid[i];
-            if (Math.abs(t.x) > range || Math.abs(t.y) > range) {
+            const dy = t.y - centerY;
+            const dx = t.x; // Player X is usually near 0, but if player moves side to side?
+            // Actually, player.x can be anything. We should cull relative to player X too.
+            // But if player goes too far X, they die anyway.
+
+            if (Math.abs(dx) > range || Math.abs(dy) > range) {
                 t.element.remove();
                 this.grid.splice(i, 1);
             }
@@ -380,6 +399,7 @@ class Game {
 
     gameOver() {
         this.isRunning = false;
+        this.playTone(100, 'sawtooth', 0.5);
         this.ui.finalScore.innerText = this.score;
         this.ui.gameOverScreen.classList.remove('hidden');
     }
@@ -390,18 +410,115 @@ class Game {
         const dt = time - this.lastTime;
         this.lastTime = time;
 
-        this.scrollTimer += dt;
-        if (this.scrollTimer > this.scrollInterval) {
-            this.scrollTimer = 0;
-            this.scrollWorld();
+        // Speed Logic: value in pixels per ms? 
+        // SCROLL_SPEED was 1000ms per tile.
+        // So speed = TILE_SIZE / SCROLL_SPEED
+        // Speed up factor: we decrease SCROLL_SPEED.
 
-            // Speed up
-            if (this.scrollInterval > 100) {
-                this.scrollInterval -= 1;
-            }
+        const pixelsPerMs = (TILE_SIZE + TILE_GAP) / this.scrollInterval;
+
+        // Continuous Scroll
+        this.yOffset += pixelsPerMs * dt;
+
+        // Check Wrap
+        const fullTile = TILE_SIZE + TILE_GAP;
+        if (this.yOffset >= fullTile) {
+            this.yOffset -= fullTile;
+            this.shiftLogic();
+        }
+
+        // Render Smooth Offset
+        this.renderScroll();
+
+        // Basic Speed Up
+        if (this.scrollInterval > 200) {
+            this.scrollInterval -= 0.05 * dt; // Slow generic speedup
         }
 
         requestAnimationFrame(this.update);
+    }
+
+    renderScroll() {
+        // Apply Y offset to the grid container
+        // The grid tiles are static in their local X/Y. We move the container.
+        this.ui.gridContainer.style.transform = `translate3d(0, ${this.yOffset}px, 0)`;
+
+        // Player is separate, so we must manually offset the player too?
+        // Player position = Logical(x,y) * size
+        // We need to ADD the visual offset.
+        this.updatePlayerVisual();
+    }
+
+    shiftLogic() {
+        // This is called when we have scrolled 1 full tile Down (+Y).
+        // 1. Shift all logical coordinates +1 Y ??
+        //    If we shift tile.y += 1, and reset offset to 0...
+        //    Old Visual: y*size + size = (y+1)*size.
+        //    New Visual: (y+1)*size + 0.
+        //    Perfect match.
+
+        this.grid.forEach(t => t.y++);
+        this.player.y++; // Player moves with the floor due to friction/physics
+
+        // 2. Cull/Spawn
+        //    "Down-Left" means logic Y increases.
+        //    So things with high Y fall off bottom.
+        //    Things at low Y (top) need to be spawned.
+
+        //    We define the "Visible Range" relative to the Player? 
+        //    Or relative to 0?
+        //    Let's keep Player centered-ish. 
+        //    If Player moves UP (-1 Y) to survive, Player Y stays near 0.
+        //    So we cull/spawn around Y=0.
+
+        this.cullGrid();
+        this.fillGrid();
+
+        this.score++;
+        this.ui.score.innerText = this.score;
+
+        // Check collision after shift (did I ride into a hole?)
+        this.checkCollision();
+    }
+
+    initAudio() {
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
+        }
+    }
+
+    playTone(freq, type, duration) {
+        if (!this.audioCtx) return;
+        try {
+            const osc = this.audioCtx.createOscillator();
+            const gain = this.audioCtx.createGain();
+
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
+
+            gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.audioCtx.destination);
+
+            osc.start();
+            osc.stop(this.audioCtx.currentTime + duration);
+        } catch (e) {
+            console.warn('Audio play failed', e);
+        }
+    }
+
+    updatePlayerVisual() {
+        const size = TILE_SIZE + TILE_GAP;
+        const xPos = this.player.x * size;
+        const yPos = this.player.y * size + this.yOffset; // Add the smooth scroll
+        const zOffset = TILE_SIZE / 2;
+
+        this.ui.player.style.transform = `translate3d(${xPos}px, ${yPos}px, ${zOffset}px)`;
     }
 }
 
