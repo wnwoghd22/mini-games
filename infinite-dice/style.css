@@ -249,3 +249,33 @@ button:active {
         opacity: 0.3;
     }
 }
+/* Tile Animations */
+@keyframes tileEnter {
+    0% {
+        opacity: 0;
+        transform: translateZ(200px) scale(0.5);
+    }
+    100% {
+        opacity: 1;
+        transform: translateZ(0) scale(1);
+    }
+}
+
+@keyframes tileExit {
+    0% {
+        opacity: 1;
+        transform: translateZ(0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateZ(-200px) scale(0.5);
+    }
+}
+
+.tile-enter {
+    animation: tileEnter 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.tile-exit {
+    animation: tileExit 0.5s ease-in forwards;
+}

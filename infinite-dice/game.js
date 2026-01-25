@@ -163,7 +163,7 @@ class Game {
 
     spawnTile(x, y) {
         const tile = document.createElement('div');
-        tile.className = 'tile';
+        tile.className = 'tile tile-enter';
 
         // Position visually
         this.updateTilePosition(tile, x, y);
@@ -462,7 +462,14 @@ class Game {
             // But if player goes too far X, they die anyway.
 
             if (Math.abs(dx) > range || Math.abs(dy) > range) {
-                t.element.remove();
+                t.element.classList.remove('tile-enter');
+                t.element.classList.add('tile-exit');
+
+                // Remove from DOM after animation
+                setTimeout(() => {
+                    t.element.remove();
+                }, 500);
+
                 this.grid.splice(i, 1);
             }
         }
