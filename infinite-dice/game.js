@@ -151,10 +151,11 @@ class Game {
         // We'll track tiles by their logical coordinates (x, y)
 
         // Initial 7x7 grid centered
-        const offset = Math.floor(GRID_SIZE / 2);
+        // Initial fill covering the full view range
+        const range = Math.floor(GRID_SIZE / 2) + 2;
 
-        for (let x = -offset; x <= offset; x++) {
-            for (let y = -offset; y <= offset; y++) {
+        for (let x = -range; x <= range; x++) {
+            for (let y = -range; y <= range; y++) {
                 this.spawnTile(x, y);
             }
         }
@@ -420,29 +421,29 @@ class Game {
     }
 
     fillGrid() {
-        // Ensure standard grid area has tiles relative to PLAYER
-        // Player Y increases indefinitely as they ride the belt.
-        // We want tiles in range [player.y - range, player.y + range]
-
         const range = Math.floor(GRID_SIZE / 2) + 2;
-
-        // Center the loops around the fixed world center (0,0) to create a treadmill effect
         const centerY = 0;
 
-        for (let x = -range; x <= range; x++) {
-            for (let y = centerY - range; y <= centerY + range; y++) {
-                // Check if tile exists at x,y
-                const exists = this.grid.some(t => t.x === x && t.y === y);
-                if (!exists) {
-                    // Procedural Generation Logic
-                    // ... (same as before)
-                    let chance = 0.9;
-                    if (this.score < 20) chance = 1.0;
-                    else if (this.score > 20) chance = 0.9;
+        // Only spawn the NEW top row (minimum y)
+        // Since tiles move down (y increases), the new "top" is the smallest logical Y.
+        // Wait, our viewport is fixed at centerY=0.
+        // Tiles drift from -range to +range.
+        // So we need to insert at y = -range.
 
-                    if (Math.random() < chance) {
-                        this.spawnTile(x, y);
-                    }
+        const y = centerY - range;
+
+        for (let x = -range; x <= range; x++) {
+            // Check if tile already exists (shouldn't, but for safety)
+            const exists = this.grid.some(t => t.x === x && t.y === y);
+            if (!exists) {
+                // Procedural Generation Logic
+                // ... (same as before)
+                let chance = 0.9;
+                if (this.score < 20) chance = 1.0;
+                else if (this.score > 20) chance = 0.9;
+
+                if (Math.random() < chance) {
+                    this.spawnTile(x, y);
                 }
             }
         }
