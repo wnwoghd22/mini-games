@@ -282,6 +282,20 @@ button:active {
     animation: tileExit 0.5s ease-in forwards;
 }
 
+/* Tile Number Label */
+.tile-number {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 32px;
+    font-weight: 900;
+    color: rgba(0, 0, 0, 0.8);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6);
+    z-index: 10;
+    pointer-events: none;
+}
+
 /* Special Tile Types */
 .tile-bonus {
     background: linear-gradient(135deg, rgba(255, 215, 0, 0.9) 0%, rgba(218, 165, 32, 0.9) 100%);
@@ -290,9 +304,7 @@ button:active {
 }
 
 .tile-bonus::after {
-    background: rgba(255, 215, 0, 0.8);
-    width: 30%;
-    height: 30%;
+    display: none; /* Hide the dot when showing number */
 }
 
 .tile-conditional {

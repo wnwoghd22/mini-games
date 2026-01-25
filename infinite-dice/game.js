@@ -3,6 +3,32 @@
  * Core Game Logic
  */
 
+// ChunkCache for storing generated map chunks
+class ChunkCache {
+    constructor() {
+        this.chunks = new Map();
+        this.maxSize = 10; // Keep last 10 chunks
+    }
+
+    getChunk(startY) {
+        return this.chunks.get(startY);
+    }
+
+    addChunk(chunk) {
+        this.chunks.set(chunk.start_y, chunk);
+
+        // Remove old chunks if cache is too large
+        if (this.chunks.size > this.maxSize) {
+            const oldestKey = Math.min(...this.chunks.keys());
+            this.chunks.delete(oldestKey);
+        }
+    }
+
+    clear() {
+        this.chunks.clear();
+    }
+}
+
 const TILE_SIZE = 60;
 const TILE_GAP = 4;
 const STEP_SIZE = TILE_SIZE + TILE_GAP;
@@ -10,15 +36,16 @@ const GRID_SIZE = 7; // Keep it odd to center easily
 const MOVE_SPEED = 200; // ms per move
 const SCROLL_SPEED = 1000; // ms per grid shift (initial)
 
-// Dice face normals (initial orientation before any rotation)
-const FACE_NORMALS = {
-    1: { x: 0, y: 0, z: 1 },   // front
-    6: { x: 0, y: 0, z: -1 },  // back
-    3: { x: 1, y: 0, z: 0 },   // right
-    4: { x: -1, y: 0, z: 0 },  // left
-    5: { x: 0, y: 1, z: 0 },   // top (initial)
-    2: { x: 0, y: -1, z: 0 }   // bottom
-}
+// Initial axis state mapping (match3dice approach)
+// Maps axis direction labels to dice face numbers
+const INITIAL_AXIS_STATE = {
+    'U': 1,  // Up = 1
+    'D': 6,  // Down = 6
+    'F': 2,  // Front = 2
+    'B': 5,  // Back = 5
+    'R': 3,  // Right = 3
+    'L': 4   // Left = 4
+};
 
 // --- Minimal Quaternion helpers (column-major convention for CSS matrix) ---
 const quatIdentity = () => ({ x: 0, y: 0, z: 0, w: 1 });
@@ -42,27 +69,6 @@ const rotateVectorByQuat = (vec, quat) => {
     const temp = quatMultiply(quat, vecQuat);
     const result = quatMultiply(temp, qInv);
     return { x: result.x, y: result.y, z: result.z };
-};
-
-// Determine which die face is currently on top (1-6)
-const getTopFaceNumber = (quaternion) => {
-    const WORLD_UP = { x: 0, y: 1, z: 0 };
-    let bestDot = -Infinity;
-    let topFace = 1;
-
-    for (const [faceNum, normal] of Object.entries(FACE_NORMALS)) {
-        const rotatedNormal = rotateVectorByQuat(normal, quaternion);
-        const dot = rotatedNormal.x * WORLD_UP.x +
-                    rotatedNormal.y * WORLD_UP.y +
-                    rotatedNormal.z * WORLD_UP.z;
-
-        if (dot > bestDot) {
-            bestDot = dot;
-            topFace = parseInt(faceNum);
-        }
-    }
-
-    return topFace;
 };
 
 const quatFromAxisAngle = (axis, angleRad) => {
@@ -145,6 +151,12 @@ class Game {
         this.scrollInterval = SCROLL_SPEED;
         this.yOffset = 0;
 
+        // WASM map generator
+        this.wasmGenerator = null;
+        this.chunkCache = new ChunkCache();
+        this.currentChunkY = 0;
+        this.worldStep = 0; // Track infinite world progression
+
         // Dice animation state
         this.orientation = quatIdentity();
         this.startQuat = quatIdentity();
@@ -154,7 +166,13 @@ class Game {
         this.moveDirection = null;
         this.moveStart = 0;
         this.moveDuration = MOVE_SPEED;
-        this.currentTopFace = 5; // Initial top face
+
+        // Face tracking using axis_state array (match3dice approach)
+        // Index: [0:Up, 1:Front, 2:Right, 3:Back, 4:Left, 5:Down]
+        // Initial: U=1, F=2, R=3, B=5, L=4, D=6
+        this.axisState = ['U', 'F', 'R', 'B', 'L', 'D'];
+        this.currentTopFace = 1; // Initial top face (what we see visually)
+        this.currentBottomFace = 6; // Initial bottom face (opposite of 1)
 
         // Audio
         this.audioCtx = null;
@@ -179,9 +197,27 @@ class Game {
         window.addEventListener('keydown', this.handleInput);
     }
 
-    init() {
+    async init() {
+        await this.initWasm();
         this.createGrid();
         this.resetPlayer();
+    }
+
+    async initWasm() {
+        try {
+            console.log("Attempting to load WASM map generator...");
+            const wasm = await import('./wasm-mapgen/pkg/infinite_dice_mapgen.js');
+            await wasm.default();
+
+            // Create generator with random seed
+            const seed = BigInt(Math.floor(Math.random() * 1000000));
+            const difficulty = 0.3; // Start with medium difficulty
+            this.wasmGenerator = new wasm.WasmMapGenerator(seed, difficulty);
+            console.log("WASM Map Generator loaded successfully!");
+        } catch (error) {
+            console.error('Failed to load WASM, using fallback generator. Error:', error);
+            this.wasmGenerator = null;
+        }
     }
 
     createGrid() {
@@ -210,6 +246,13 @@ class Game {
         // Add special tile type classes
         if (type === 'bonus') {
             tile.classList.add('tile-bonus');
+            // Display required face number
+            if (metadata && metadata.requiredFace) {
+                const numberLabel = document.createElement('div');
+                numberLabel.className = 'tile-number';
+                numberLabel.textContent = metadata.requiredFace;
+                tile.appendChild(numberLabel);
+            }
         } else if (type === 'conditional') {
             tile.classList.add('tile-conditional');
         } else if (type === 'teleport') {
@@ -277,8 +320,8 @@ class Game {
     // ...
 
 
-    reset() {
-        this.init(); // Rebuild grid
+    async reset() {
+        await this.init(); // Rebuild grid
         this.start();
     }
 
@@ -289,7 +332,12 @@ class Game {
         this.orientation = quatIdentity();
         this.startQuat = quatIdentity();
         this.targetQuat = quatIdentity();
-        this.currentTopFace = 5; // Reset to initial top face
+
+        // Reset axis_state to initial configuration
+        this.axisState = ['U', 'F', 'R', 'B', 'L', 'D'];
+        this.currentTopFace = 1;    // U
+        this.currentBottomFace = 6; // D
+
         this.isMoving = false;
 
         // Clear any death animation transitions
@@ -495,6 +543,8 @@ class Game {
         // But only spawn if it's "upstream" (NE).
         // Actually, just spawning "missing" tiles in the visible range is enough.
 
+        // Track world progress
+        this.worldStep++;
         this.fillGrid();
 
         // Cull tiles
@@ -512,29 +562,146 @@ class Game {
     fillGrid() {
         const range = Math.floor(GRID_SIZE / 2) + 2;
         const centerY = 0;
+        const screenY = centerY - range;
 
-        // Only spawn the NEW top row (minimum y)
-        // Since tiles move down (y increases), the new "top" is the smallest logical Y.
-        // Wait, our viewport is fixed at centerY=0.
-        // Tiles drift from -range to +range.
-        // So we need to insert at y = -range.
+        // World Y moves "Up" (Negative) as we step forward
+        // Initial state (step 0): worldY = screenY (-5)
+        // Step 1: worldY = -6
+        const worldY = screenY - this.worldStep;
 
-        const y = centerY - range;
+        // Use WASM generator if available
+        if (this.wasmGenerator) {
+            console.log(`[FILL] worldStep=${this.worldStep}, screenY=${screenY}, worldY=${worldY}`);
+            this.fillGridWithWasm(screenY, worldY);
+        } else {
+            console.log("[FILL] Using fallback generator (WASM failed to load)");
+            this.fillGridFallback(screenY, range);
+        }
+    }
 
+    fillGridWithWasm(screenY, worldY) {
+        const chunkSize = 15;
+        // Use worldY to decide which chunk to fetch
+        const chunkStartY = Math.floor(worldY / chunkSize) * chunkSize;
+
+        console.log(`[WASM] Requesting worldY=${worldY}, chunkStartY=${chunkStartY}`);
+
+        // Check if we need a new chunk
+        let chunk = this.chunkCache.getChunk(chunkStartY);
+
+        if (!chunk) {
+            console.log(`[WASM] Cache MISS - Generating new chunk`);
+            // Generate new chunk
+            const chunkData = this.wasmGenerator.generateChunk(chunkStartY);
+            chunk = chunkData;
+            this.chunkCache.addChunk(chunk);
+            console.log(`[WASM] Generated chunk with ${chunk.tiles.length} tiles`);
+        } else {
+            console.log(`[WASM] Cache HIT - Reusing chunk`);
+        }
+
+        // Spawn tiles from chunk for this row
+        if (chunk && chunk.tiles) {
+            const rowTiles = chunk.tiles.filter(t => t.y === worldY);
+            console.log(`[WASM] Row worldY=${worldY} has ${rowTiles.length} tiles at X positions:`,
+                        rowTiles.map(t => t.x).sort((a,b) => a-b));
+
+            for (const tileData of rowTiles) {
+                const exists = this.grid.some(t => t.x === tileData.x && t.y === screenY);
+                if (!exists) {
+                    const type = this.getTileTypeString(tileData.tile_type);
+                    const metadata = this.convertMetadata(tileData.metadata);
+                    // IMPORTANT: Spawn at screenY, but use tileData.x (horizontal is shared)
+                    this.spawnTile(tileData.x, screenY, type, metadata);
+                }
+            }
+        }
+    }
+
+    convertMetadata(wasmMetadata) {
+        if (!wasmMetadata) return null;
+
+        // Convert snake_case to camelCase
+        return {
+            requiredFace: wasmMetadata.required_face,
+            allowedFaces: wasmMetadata.allowed_faces,
+            bonusPoints: wasmMetadata.bonus_points,
+            destination: wasmMetadata.destination,
+            pairId: wasmMetadata.pair_id,
+            isKey: wasmMetadata.is_key,
+            linkedTiles: wasmMetadata.linked_tiles
+        };
+    }
+
+    fillGridFallback(y, range) {
+        // Fallback JavaScript generator
         for (let x = -range; x <= range; x++) {
-            // Check if tile already exists (shouldn't, but for safety)
             const exists = this.grid.some(t => t.x === x && t.y === y);
             if (!exists) {
-                // Procedural Generation Logic
-                // ... (same as before)
                 let chance = 0.9;
                 if (this.score < 20) chance = 1.0;
                 else if (this.score > 20) chance = 0.9;
 
                 if (Math.random() < chance) {
-                    this.spawnTile(x, y);
+                    // Randomly add special tiles
+                    const specialChance = 0.15;
+                    if (Math.random() < specialChance) {
+                        const specialType = Math.floor(Math.random() * 4);
+                        switch (specialType) {
+                            case 0:
+                                this.spawnTile(x, y, 'bonus', {
+                                    requiredFace: 6,
+                                    bonusPoints: 10
+                                });
+                                break;
+                            case 1:
+                                this.spawnTile(x, y, 'conditional', {
+                                    allowedFaces: [3, 4, 5]
+                                });
+                                break;
+                            case 2: {
+                                const destX = Math.floor(Math.random() * 9) - 4;
+                                const destY = y + 3;
+                                this.spawnTile(x, y, 'teleport', {
+                                    requiredFace: 1,
+                                    destination: { x: destX, y: destY }
+                                });
+                                // Ensure destination tile exists (will be created when that row is generated)
+                                break;
+                            }
+                            case 3: {
+                                const doorX = Math.floor(Math.random() * 9) - 4;
+                                const doorY = y + 2;
+                                const pairId = `lock_${y}_${x}`;
+                                this.spawnTile(x, y, 'lock', {
+                                    requiredFace: 2,
+                                    isKey: true,
+                                    pairId: pairId,
+                                    linkedTiles: [
+                                        { x: doorX + 1, y: doorY },
+                                        { x: doorX - 1, y: doorY }
+                                    ]
+                                });
+                                // Door will be spawned when needed
+                                break;
+                            }
+                        }
+                    } else {
+                        this.spawnTile(x, y);
+                    }
                 }
             }
+        }
+    }
+
+    getTileTypeString(tileType) {
+        switch (tileType) {
+            case 0: return 'normal';
+            case 1: return 'bonus';
+            case 2: return 'conditional';
+            case 3: return 'teleport';
+            case 4: return 'lock';
+            default: return 'normal';
         }
     }
 
@@ -572,17 +739,24 @@ class Game {
     }
 
     handleBonusTile(tile) {
-        // Bonus tile: requires face 6 for +10 points
-        if (this.currentTopFace === 6) {
+        // Bonus tile: check if BOTTOM face (touching the tile) matches required face
+        const requiredFace = tile.metadata?.requiredFace;
+        console.log(`[BONUS] Required: ${requiredFace}, Bottom face: ${this.currentBottomFace}, Top face: ${this.currentTopFace}`);
+
+        if (requiredFace && this.currentBottomFace === requiredFace) {
             const bonusPoints = tile.metadata?.bonusPoints || 10;
             this.score += bonusPoints;
             this.ui.score.innerText = this.score;
             this.playTone(600, 'sine', 0.2);
+            console.log(`[BONUS] ✓ Success! +${bonusPoints} points`);
+
             // Visual feedback
             tile.element.style.transform = 'scale(1.2)';
             setTimeout(() => {
                 tile.element.style.transform = 'scale(1)';
             }, 200);
+        } else {
+            console.log(`[BONUS] ✗ Wrong face - no bonus`);
         }
     }
 
@@ -601,6 +775,14 @@ class Game {
         // Teleport tile: requires face 1 to warp
         if (this.currentTopFace === 1 && tile.metadata?.destination) {
             const dest = tile.metadata.destination;
+
+            // Ensure destination tile exists
+            const destTileExists = this.grid.some(t => t.x === dest.x && t.y === dest.y);
+            if (!destTileExists) {
+                // Create destination tile if it doesn't exist
+                this.spawnTile(dest.x, dest.y);
+            }
+
             this.player.x = dest.x;
             this.player.y = dest.y;
             this.playTone(800, 'square', 0.3);
@@ -790,11 +972,25 @@ class Game {
         //    If Player moves UP (-1 Y) to survive, Player Y stays near 0.
         //    So we cull/spawn around Y=0.
 
+        // Track world progress
+        this.worldStep++;
+
         this.cullGrid();
         this.fillGrid();
 
         this.score++;
         this.ui.score.innerText = this.score;
+
+        // Update difficulty based on score
+        this.updateDifficulty();
+    }
+
+    updateDifficulty() {
+        if (this.wasmGenerator) {
+            // Gradually increase difficulty (0.3 to 0.9 over 200 points)
+            const newDifficulty = Math.min(0.9, 0.3 + (this.score / 400));
+            this.wasmGenerator.setDifficulty(newDifficulty);
+        }
     }
 
     updateMovement(time) {
@@ -833,6 +1029,50 @@ class Game {
         this.updatePlayerVisual({ position: pos, quaternion: currentQuat });
     }
 
+    rotateAxis(direction) {
+        // Update axis state array based on movement direction
+        // This tracks which dice face is in which orientation
+        const a = this.axisState;
+
+        switch(direction) {
+            case 'UP':  // dy=-1
+                // U→F→D→B→U cycle
+                const tempUp = a[0];
+                a[0] = a[1];  // U ← F
+                a[1] = a[5];  // F ← D
+                a[5] = a[3];  // D ← B
+                a[3] = tempUp; // B ← U
+                break;
+
+            case 'DOWN':  // dy=1
+                // U→B→D→F→U cycle
+                const tempDown = a[0];
+                a[0] = a[3];  // U ← B
+                a[3] = a[5];  // B ← D
+                a[5] = a[1];  // D ← F
+                a[1] = tempDown; // F ← U
+                break;
+
+            case 'LEFT':  // dx=-1
+                // U→R→D→L→U cycle
+                const tempLeft = a[0];
+                a[0] = a[2];  // U ← R
+                a[2] = a[5];  // R ← D
+                a[5] = a[4];  // D ← L
+                a[4] = tempLeft; // L ← U
+                break;
+
+            case 'RIGHT':  // dx=1
+                // U→L→D→R→U cycle
+                const tempRight = a[0];
+                a[0] = a[4];  // U ← L
+                a[4] = a[5];  // L ← D
+                a[5] = a[2];  // D ← R
+                a[2] = tempRight; // R ← U
+                break;
+        }
+    }
+
     startRollAnimation(dx, dy, startX, startY) {
         this.isMoving = true;
         this.moveStart = performance.now();
@@ -865,8 +1105,22 @@ class Game {
     finishMoveAnimation() {
         this.isMoving = false;
         this.orientation = quatNormalize(this.targetQuat);
-        this.currentTopFace = getTopFaceNumber(this.orientation);
-        console.log('Top face:', this.currentTopFace); // Debug output
+
+        // Update axis_state based on movement direction
+        let direction;
+        if (this.moveDirection.dy === -1) direction = 'UP';
+        else if (this.moveDirection.dy === 1) direction = 'DOWN';
+        else if (this.moveDirection.dx === -1) direction = 'LEFT';
+        else if (this.moveDirection.dx === 1) direction = 'RIGHT';
+
+        this.rotateAxis(direction);
+
+        // Get face numbers from axis_state
+        this.currentTopFace = INITIAL_AXIS_STATE[this.axisState[0]];   // Up face
+        this.currentBottomFace = INITIAL_AXIS_STATE[this.axisState[5]]; // Down face
+
+        console.log(`[DICE MOVE] Direction: ${direction}, Top: ${this.currentTopFace}, Bottom: ${this.currentBottomFace}`);
+
         this.updatePlayerVisual();
         this.checkCollision();
     }
@@ -918,4 +1172,6 @@ class Game {
 
 // Start
 const game = new Game();
-game.init();
+game.init().catch(err => {
+    console.error('Failed to initialize game:', err);
+});
