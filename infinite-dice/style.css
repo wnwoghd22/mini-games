@@ -1,0 +1,251 @@
+:root {
+    --bg-color: #1a1a2e;
+    --primary-color: #e94560;
+    --secondary-color: #0f3460;
+    --accent-color: #16213e;
+    --text-color: #ffffff;
+
+    --tile-size: 60px;
+    --tile-gap: 4px;
+
+    --grid-width: 7;
+    --grid-height: 10;
+}
+
+* {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background-color: var(--bg-color);
+    font-family: 'Outfit', sans-serif;
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#app {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+/* UI Layer */
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    pointer-events: none;
+    /* Let clicks pass through to game when playing */
+}
+
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(26, 26, 46, 0.85);
+    backdrop-filter: blur(5px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    pointer-events: auto;
+    transition: opacity 0.3s ease;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.title {
+    font-size: 4rem;
+    line-height: 1;
+    margin-bottom: 30px;
+    text-shadow: 0 0 20px var(--primary-color);
+    transform: skew(-5deg);
+}
+
+.instruction {
+    font-size: 1.2rem;
+    margin-bottom: 40px;
+    opacity: 0.8;
+}
+
+button {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 15px 40px;
+    font-size: 1.5rem;
+    font-weight: bold;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(233, 69, 96, 0.4);
+    transform: skew(-5deg);
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+button:active {
+    transform: skew(-5deg) scale(0.95);
+    box-shadow: 0 2px 10px rgba(233, 69, 96, 0.4);
+}
+
+#score-container {
+    position: absolute;
+    top: 30px;
+    right: 30px;
+    text-align: right;
+    pointer-events: auto;
+}
+
+#score-container .label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    letter-spacing: 2px;
+}
+
+#score {
+    font-size: 3rem;
+    font-weight: 900;
+}
+
+/* 3D Scene */
+#scene {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    perspective: 1000px;
+}
+
+#world {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-style: preserve-3d;
+    /* Isometric View */
+    transform: rotateX(60deg) rotateZ(45deg);
+    transition: transform 0.5s ease;
+}
+
+/* Grid & Tiles */
+#grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-style: preserve-3d;
+}
+
+.tile {
+    position: absolute;
+    width: var(--tile-size);
+    height: var(--tile-size);
+    background: linear-gradient(135deg, rgba(15, 52, 96, 0.9) 0%, rgba(22, 33, 62, 0.9) 100%);
+    border: 1px solid rgba(233, 69, 96, 0.3);
+    border-radius: 4px;
+    box-shadow: 0 0 15px rgba(233, 69, 96, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.5);
+    transition: background-color 0.2s, box-shadow 0.2s;
+    backface-visibility: hidden;
+}
+
+.tile::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20%;
+    height: 20%;
+    background: rgba(233, 69, 96, 0.5);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    filter: blur(2px);
+    opacity: 0.3;
+}
+
+/* Player Dice */
+#player {
+    position: absolute;
+    width: var(--tile-size);
+    height: var(--tile-size);
+    transform-style: preserve-3d;
+    transform-origin: center center center;
+    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.face {
+    position: absolute;
+    width: var(--tile-size);
+    height: var(--tile-size);
+    background: radial-gradient(circle at center, #ffffff 0%, #e0e0e0 100%);
+    border: 2px solid #ccc;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    font-weight: 900;
+    backface-visibility: hidden;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.face.front {
+    transform: translateZ(calc(var(--tile-size)/2));
+}
+
+.face.back {
+    transform: rotateY(180deg) translateZ(calc(var(--tile-size)/2));
+}
+
+.face.right {
+    transform: rotateY(90deg) translateZ(calc(var(--tile-size)/2));
+}
+
+.face.left {
+    transform: rotateY(-90deg) translateZ(calc(var(--tile-size)/2));
+}
+
+.face.top {
+    transform: rotateX(90deg) translateZ(calc(var(--tile-size)/2));
+}
+
+.face.bottom {
+    transform: rotateX(-90deg) translateZ(calc(var(--tile-size)/2));
+}
+
+/* Dynamic Glows */
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.3;
+    }
+
+    50% {
+        transform: scale(1.2);
+        opacity: 0.6;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 0.3;
+    }
+}
