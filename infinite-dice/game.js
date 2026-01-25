@@ -5,9 +5,92 @@
 
 const TILE_SIZE = 60;
 const TILE_GAP = 4;
+const STEP_SIZE = TILE_SIZE + TILE_GAP;
 const GRID_SIZE = 7; // Keep it odd to center easily
 const MOVE_SPEED = 200; // ms per move
 const SCROLL_SPEED = 1000; // ms per grid shift (initial)
+
+// --- Minimal Quaternion helpers (column-major convention for CSS matrix) ---
+const quatIdentity = () => ({ x: 0, y: 0, z: 0, w: 1 });
+const quatNormalize = (q) => {
+    const len = Math.hypot(q.x, q.y, q.z, q.w);
+    if (!len) return quatIdentity();
+    return { x: q.x / len, y: q.y / len, z: q.z / len, w: q.w / len };
+};
+const quatMultiply = (a, b) => ({
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+});
+const quatConjugate = (q) => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
+const quatFromAxisAngle = (axis, angleRad) => {
+    const half = angleRad / 2;
+    const s = Math.sin(half);
+    return quatNormalize({
+        x: axis.x * s,
+        y: axis.y * s,
+        z: axis.z * s,
+        w: Math.cos(half),
+    });
+};
+const quatSlerp = (a, b, t) => {
+    let cosom = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    let end = b;
+    if (cosom < 0) {
+        cosom = -cosom;
+        end = { x: -b.x, y: -b.y, z: -b.z, w: -b.w };
+    }
+
+    let scale0, scale1;
+    if (1 - cosom > 1e-6) {
+        const omega = Math.acos(cosom);
+        const sinom = Math.sin(omega);
+        scale0 = Math.sin((1 - t) * omega) / sinom;
+        scale1 = Math.sin(t * omega) / sinom;
+    } else {
+        scale0 = 1 - t;
+        scale1 = t;
+    }
+
+    return quatNormalize({
+        x: scale0 * a.x + scale1 * end.x,
+        y: scale0 * a.y + scale1 * end.y,
+        z: scale0 * a.z + scale1 * end.z,
+        w: scale0 * a.w + scale1 * end.w,
+    });
+};
+const matrixFromQuatAndPos = (q, pos) => {
+    const x2 = q.x + q.x;
+    const y2 = q.y + q.y;
+    const z2 = q.z + q.z;
+    const xx = q.x * x2;
+    const yy = q.y * y2;
+    const zz = q.z * z2;
+    const xy = q.x * y2;
+    const xz = q.x * z2;
+    const yz = q.y * z2;
+    const wx = q.w * x2;
+    const wy = q.w * y2;
+    const wz = q.w * z2;
+
+    const m11 = 1 - (yy + zz);
+    const m12 = xy - wz;
+    const m13 = xz + wy;
+    const m21 = xy + wz;
+    const m22 = 1 - (xx + zz);
+    const m23 = yz - wx;
+    const m31 = xz - wy;
+    const m32 = yz + wx;
+    const m33 = 1 - (xx + yy);
+
+    return [
+        m11, m12, m13, 0,
+        m21, m22, m23, 0,
+        m31, m32, m33, 0,
+        pos.x, pos.y, pos.z, 1
+    ];
+};
 
 class Game {
     constructor() {
@@ -15,10 +98,21 @@ class Game {
         this.player = null;
         this.score = 0;
         this.isRunning = false;
+        this.isMoving = false;
         this.lastTime = 0;
         this.scrollTimer = 0;
         this.scrollInterval = SCROLL_SPEED;
         this.yOffset = 0;
+
+        // Dice animation state
+        this.orientation = quatIdentity();
+        this.startQuat = quatIdentity();
+        this.targetQuat = quatIdentity();
+        this.moveFrom = { x: 0, y: 0 };
+        this.anchor = { x: 0, y: 0 };
+        this.moveDirection = null;
+        this.moveStart = 0;
+        this.moveDuration = MOVE_SPEED;
 
         // Audio
         this.audioCtx = null;
@@ -80,7 +174,7 @@ class Game {
     updateTilePosition(element, x, y) {
         // Isometric Logic:
         // Adjust for tile size + gap
-        const size = TILE_SIZE + TILE_GAP;
+        const size = STEP_SIZE;
 
         // In this CSS isometric setup (rx 60, rz 45):
         // Visual X corresponds to ... logic?
@@ -114,24 +208,15 @@ class Game {
     resetPlayer() {
         // Reset player logic pos
         this.player = { x: 0, y: 0 };
+        this.orientation = quatIdentity();
+        this.startQuat = quatIdentity();
+        this.targetQuat = quatIdentity();
+        this.isMoving = false;
         this.updatePlayerVisual();
     }
 
-    updatePlayerVisual() {
-        const size = TILE_SIZE + TILE_GAP;
-        // Transform the player wrapper to the correct position
-        // We need to match the tile logic
-        const xPos = this.player.x * size;
-        const yPos = this.player.y * size;
-
-        // We need to lift the die up by half its height so it sits ON the tile
-        const zOffset = TILE_SIZE / 2;
-
-        this.ui.player.style.transform = `translate3d(${xPos}px, ${yPos}px, ${zOffset}px)`;
-    }
-
     handleInput(e) {
-        if (!this.isRunning) return;
+        if (!this.isRunning || this.isMoving) return;
 
         let dx = 0;
         let dy = 0;
@@ -148,12 +233,15 @@ class Game {
     }
 
     movePlayer(dx, dy) {
+        if (this.isMoving) return;
+
+        const startX = this.player.x;
+        const startY = this.player.y;
+
         this.player.x += dx;
         this.player.y += dy;
         this.playTone(300 + Math.random() * 100, 'triangle', 0.05);
-        this.updatePlayerVisual();
-
-        this.checkCollision();
+        this.startRollAnimation(dx, dy, startX, startY);
     }
 
     scrollWorld() {
@@ -378,18 +466,14 @@ class Game {
 
         if (!onTile) {
             // Fall animation
+            this.isMoving = false;
             this.ui.player.style.transition = 'transform 0.5s ease-in';
-            const currentTransform = getComputedStyle(this.ui.player).transform;
-            // We can't easily append to matrix, but we can just add a class or force a new style.
-            // Actually, we are updating the style every frame in game loop? No, only on move.
-            // But let's just force a big Z drop.
-
-            // We need to re-apply the current X/Y and Drop Z.
-            const size = TILE_SIZE + TILE_GAP;
+            const size = STEP_SIZE;
             const xPos = this.player.x * size;
-            const yPos = this.player.y * size;
+            const yPos = this.player.y * size + this.yOffset;
 
-            this.ui.player.style.transform = `translate3d(${xPos}px, ${yPos}px, -1000px)`;
+            const mat = matrixFromQuatAndPos(this.orientation, { x: xPos, y: yPos, z: -1000 });
+            this.ui.player.style.transform = `matrix3d(${mat.join(',')})`;
 
             // Wait a bit then game over
             setTimeout(() => this.gameOver(), 500);
@@ -415,13 +499,13 @@ class Game {
         // So speed = TILE_SIZE / SCROLL_SPEED
         // Speed up factor: we decrease SCROLL_SPEED.
 
-        const pixelsPerMs = (TILE_SIZE + TILE_GAP) / this.scrollInterval;
+        const pixelsPerMs = STEP_SIZE / this.scrollInterval;
 
         // Continuous Scroll
         this.yOffset += pixelsPerMs * dt;
 
         // Check Wrap
-        const fullTile = TILE_SIZE + TILE_GAP;
+        const fullTile = STEP_SIZE;
         if (this.yOffset >= fullTile) {
             this.yOffset -= fullTile;
             this.shiftLogic();
@@ -429,6 +513,7 @@ class Game {
 
         // Render Smooth Offset
         this.renderScroll();
+        this.updateMovement(time);
 
         // Basic Speed Up
         if (this.scrollInterval > 200) {
@@ -442,11 +527,6 @@ class Game {
         // Apply Y offset to the grid container
         // The grid tiles are static in their local X/Y. We move the container.
         this.ui.gridContainer.style.transform = `translate3d(0, ${this.yOffset}px, 0)`;
-
-        // Player is separate, so we must manually offset the player too?
-        // Player position = Logical(x,y) * size
-        // We need to ADD the visual offset.
-        this.updatePlayerVisual();
     }
 
     shiftLogic() {
@@ -459,6 +539,10 @@ class Game {
 
         this.grid.forEach(t => t.y++);
         this.player.y++; // Player moves with the floor due to friction/physics
+        if (this.isMoving) {
+            this.moveFrom.y += 1;
+            this.anchor.y += 1;
+        }
 
         // 2. Cull/Spawn
         //    "Down-Left" means logic Y increases.
@@ -478,6 +562,78 @@ class Game {
         this.ui.score.innerText = this.score;
 
         // Check collision after shift (did I ride into a hole?)
+        this.checkCollision();
+    }
+
+    updateMovement(time) {
+        if (!this.isMoving) {
+            this.updatePlayerVisual();
+            return;
+        }
+
+        const elapsed = time - this.moveStart;
+        const t = Math.min(1, elapsed / this.moveDuration);
+        this.applyRollFrame(t);
+
+        if (t >= 1) {
+            this.finishMoveAnimation();
+        }
+    }
+
+    applyRollFrame(t) {
+        const moveDeg = t * 90 + 45;
+        const rad = moveDeg * Math.PI / 180;
+        const sinPart = Math.sin(rad) / Math.SQRT2;
+        const cosPart = Math.cos(rad) / Math.SQRT2;
+        const pos = { x: this.anchor.x, y: this.anchor.y, z: sinPart };
+
+        if (this.moveDirection.dy === -1) {
+            pos.y = this.anchor.y + cosPart;
+        } else if (this.moveDirection.dy === 1) {
+            pos.y = this.anchor.y - cosPart;
+        } else if (this.moveDirection.dx === -1) {
+            pos.x = this.anchor.x + cosPart;
+        } else if (this.moveDirection.dx === 1) {
+            pos.x = this.anchor.x - cosPart;
+        }
+
+        const currentQuat = quatSlerp(this.startQuat, this.targetQuat, t);
+        this.updatePlayerVisual({ position: pos, quaternion: currentQuat });
+    }
+
+    startRollAnimation(dx, dy, startX, startY) {
+        this.isMoving = true;
+        this.moveStart = performance.now();
+        this.moveDuration = MOVE_SPEED;
+        this.moveDirection = { dx, dy };
+        this.moveFrom = { x: startX, y: startY };
+        this.anchor = { x: startX, y: startY };
+
+        if (dy === -1) this.anchor.y -= 0.5;
+        else if (dy === 1) this.anchor.y += 0.5;
+        else if (dx === -1) this.anchor.x -= 0.5;
+        else if (dx === 1) this.anchor.x += 0.5;
+
+        this.startQuat = { ...this.orientation };
+        // Match match3dice approach: apply a world-space quarter turn to current orientation.
+        let axis;
+        let angle;
+        if (dy !== 0) {
+            axis = { x: 1, y: 0, z: 0 }; // pitch forward/backward
+            angle = dy === -1 ? -Math.PI / 2 : Math.PI / 2;
+        } else {
+            axis = { x: 0, y: 1, z: 0 }; // roll left/right
+            angle = dx === -1 ? Math.PI / 2 : -Math.PI / 2;
+        }
+
+        const deltaQuat = quatFromAxisAngle(axis, angle);
+        this.targetQuat = quatNormalize(quatMultiply(this.startQuat, deltaQuat));
+    }
+
+    finishMoveAnimation() {
+        this.isMoving = false;
+        this.orientation = quatNormalize(this.targetQuat);
+        this.updatePlayerVisual();
         this.checkCollision();
     }
 
@@ -512,13 +668,17 @@ class Game {
         }
     }
 
-    updatePlayerVisual() {
-        const size = TILE_SIZE + TILE_GAP;
-        const xPos = this.player.x * size;
-        const yPos = this.player.y * size + this.yOffset; // Add the smooth scroll
-        const zOffset = TILE_SIZE / 2;
+    updatePlayerVisual({ position, quaternion } = {}) {
+        const size = STEP_SIZE;
+        const pos = position || { x: this.player.x, y: this.player.y, z: 0.5 };
+        const q = quaternion || this.orientation;
+        const xPos = pos.x * size;
+        const yPos = pos.y * size + this.yOffset; // Add the smooth scroll
+        const height = pos.z ?? 0.5;
+        const zOffset = (TILE_SIZE * 0.5) + (height - 0.5) * STEP_SIZE;
 
-        this.ui.player.style.transform = `translate3d(${xPos}px, ${yPos}px, ${zOffset}px)`;
+        const mat = matrixFromQuatAndPos(q, { x: xPos, y: yPos, z: zOffset });
+        this.ui.player.style.transform = `matrix3d(${mat.join(',')})`;
     }
 }
 
