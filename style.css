@@ -7,6 +7,16 @@
     --accent-glow: rgba(56, 189, 248, 0.5);
     --glass-border: rgba(255, 255, 255, 0.1);
     --font-main: 'Inter', sans-serif;
+    --status-available: #34d399;
+    --status-available-rgb: 16, 185, 129;
+    --status-new: #38bdf8;
+    --status-new-rgb: 56, 189, 248;
+    --status-hot: #ef4444;
+    --status-hot-rgb: 239, 68, 68;
+    --status-develop: #f59e0b;
+    --status-develop-rgb: 245, 158, 11;
+    --status-soon: #94a3b8;
+    --status-soon-rgb: 148, 163, 184;
 }
 
 * {
@@ -105,6 +115,14 @@ main {
     transform: translateX(100%);
 }
 
+.game-card.is-static {
+    opacity: 0.5;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+    pointer-events: none;
+}
+
 .game-icon {
     font-size: 3rem;
     margin-bottom: 1.5rem;
@@ -131,13 +149,43 @@ main {
     position: absolute;
     top: 1rem;
     right: 1rem;
-    background: rgba(16, 185, 129, 0.2);
-    color: #34d399;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
     padding: 0.25rem 0.75rem;
     border-radius: 100px;
     font-size: 0.75rem;
     font-weight: 600;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    border: 1px solid var(--glass-border);
+}
+
+.status-badge[data-status="available"] {
+    color: var(--status-available);
+    background: rgba(var(--status-available-rgb), 0.12);
+    border-color: rgba(var(--status-available-rgb), 0.3);
+}
+
+.status-badge[data-status="new"] {
+    color: var(--status-new);
+    background: rgba(var(--status-new-rgb), 0.12);
+    border-color: rgba(var(--status-new-rgb), 0.3);
+}
+
+.status-badge[data-status="hot"] {
+    color: var(--status-hot);
+    background: rgba(var(--status-hot-rgb), 0.12);
+    border-color: rgba(var(--status-hot-rgb), 0.3);
+}
+
+.status-badge[data-status="develop"] {
+    color: var(--status-develop);
+    background: rgba(var(--status-develop-rgb), 0.12);
+    border-color: rgba(var(--status-develop-rgb), 0.3);
+}
+
+.status-badge[data-status="soon"] {
+    color: var(--status-soon);
+    background: rgba(var(--status-soon-rgb), 0.12);
+    border-color: rgba(var(--status-soon-rgb), 0.3);
 }
 
 footer {
