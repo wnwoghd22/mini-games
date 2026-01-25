@@ -189,7 +189,6 @@ button:active {
     transform-style: preserve-3d;
     transform-origin: center center center;
     transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
 }
 
 .face {
@@ -249,12 +248,14 @@ button:active {
         opacity: 0.3;
     }
 }
+
 /* Tile Animations */
 @keyframes tileEnter {
     0% {
         opacity: 0;
         transform: translateZ(200px) scale(0.5);
     }
+
     100% {
         opacity: 1;
         transform: translateZ(0) scale(1);
@@ -266,6 +267,7 @@ button:active {
         opacity: 1;
         transform: translateZ(0) scale(1);
     }
+
     100% {
         opacity: 0;
         transform: translateZ(-200px) scale(0.5);
