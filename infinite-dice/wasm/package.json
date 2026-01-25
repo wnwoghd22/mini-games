@@ -1,0 +1,15 @@
+{
+  "name": "infinite-dice-mapgen",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "infinite_dice_mapgen_bg.wasm",
+    "infinite_dice_mapgen.js",
+    "infinite_dice_mapgen.d.ts"
+  ],
+  "main": "infinite_dice_mapgen.js",
+  "types": "infinite_dice_mapgen.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
