@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 
 <head>
@@ -22,39 +22,40 @@
         <div class="games-grid">
             <!-- Match 3 Dice Card (Existing Game) -->
             <a href="./match3dice/index.html" class="game-card">
-                <span class="status-badge">Available</span>
-                <div class="game-icon">🎲</div>
+                <span class="status-badge" data-status="available">Available</span>
+                <div class="game-icon" aria-hidden="true">&#127922;3</div>
                 <h2 class="game-title">Match 3 Dice</h2>
-                <p class="game-desc">A puzzle game where you match dice values. Built with Rust and WebAssembly for high
-                    performance.</p>
+                <p class="game-desc">A puzzle game where you match dice values. Built with Rust and WebAssembly for high performance.</p>
             </a>
 
             <!-- Hex Connect Card (New Game) -->
             <a href="./hex-connect/index.html" class="game-card">
-                <span class="status-badge"
-                    style="color: #38bdf8; background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.2);">New</span>
-                <div class="game-icon">⬢</div>
+                <span class="status-badge" data-status="new">New</span>
+                <div class="game-icon" aria-hidden="true">&#11042;</div>
                 <h2 class="game-title">Hex Connect</h2>
-                <p class="game-desc">Connect adjacent matching colors in this relaxing hexagonal puzzle. How high can
-                    you score?</p>
+                <p class="game-desc">Connect adjacent matching colors in this relaxing hexagonal puzzle. How high can you score?</p>
             </a>
 
-            <!-- Hex Defense Card (New Game) -->
+            <!-- Hex Defense Card (Hot Game) -->
             <a href="./hex-defense/index.html" class="game-card">
-                <span class="status-badge"
-                    style="color: #ef4444; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2);">Hot</span>
-                <div class="game-icon">🛡️</div>
+                <span class="status-badge" data-status="hot">Hot</span>
+                <div class="game-icon" aria-hidden="true">&#128737;</div>
                 <h2 class="game-title">Hex Defense</h2>
-                <p class="game-desc">Strategic Tower Defense on a Hex Grid. Build custom turrets and defend against
-                    waves!</p>
+                <p class="game-desc">Strategic Tower Defense on a Hex Grid. Build custom turrets and defend against waves!</p>
+            </a>
+
+            <!-- Infinite Dice Card (In Develop) -->
+            <a href="./infinite-dice/index.html" class="game-card">
+                <span class="status-badge" data-status="develop">In-Develop</span>
+                <div class="game-icon" aria-hidden="true">&#8734;&#127922;</div>
+                <h2 class="game-title">Infinite Dice</h2>
+                <p class="game-desc">Roll across an endless grid, dodge obstacles, and chase high scores in a slick 3D dice run.</p>
             </a>
 
             <!-- Placeholder for Future Games -->
-            <div class="game-card" style="opacity: 0.5; cursor: default; transform: none; box-shadow: none;">
-                <span class="status-badge"
-                    style="background: rgba(148, 163, 184, 0.1); color: #94a3b8; border-color: rgba(148, 163, 184, 0.2);">Coming
-                    Soon</span>
-                <div class="game-icon" style="-webkit-text-fill-color: #475569;">🚀</div>
+            <div class="game-card is-static">
+                <span class="status-badge" data-status="soon">Coming Soon</span>
+                <div class="game-icon" aria-hidden="true" style="-webkit-text-fill-color: #475569;">&#10024;</div>
                 <h2 class="game-title">New Adventure</h2>
                 <p class="game-desc">The next exciting game is currently in development. Stay tuned!</p>
             </div>
@@ -62,7 +63,7 @@
     </main>
 
     <footer>
-        <p>© 2024 Vibes Coding Mini-Games. Built with passion & AI.</p>
+        <p>(c) 2024 Vibes Coding Mini-Games. Built with passion & AI.</p>
     </footer>
 </body>
 

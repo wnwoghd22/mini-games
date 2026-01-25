@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Dice Roll</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="app">
+        <!-- UI Layer -->
+        <div id="ui-layer">
+            <div id="score-container">
+                <span class="label">SCORE</span>
+                <span id="score">0</span>
+            </div>
+
+            <div id="start-screen" class="screen">
+                <h1 class="title">INFINITE<br>DICE ROLL</h1>
+                <p class="instruction">Use Arrow Keys or Swipe to Move</p>
+                <button id="start-btn">START GAME</button>
+            </div>
+
+            <div id="game-over-screen" class="screen hidden">
+                <h1 class="title">GAME OVER</h1>
+                <p class="final-score">Score: <span id="final-score-val">0</span></p>
+                <button id="restart-btn">TRY AGAIN</button>
+            </div>
+        </div>
+
+        <!-- 3D Scene -->
+        <div id="scene">
+            <div id="world">
+                <!-- Grid tiles will be injected here -->
+                <div id="grid"></div>
+
+                <!-- The Player Dice -->
+                <div id="player">
+                    <div class="face front">1</div>
+                    <div class="face back">6</div>
+                    <div class="face right">3</div>
+                    <div class="face left">4</div>
+                    <div class="face top">5</div>
+                    <div class="face bottom">2</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="game.js" type="module"></script>
+</body>
+
+</html>
