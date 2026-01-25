@@ -507,8 +507,11 @@ class Game {
         // Check Wrap
         const fullTile = STEP_SIZE;
         if (this.yOffset >= fullTile) {
-            this.yOffset -= fullTile;
-            this.shiftLogic();
+            // Use a while loop to catch up if we skipped multiple tiles
+            while (this.yOffset >= fullTile) {
+                this.yOffset -= fullTile;
+                this.shiftLogic();
+            }
         }
 
         // Render Smooth Offset
