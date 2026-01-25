@@ -7,6 +7,7 @@
 class ChunkCache {
     constructor() {
         this.chunks = new Map();
+        this.lastRowPositions = new Map(); // Store last row X positions for each chunk
         this.maxSize = 10; // Keep last 10 chunks
     }
 
@@ -17,15 +18,27 @@ class ChunkCache {
     addChunk(chunk) {
         this.chunks.set(chunk.start_y, chunk);
 
+        // Store last row positions for connectivity
+        const lastY = chunk.end_y - 1;
+        const lastRowTiles = chunk.tiles.filter(t => t.y === lastY);
+        const lastRowXPositions = lastRowTiles.map(t => t.x);
+        this.lastRowPositions.set(chunk.start_y, lastRowXPositions);
+
         // Remove old chunks if cache is too large
         if (this.chunks.size > this.maxSize) {
             const oldestKey = Math.min(...this.chunks.keys());
             this.chunks.delete(oldestKey);
+            this.lastRowPositions.delete(oldestKey);
         }
+    }
+
+    getLastRowPositions(startY) {
+        return this.lastRowPositions.get(startY) || [];
     }
 
     clear() {
         this.chunks.clear();
+        this.lastRowPositions.clear();
     }
 }
 
@@ -583,6 +596,7 @@ class Game {
         const chunkSize = 15;
         // Use worldY to decide which chunk to fetch
         const chunkStartY = Math.floor(worldY / chunkSize) * chunkSize;
+        const prevChunkStartY = chunkStartY - chunkSize;
 
         console.log(`[WASM] Requesting worldY=${worldY}, chunkStartY=${chunkStartY}`);
 
@@ -594,6 +608,53 @@ class Game {
             // Generate new chunk
             const chunkData = this.wasmGenerator.generateChunk(chunkStartY);
             chunk = chunkData;
+
+            // CRITICAL: Fix chunk boundary connectivity BEFORE caching
+            if (chunkStartY !== 0) {
+                const prevLastRowPositions = this.chunkCache.getLastRowPositions(prevChunkStartY);
+
+                if (prevLastRowPositions.length > 0) {
+                    const firstRowY = chunkStartY;
+                    const firstRowTiles = chunk.tiles.filter(t => t.y === firstRowY);
+                    const firstRowXPositions = firstRowTiles.map(t => t.x);
+
+                    // Calculate reachable positions from previous row
+                    const reachable = new Set();
+                    for (const prevX of prevLastRowPositions) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const nextX = prevX + dx;
+                            if (nextX >= -5 && nextX <= 5) {
+                                reachable.add(nextX);
+                            }
+                        }
+                    }
+
+                    // Check if at least one tile exists in reachable positions
+                    const hasReachableTile = firstRowXPositions.some(x => reachable.has(x));
+
+                    if (!hasReachableTile) {
+                        console.log(`[WASM] ⚠️ CHUNK BOUNDARY BROKEN! No reachable tiles.`);
+                        console.log(`[WASM] Previous row: [${prevLastRowPositions.join(', ')}]`);
+                        console.log(`[WASM] Reachable: [${[...reachable].sort((a,b) => a-b).join(', ')}]`);
+                        console.log(`[WASM] Current row: [${firstRowXPositions.sort((a,b) => a-b).join(', ')}]`);
+
+                        // Add a guaranteed bridge tile
+                        const reachableArray = [...reachable];
+                        const bridgeX = reachableArray[Math.floor(Math.random() * reachableArray.length)];
+                        const bridgeTile = {
+                            x: bridgeX,
+                            y: firstRowY,
+                            tile_type: 0, // Normal
+                            metadata: null
+                        };
+                        chunk.tiles.push(bridgeTile);
+                        console.log(`[WASM] ✓ Added bridge tile at X=${bridgeX}, Y=${firstRowY}`);
+                    } else {
+                        console.log(`[WASM] ✓ Chunk boundary connected properly`);
+                    }
+                }
+            }
+
             this.chunkCache.addChunk(chunk);
             console.log(`[WASM] Generated chunk with ${chunk.tiles.length} tiles`);
         } else {
@@ -603,6 +664,7 @@ class Game {
         // Spawn tiles from chunk for this row
         if (chunk && chunk.tiles) {
             const rowTiles = chunk.tiles.filter(t => t.y === worldY);
+
             console.log(`[WASM] Row worldY=${worldY} has ${rowTiles.length} tiles at X positions:`,
                         rowTiles.map(t => t.x).sort((a,b) => a-b));
 
