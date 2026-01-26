@@ -15,6 +15,19 @@ const GRAVITY_DIRS = [
     { x: -1, y: 0 }  // 3: Left
 ];
 
+const rotate90 = (v, sign) => sign === 1
+    ? { x: -v.y, y: v.x }   // CCW
+    : { x: v.y, y: -v.x };  // CW
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerpPoint = (a, b, t) => ({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) });
+const lerpAngle = (a, b, t) => {
+    let diff = b - a;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    return a + diff * t;
+};
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -46,6 +59,7 @@ class Game {
             gravityIndex: 0,
             rotation: 0,
             isMoving: false,
+            lockRotation: false,
             score: 0
         };
 
@@ -74,9 +88,6 @@ class Game {
     }
 
     attemptMove(dir) {
-        // 1. Check direct slide
-        // 2. Check overlap?
-
         const g = GRAVITY_DIRS[this.state.gravityIndex];
 
         // Current Pos
@@ -89,39 +100,173 @@ class Game {
 
         const nextTile = this.getTile(tx, ty);
 
-        // Stop Condition 1: Wall
         if (nextTile === TILE.WALL) return; // Bonk
 
-        // Check for Walk-Off Interaction
-        // We are moving into Empty Space, but the floor *under* that space is a Corner.
+        // Corner directly ahead (same plane)
+        if (this.isCorner(nextTile)) {
+            const plan = this.buildCornerPlan(tx, ty, nextTile, dir);
+            if (plan) {
+                this.runCornerPlan(plan);
+                return;
+            }
+            return;
+        }
+
+        // Empty space with a corner just below/behind (walk-off case)
         if (nextTile === TILE.EMPTY) {
-            const g = GRAVITY_DIRS[this.state.gravityIndex];
             const floorX = tx + g.x;
             const floorY = ty + g.y;
             const floorTile = this.getTile(floorX, floorY);
 
             if (this.isCorner(floorTile)) {
-                // We are about to step onto a Corner Ledge.
-                // Check traversal
-                if (this.canTraverseCorner(floorTile, dir, g)) {
-                    // Pass the Corner Tile coordinates as target
-                    this.traverseCorner(floorTile, floorX, floorY, dir);
+                const plan = this.buildCornerPlan(floorX, floorY, floorTile, dir);
+                if (plan) {
+                    this.runCornerPlan(plan);
                     return;
                 }
             }
         }
 
-        // Interaction Condition: Corner Block AHEAD (Face-Plant)
-        // NOT Supported for "Outer Corner" logic as per User Requests (Walk-Off only).
-        // If we hit a corner wall, we just stop.
-        if (this.isCorner(nextTile)) {
-            // Stop.
-            this.state.isMoving = false;
-            return;
+        this.slide(dir);
+    }
+
+    getCornerTurn(cornerType, gIdx, dir) {
+        const dx = dir.x, dy = dir.y;
+
+        switch (cornerType) {
+            case TILE.CORNER_TR:
+                if (gIdx === 0 && dx === 1 && dy === 0) return { targetG: 3, sign: 1 };   // Top -> Right face
+                if (gIdx === 3 && dx === 0 && dy === -1) return { targetG: 0, sign: -1 }; // Right -> Top face
+                break;
+            case TILE.CORNER_TL:
+                if (gIdx === 0 && dx === -1 && dy === 0) return { targetG: 1, sign: -1 }; // Top -> Left face
+                if (gIdx === 1 && dx === 0 && dy === -1) return { targetG: 0, sign: -1 }; // Left -> Top face
+                break;
+            case TILE.CORNER_BR:
+                if (gIdx === 2 && dx === 1 && dy === 0) return { targetG: 3, sign: -1 };  // Bottom -> Right face
+                if (gIdx === 3 && dx === 0 && dy === 1) return { targetG: 2, sign: 1 };   // Right -> Bottom face
+                break;
+            case TILE.CORNER_BL:
+                if (gIdx === 2 && dx === -1 && dy === 0) return { targetG: 1, sign: 1 };  // Bottom -> Left face
+                if (gIdx === 1 && dx === 0 && dy === 1) return { targetG: 2, sign: -1 };  // Left -> Bottom face
+                break;
         }
 
-        // Standard Slide
-        this.slide(dir);
+        return null;
+    }
+
+    buildCornerPlan(cornerX, cornerY, cornerType, dir) {
+        const gIdx = this.state.gravityIndex;
+        const turn = this.getCornerTurn(cornerType, gIdx, dir);
+        if (!turn) return null;
+
+        const pivot = { x: cornerX + 0.5, y: cornerY + 0.5 };
+        const gStart = GRAVITY_DIRS[gIdx];
+        const gEnd = GRAVITY_DIRS[turn.targetG];
+
+        const entryCenter = {
+            x: pivot.x - gStart.x * 0.5,
+            y: pivot.y - gStart.y * 0.5
+        };
+
+        const exitCenter = {
+            x: pivot.x - gEnd.x * 0.5,
+            y: pivot.y - gEnd.y * 0.5
+        };
+
+        const exitDir = rotate90(dir, turn.sign);
+        const exitStepCenter = {
+            x: exitCenter.x + exitDir.x,
+            y: exitCenter.y + exitDir.y
+        };
+
+        const finalTile = {
+            x: Math.round(exitStepCenter.x - 0.5),
+            y: Math.round(exitStepCenter.y - 0.5)
+        };
+
+        const finalTileType = this.getTile(finalTile.x, finalTile.y);
+        if (finalTileType === TILE.WALL || this.isCorner(finalTileType)) return null;
+
+        const floorX = finalTile.x + gEnd.x;
+        const floorY = finalTile.y + gEnd.y;
+        if (!this.hasSolidGround(floorX, floorY)) return null;
+
+        return {
+            cornerType,
+            turn,
+            pivot,
+            targetG: turn.targetG,
+            entryCenter,
+            exitCenter,
+            exitStepCenter,
+            finalTile
+        };
+    }
+
+    runCornerPlan(plan) {
+        this.state.isMoving = true;
+        this.state.lockRotation = true;
+
+        const startCenter = { x: this.state.player.x + 0.5, y: this.state.player.y + 0.5 };
+        const startRot = this.state.rotation;
+        const targetRot = plan.targetG * (Math.PI / 2);
+
+        const entryAngle = Math.atan2(plan.entryCenter.y - plan.pivot.y, plan.entryCenter.x - plan.pivot.x);
+        const radius = Math.hypot(plan.entryCenter.x - plan.pivot.x, plan.entryCenter.y - plan.pivot.y);
+
+        let progress = 0;
+        const entryEnd = 0.25;
+        const rotateEnd = 0.75;
+        const speed = 0.03;
+
+        const step = () => {
+            progress += speed;
+            if (progress > 1) progress = 1;
+
+            let center, rot;
+
+            if (progress < entryEnd) {
+                const t = progress / entryEnd;
+                center = lerpPoint(startCenter, plan.entryCenter, t);
+                rot = startRot;
+            } else if (progress < rotateEnd) {
+                const t = (progress - entryEnd) / (rotateEnd - entryEnd);
+                const ang = entryAngle + plan.turn.sign * t * (Math.PI / 2);
+                center = {
+                    x: plan.pivot.x + Math.cos(ang) * radius,
+                    y: plan.pivot.y + Math.sin(ang) * radius
+                };
+                rot = lerpAngle(startRot, targetRot, t);
+            } else {
+                const t = (progress - rotateEnd) / (1 - rotateEnd);
+                center = lerpPoint(plan.exitCenter, plan.exitStepCenter, t);
+                rot = targetRot;
+            }
+
+            this.state.player.x = center.x - 0.5;
+            this.state.player.y = center.y - 0.5;
+            this.state.rotation = rot;
+
+            if (progress < 1) {
+                requestAnimationFrame(step);
+            } else {
+                this.state.isMoving = false;
+                this.state.lockRotation = false;
+                this.state.gravityIndex = plan.targetG;
+                this.state.player.x = plan.exitStepCenter.x - 0.5;
+                this.state.player.y = plan.exitStepCenter.y - 0.5;
+                this.state.rotation = this.state.gravityIndex * (Math.PI / 2);
+
+                const gx = Math.round(this.state.player.x);
+                const gy = Math.round(this.state.player.y);
+                if (this.getTile(gx, gy) === TILE.GEM) {
+                    this.collectGem(gx, gy);
+                }
+            }
+        };
+
+        requestAnimationFrame(step);
     }
 
     canTraverseCorner(cornerType, moveDir, gravityDir) {
@@ -671,15 +816,15 @@ class Game {
         const dt = t - this.lastTime;
         this.lastTime = t;
 
-        // Smooth rotation
-        const targetRot = this.state.gravityIndex * (Math.PI / 2);
+        if (!this.state.lockRotation) {
+            const targetRot = this.state.gravityIndex * (Math.PI / 2);
 
-        // Shortest path interpolation (0 -> 270 should be -90)
-        let diff = targetRot - this.state.rotation;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
+            let diff = targetRot - this.state.rotation;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
 
-        this.state.rotation += diff * 0.1;
+            this.state.rotation += diff * 0.1;
+        }
 
         this.renderer.draw(this.state, this.level);
         requestAnimationFrame((t) => this.loop(t));
