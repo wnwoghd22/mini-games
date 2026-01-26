@@ -160,29 +160,34 @@ class Game {
         const turn = this.getCornerTurn(cornerType, gIdx, dir);
         if (!turn) return null;
 
+        // Pivot at tile center; arc radius is half a tile to match the rendered quarter circle.
+        const CORNER_RADIUS = 0.5;
         const pivot = { x: cornerX + 0.5, y: cornerY + 0.5 };
         const gStart = GRAVITY_DIRS[gIdx];
         const gEnd = GRAVITY_DIRS[turn.targetG];
 
         const entryCenter = {
-            x: pivot.x - gStart.x * 0.5,
-            y: pivot.y - gStart.y * 0.5
+            x: pivot.x - gStart.x * CORNER_RADIUS,
+            y: pivot.y - gStart.y * CORNER_RADIUS
         };
 
         const exitCenter = {
-            x: pivot.x - gEnd.x * 0.5,
-            y: pivot.y - gEnd.y * 0.5
+            x: pivot.x - gEnd.x * CORNER_RADIUS,
+            y: pivot.y - gEnd.y * CORNER_RADIUS
         };
 
         const exitDir = rotate90(dir, turn.sign);
-        const exitStepCenter = {
-            x: exitCenter.x + exitDir.x,
-            y: exitCenter.y + exitDir.y
+        // Push outward from the corner so the player body doesn't overlap the curved block.
+        const outward = { x: -gEnd.x * CORNER_RADIUS, y: -gEnd.y * CORNER_RADIUS };
+
+        const finalCenter = {
+            x: exitCenter.x + exitDir.x + outward.x,
+            y: exitCenter.y + exitDir.y + outward.y
         };
 
         const finalTile = {
-            x: Math.round(exitStepCenter.x - 0.5),
-            y: Math.round(exitStepCenter.y - 0.5)
+            x: Math.round(finalCenter.x - 0.5),
+            y: Math.round(finalCenter.y - 0.5)
         };
 
         const finalTileType = this.getTile(finalTile.x, finalTile.y);
@@ -192,6 +197,8 @@ class Game {
         const floorY = finalTile.y + gEnd.y;
         if (!this.hasSolidGround(floorX, floorY)) return null;
 
+        const snapCenter = { x: finalTile.x + 0.5, y: finalTile.y + 0.5 };
+
         return {
             cornerType,
             turn,
@@ -199,8 +206,9 @@ class Game {
             targetG: turn.targetG,
             entryCenter,
             exitCenter,
-            exitStepCenter,
-            finalTile
+            exitStepCenter: finalCenter,
+            finalTile,
+            snapCenter
         };
     }
 
@@ -213,7 +221,7 @@ class Game {
         const targetRot = plan.targetG * (Math.PI / 2);
 
         const entryAngle = Math.atan2(plan.entryCenter.y - plan.pivot.y, plan.entryCenter.x - plan.pivot.x);
-        const radius = Math.hypot(plan.entryCenter.x - plan.pivot.x, plan.entryCenter.y - plan.pivot.y);
+        const radius = 0.5; // fixed half-tile radius to match corner geometry
 
         let progress = 0;
         const entryEnd = 0.25;
@@ -254,8 +262,8 @@ class Game {
                 this.state.isMoving = false;
                 this.state.lockRotation = false;
                 this.state.gravityIndex = plan.targetG;
-                this.state.player.x = plan.exitStepCenter.x - 0.5;
-                this.state.player.y = plan.exitStepCenter.y - 0.5;
+                this.state.player.x = plan.snapCenter.x - 0.5;
+                this.state.player.y = plan.snapCenter.y - 0.5;
                 this.state.rotation = this.state.gravityIndex * (Math.PI / 2);
 
                 const gx = Math.round(this.state.player.x);

@@ -102,71 +102,42 @@ export class Renderer {
             ctx.fill();
         }
         else if (tile >= TILE.CORNER_TL && tile <= TILE.CORNER_BR) {
-            ctx.fillStyle = this.colors[TILE.WALL]; // Use Wall color for base
-            // Draw arc?
-            // TILE.CORNER_TL: Top-Left Rounded. Means Top and Left sides are flat?
-            // "non-adjacent side is quarter circle". 
-            // Neighbors on TWO sides.
-            // If TL (Top-Left) is the type.
-            // Usually TL implies the "Corner" is at Top-Left. 
-            // So Bottom and Right are the neighbors?
-            // Let's assume standard nomenclature:
-            // CORNER_TL means the "Top Left" of the solid block is missing (curved).
-            // So Neighbors are Bottom and Right.
-            // Curve is concave? No, convex wall corner.
+            ctx.fillStyle = this.colors[TILE.WALL];
 
-            // Let's stick to the visual: 
-            // If I am walking on Top surface, I reach the Right edge.
-            // The Block there is a Rounded Corner.
-            // If it rounds "Down", it's the Top-Left of that block that is rounded.
-            // So Neighbors are Bottom and Right.
-
-            // Draw logic:
-            // Fill a square, then "Cut" the corner?
-            // Or just fill the shape.
+            // Corner drawn around cell center with radius half tile
+            const cx = x + this.tileSize / 2;
+            const cy = y + this.tileSize / 2;
+            const r = this.tileSize / 2;
 
             ctx.beginPath();
-            const cx = x + (tile === TILE.CORNER_TL || tile === TILE.CORNER_BL ? this.tileSize : 0);
-            const cy = y + (tile === TILE.CORNER_TL || tile === TILE.CORNER_TR ? this.tileSize : 0);
-            // Wait, if TL (Top Left is Removed). Pivot is Bottom-Right?
-            // Yes.
-
-            let pivotX = x, pivotY = y;
-            let startAng = 0, endAng = 0;
-
-            if (tile === TILE.CORNER_TL) { // Missing Top-Left. Pivot Bottom-Right.
-                pivotX = x + this.tileSize;
-                pivotY = y + this.tileSize;
-                startAng = Math.PI; // 180
-                endAng = Math.PI * 1.5; // 270
-                // Draw arc from Left(180) to Top(270) relative to pivot?
-                // Arc goes 180->270.
-                // We want to fill the SECTOR.
-                // ctx.moveTo(pivotX, pivotY); 
-                // ctx.arc(...)
-            } else if (tile === TILE.CORNER_TR) { // Missing Top-Right. Pivot Bottom-Left.
-                pivotX = x;
-                pivotY = y + this.tileSize;
-                startAng = Math.PI * 1.5; // 270
-                endAng = Math.PI * 2; // 360
-            } else if (tile === TILE.CORNER_BR) { // Missing Bottom-Right. Pivot Top-Left.
-                pivotX = x;
-                pivotY = y;
-                startAng = 0;
-                endAng = Math.PI * 0.5; // 90
-            } else if (tile === TILE.CORNER_BL) { // Missing Bottom-Left. Pivot Top-Right.
-                pivotX = x + this.tileSize;
-                pivotY = y;
-                startAng = Math.PI * 0.5; // 90
-                endAng = Math.PI; // 180
+            if (tile === TILE.CORNER_TL) {
+                ctx.moveTo(x, y + this.tileSize);
+                ctx.lineTo(x, y + this.tileSize / 2);
+                ctx.arc(cx, cy, r, Math.PI, Math.PI * 1.5, false);
+                ctx.lineTo(x + this.tileSize, y);
+                ctx.lineTo(x + this.tileSize, y + this.tileSize);
+            } else if (tile === TILE.CORNER_TR) {
+                ctx.moveTo(x + this.tileSize, y + this.tileSize);
+                ctx.lineTo(x + this.tileSize, y + this.tileSize / 2);
+                ctx.arc(cx, cy, r, -Math.PI * 0.5, 0, false);
+                ctx.lineTo(x, y);
+                ctx.lineTo(x, y + this.tileSize);
+            } else if (tile === TILE.CORNER_BR) {
+                ctx.moveTo(x + this.tileSize, y);
+                ctx.lineTo(x + this.tileSize / 2, y);
+                ctx.arc(cx, cy, r, 0, Math.PI * 0.5, false);
+                ctx.lineTo(x, y + this.tileSize);
+                ctx.lineTo(x + this.tileSize, y + this.tileSize);
+            } else if (tile === TILE.CORNER_BL) {
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + this.tileSize / 2);
+                ctx.arc(cx, cy, r, Math.PI * 0.5, Math.PI, false);
+                ctx.lineTo(x + this.tileSize, y + this.tileSize);
+                ctx.lineTo(x + this.tileSize, y);
             }
 
-            ctx.moveTo(pivotX, pivotY);
-            ctx.arc(pivotX, pivotY, this.tileSize, startAng, endAng);
             ctx.closePath();
             ctx.fill();
-
-            // Debug text removed for cleaner look
             ctx.strokeStyle = '#222';
             ctx.stroke();
         }
