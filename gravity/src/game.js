@@ -160,29 +160,33 @@ class Game {
         const turn = this.getCornerTurn(cornerType, gIdx, dir);
         if (!turn) return null;
 
-        // Pivot at tile center; arc radius is half a tile to match the rendered quarter circle.
-        const CORNER_RADIUS = 0.5;
+        // Pivot at tile center.
         const pivot = { x: cornerX + 0.5, y: cornerY + 0.5 };
+        const startCenter = { x: this.state.player.x + 0.5, y: this.state.player.y + 0.5 };
+        const forwardDist = 0.5; // move only to the edge in front of the corner
+        const forwardCenter = { x: startCenter.x + dir.x * forwardDist, y: startCenter.y + dir.y * forwardDist };
         const gStart = GRAVITY_DIRS[gIdx];
         const gEnd = GRAVITY_DIRS[turn.targetG];
 
-        const entryCenter = {
-            x: pivot.x - gStart.x * CORNER_RADIUS,
-            y: pivot.y - gStart.y * CORNER_RADIUS
-        };
+        const entryCenter = forwardCenter; // edge point; maintain distance to pivot
 
-        const exitCenter = {
-            x: pivot.x - gEnd.x * CORNER_RADIUS,
-            y: pivot.y - gEnd.y * CORNER_RADIUS
-        };
+        // Radius is whatever distance we have at entry (pendulum-like).
+        const radius = Math.hypot(entryCenter.x - pivot.x, entryCenter.y - pivot.y);
 
         const exitDir = rotate90(dir, turn.sign);
-        // Push outward from the corner so the player body doesn't overlap the curved block.
-        const outward = { x: -gEnd.x * CORNER_RADIUS, y: -gEnd.y * CORNER_RADIUS };
+        const startAngle = Math.atan2(entryCenter.y - pivot.y, entryCenter.x - pivot.x);
+        const endAngle = startAngle + turn.sign * (Math.PI / 2);
 
+        const exitCenter = {
+            x: pivot.x + Math.cos(endAngle) * radius,
+            y: pivot.y + Math.sin(endAngle) * radius
+        };
+
+        // Step forward from the arc end into the next face (half-tile to reach the adjacent cell center).
+        const exitStep = 0.5;
         const finalCenter = {
-            x: exitCenter.x + exitDir.x + outward.x,
-            y: exitCenter.y + exitDir.y + outward.y
+            x: exitCenter.x + exitDir.x * exitStep,
+            y: exitCenter.y + exitDir.y * exitStep
         };
 
         const finalTile = {
@@ -208,6 +212,8 @@ class Game {
             exitCenter,
             exitStepCenter: finalCenter,
             finalTile,
+            radius,
+            startAngle,
             snapCenter
         };
     }
@@ -220,8 +226,8 @@ class Game {
         const startRot = this.state.rotation;
         const targetRot = plan.targetG * (Math.PI / 2);
 
-        const entryAngle = Math.atan2(plan.entryCenter.y - plan.pivot.y, plan.entryCenter.x - plan.pivot.x);
-        const radius = 0.5; // fixed half-tile radius to match corner geometry
+        const entryAngle = plan.startAngle;
+        const radius = plan.radius;
 
         let progress = 0;
         const entryEnd = 0.25;
