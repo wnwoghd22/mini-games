@@ -1,0 +1,15 @@
+{
+  "name": "futoshiki-core",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "futoshiki_core_bg.wasm",
+    "futoshiki_core.js",
+    "futoshiki_core.d.ts"
+  ],
+  "main": "futoshiki_core.js",
+  "types": "futoshiki_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
