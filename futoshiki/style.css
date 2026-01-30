@@ -195,8 +195,7 @@ main {
     z-index: 5;
     box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
     pointer-events: none;
-    transform: translate(-50%, -50%);
-    /* CRITICAL: Center on the coordinate */
+    /* transform: translate(-50%, -50%); Handled in JS */
     transition: color 0.2s;
 }
 

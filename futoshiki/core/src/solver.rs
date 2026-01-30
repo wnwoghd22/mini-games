@@ -125,7 +125,7 @@ fn propagate_sudoku(state: &mut State, idx: usize) -> bool {
     
     let row = idx / 9;
     let col = idx % 9;
-    let blk = (row / 3) * 3 + (col / 3);
+    let _blk = (row / 3) * 3 + (col / 3);
 
     // Eliminate from Row
     for k in 0..9 {
@@ -215,7 +215,7 @@ fn filter_lt(mask: u16, val: u8) -> u16 {
 
 fn filter_gt(mask: u16, val: u8) -> u16 {
     // Keep values > val
-    let limit_bit = 1 << (val - 1); // e.g. val=1 -> bit 0 (1). limit-1=0. mask & ~0 = mask.
+    let _limit_bit = 1 << (val - 1); // e.g. val=1 -> bit 0 (1). limit-1=0. mask & ~0 = mask.
     // wait, val=1, keep 2..9. mask > 1.
     // ~( (1<<val) - 1 )
     let remove_mask = (1 << val) - 1;

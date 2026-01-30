@@ -19,7 +19,7 @@ fn fill_grid(grid: &mut Grid, idx: usize, rng: &mut ThreadRng) -> bool {
 
     let row = idx / 9;
     let col = idx % 9;
-    let blk = (row / 3) * 3 + (col / 3);
+    let _blk = (row / 3) * 3 + (col / 3);
 
     // Find valid numbers
     let mut candidates = [true; 10]; // 1..9

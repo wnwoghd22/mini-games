@@ -1,4 +1,4 @@
-import init, { generate_puzzle } from './pkg/futoshiki_core.js';
+import init, { generate_puzzle } from './wasm/futoshiki_core.js';
 
 let currentPuzzle = null;
 
@@ -10,17 +10,12 @@ async function run() {
 
     const boardEl = document.getElementById('game-board');
     const newGameBtn = document.getElementById('new-game-btn');
-    const checkBtn = document.getElementById('check-btn');
     const difficultySelect = document.getElementById('difficulty');
     const statusEl = document.getElementById('status-message');
 
     newGameBtn.addEventListener('click', () => {
-        const diffusion = difficultySelect.value;
-        startNewGame(diffusion);
-    });
-
-    checkBtn.addEventListener('click', () => {
-        checkSolution();
+        const difficulty = difficultySelect.value;
+        startNewGame(difficulty);
     });
 
     // Automatically start game after load
@@ -42,16 +37,15 @@ async function run() {
         }, 10);
     }
 
-    function checkSolution() {
+    function checkSolutionIfComplete() {
         if (!currentPuzzle) return;
 
-        // Validate
-        const inputs = document.querySelectorAll('.cell');
+        const cells = document.querySelectorAll('.cell');
         let valid = true;
         let filledCount = 0;
         const values = new Array(81).fill(0);
 
-        inputs.forEach(el => {
+        cells.forEach(el => {
             let val = 0;
             if (el.querySelector('input')) {
                 val = parseInt(el.querySelector('input').value) || 0;
@@ -62,17 +56,22 @@ async function run() {
             values[el.dataset.index] = val;
         });
 
+        // 81개 미만이면 검증하지 않음
         if (filledCount < 81) {
-            statusEl.textContent = 'Incomplete!';
-            statusEl.style.color = '#ff6b6b';
+            statusEl.textContent = '';
             return;
         }
 
+        // 부등호 제약 검증
         currentPuzzle.constraints.forEach(c => {
             const valA = values[c.a];
             const valB = values[c.b];
             if (valA >= valB) valid = false;
         });
+
+        // 중복 검사 (duplicate 클래스가 있는 셀이 있으면 invalid)
+        const hasDuplicates = document.querySelector('.cell.duplicate') !== null;
+        if (hasDuplicates) valid = false;
 
         if (valid) {
             statusEl.textContent = 'Correct!';
@@ -82,6 +81,9 @@ async function run() {
             statusEl.style.color = '#ff6b6b';
         }
     }
+
+    // Expose for input listener
+    window.checkSolutionIfComplete = checkSolutionIfComplete;
 
     function renderBoard(puzzle) {
         boardEl.innerHTML = '';
@@ -115,6 +117,7 @@ async function run() {
                     el.dataset.value = e.target.value || 0;
                     if (window.validateInequalities) window.validateInequalities();
                     if (window.validateSudokuRules) window.validateSudokuRules();
+                    if (window.checkSolutionIfComplete) window.checkSolutionIfComplete();
                 });
                 el.appendChild(input);
             }
@@ -127,32 +130,28 @@ async function run() {
             const el = document.createElement('div');
             el.className = 'inequality';
 
-            // Check direction. Rust constraint is ALWAYS val[a] < val[b].
-            // So we render '<' if visual order is A then B.
-            // Or '>' if visual order is B then A.
-            // Or 'v' / '^' for vertical.
+            // We use the '<' symbol for ALL inequalities and rotate it.
+            el.textContent = '<';
 
             const r1 = Math.floor(c.a / 9);
             const c1 = c.a % 9;
             const r2 = Math.floor(c.b / 9);
             const c2 = c.b % 9;
 
-            // Determine position
+            // Determine position & rotation
             if (r1 === r2) {
                 // Horizontal
-                // Position between c1 and c2.
                 const minC = Math.min(c1, c2);
-                // Left: (minC + 1) * 100/9 %
                 el.style.left = `calc(${minC + 1} * (100% / 9))`;
                 el.style.top = `calc(${r1} * (100% / 9) + (100% / 18))`; // Center of row
 
-                // Symbol
                 if (c1 < c2) {
-                    // a is left, b is right. a < b.
-                    el.textContent = '<';
+                    // Left < Right. '<' points Left. Correct.
+                    el.style.transform = `translate(-50%, -50%) rotate(0deg)`;
                 } else {
-                    // a is right, b is left. a < b -> b > a.
-                    el.textContent = '>';
+                    // Right < Left. Right is Small. Point Right.
+                    // '<' points Left. Rotate 180.
+                    el.style.transform = `translate(-50%, -50%) rotate(180deg)`;
                 }
             } else {
                 // Vertical
@@ -161,14 +160,13 @@ async function run() {
                 el.style.top = `calc(${minR + 1} * (100% / 9))`;
 
                 if (r1 < r2) {
-                    // a is top, b is bottom. a < b.
-                    // Standard Futoshiki: Opening faces larger number.
-                    // Larger is B (bottom). V shape.
-                    el.textContent = 'v';
+                    // Top < Bottom. Point Up.
+                    // '<' points Left. Rotate 90deg -> Points Up.
+                    el.style.transform = `translate(-50%, -50%) rotate(90deg)`;
                 } else {
-                    // a is bottom, b is top. a < b -> b > a.
-                    // Larger is B (top). ^ shape.
-                    el.textContent = '^';
+                    // Bottom < Top (Top > Bottom). Point Down.
+                    // '<' points Left. Rotate -90deg -> Points Down.
+                    el.style.transform = `translate(-50%, -50%) rotate(-90deg)`;
                 }
             }
             boardEl.appendChild(el);
