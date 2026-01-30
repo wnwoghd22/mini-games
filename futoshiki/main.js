@@ -45,6 +45,7 @@ async function run() {
     function checkSolution() {
         if (!currentPuzzle) return;
 
+        // Validate
         const inputs = document.querySelectorAll('.cell');
         let valid = true;
         let filledCount = 0;
@@ -85,79 +86,91 @@ async function run() {
     function renderBoard(puzzle) {
         boardEl.innerHTML = '';
 
-        const constraintMap = new Map();
-        puzzle.constraints.forEach(c => {
-            const idx1 = Math.min(c.a, c.b);
-            const idx2 = Math.max(c.a, c.b);
-            constraintMap.set(`${c.a}-${c.b}`, '<');
-            constraintMap.set(`${c.b}-${c.a}`, '>');
-        });
+        // 1. Render Cells (9x9)
+        for (let i = 0; i < 81; i++) {
+            const el = document.createElement('div');
+            el.className = 'cell';
 
-        for (let r = 0; r < 17; r++) {
-            for (let c = 0; c < 17; c++) {
-                const el = document.createElement('div');
+            const row = Math.floor(i / 9);
+            const col = i % 9;
 
-                if (r % 2 === 0 && c % 2 === 0) {
-                    // CELL
-                    const cellRow = r / 2;
-                    const cellCol = c / 2;
-                    const idx = cellRow * 9 + cellCol;
+            // Add thick borders for 3x3 blocks
+            if (col === 2 || col === 5) el.classList.add('border-right-thick');
+            if (row === 2 || row === 5) el.classList.add('border-bottom-thick');
 
-                    el.className = 'cell';
-                    const val = puzzle.grid[idx];
-
-                    if (val !== -1) {
-                        el.textContent = val;
-                        el.classList.add('fixed');
-                        el.dataset.value = val;
-                    } else {
-                        const input = document.createElement('input');
-                        input.type = 'text';
-                        input.maxLength = 1;
-                        input.addEventListener('input', (e) => {
-                            const v = e.target.value;
-                            if (v && !/^[1-9]$/.test(v)) {
-                                e.target.value = '';
-                            }
-                            el.dataset.value = e.target.value || 0;
-                        });
-                        el.appendChild(input);
+            const val = puzzle.grid[i];
+            if (val !== -1) {
+                el.textContent = val;
+                el.classList.add('fixed');
+                el.dataset.value = val;
+            } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.maxLength = 1;
+                input.addEventListener('input', (e) => {
+                    const v = e.target.value;
+                    if (v && !/^[1-9]$/.test(v)) {
+                        e.target.value = '';
                     }
-                    el.dataset.index = idx;
-
-                } else if (r % 2 === 0) {
-                    // H GAP
-                    const row = r / 2;
-                    const colLeft = (c - 1) / 2;
-                    const colRight = (c + 1) / 2;
-                    const idxA = row * 9 + colLeft;
-                    const idxB = row * 9 + colRight;
-
-                    el.className = 'inequality h';
-                    if (constraintMap.has(`${idxA}-${idxB}`)) {
-                        el.textContent = '<';
-                    } else if (constraintMap.has(`${idxB}-${idxA}`)) {
-                        el.textContent = '>';
-                    }
-
-                } else if (c % 2 === 0) {
-                    // V GAP
-                    const col = c / 2;
-                    const rowTop = (r - 1) / 2;
-                    const rowBottom = (r + 1) / 2;
-                    const idxA = rowTop * 9 + col;
-                    const idxB = rowBottom * 9 + col;
-
-                    el.className = 'inequality v';
-                    if (constraintMap.has(`${idxA}-${idxB}`)) {
-                        el.textContent = 'v';
-                    } else if (constraintMap.has(`${idxB}-${idxA}`)) {
-                        el.textContent = '^';
-                    }
-                }
-                boardEl.appendChild(el);
+                    el.dataset.value = e.target.value || 0;
+                });
+                el.appendChild(input);
             }
+            el.dataset.index = i;
+            boardEl.appendChild(el);
         }
+
+        // 2. Render Constraints (Overlays)
+        puzzle.constraints.forEach(c => {
+            const el = document.createElement('div');
+            el.className = 'inequality';
+
+            // Check direction. Rust constraint is ALWAYS val[a] < val[b].
+            // So we render '<' if visual order is A then B.
+            // Or '>' if visual order is B then A.
+            // Or 'v' / '^' for vertical.
+
+            const r1 = Math.floor(c.a / 9);
+            const c1 = c.a % 9;
+            const r2 = Math.floor(c.b / 9);
+            const c2 = c.b % 9;
+
+            // Determine position
+            if (r1 === r2) {
+                // Horizontal
+                // Position between c1 and c2.
+                const minC = Math.min(c1, c2);
+                // Left: (minC + 1) * 100/9 %
+                el.style.left = `calc(${minC + 1} * (100% / 9))`;
+                el.style.top = `calc(${r1} * (100% / 9) + (100% / 18))`; // Center of row
+
+                // Symbol
+                if (c1 < c2) {
+                    // a is left, b is right. a < b.
+                    el.textContent = '<';
+                } else {
+                    // a is right, b is left. a < b -> b > a.
+                    el.textContent = '>';
+                }
+            } else {
+                // Vertical
+                const minR = Math.min(r1, r2);
+                el.style.left = `calc(${c1} * (100% / 9) + (100% / 18))`; // Center of col
+                el.style.top = `calc(${minR + 1} * (100% / 9))`;
+
+                if (r1 < r2) {
+                    // a is top, b is bottom. a < b.
+                    // Standard Futoshiki: Opening faces larger number.
+                    // Larger is B (bottom). V shape.
+                    el.textContent = 'v';
+                } else {
+                    // a is bottom, b is top. a < b -> b > a.
+                    // Larger is B (top). ^ shape.
+                    el.textContent = '^';
+                }
+            }
+            boardEl.appendChild(el);
+        });
     }
 }
 
@@ -165,15 +178,15 @@ function renderInitialGrid() {
     const boardEl = document.getElementById('game-board');
     if (!boardEl) return;
     boardEl.innerHTML = '';
-    // Simple empty 17x17 grid
-    for (let r = 0; r < 17; r++) {
-        for (let c = 0; c < 17; c++) {
-            const el = document.createElement('div');
-            if (r % 2 === 0 && c % 2 === 0) {
-                el.className = 'cell';
-            }
-            boardEl.appendChild(el);
-        }
+
+    for (let i = 0; i < 81; i++) {
+        const el = document.createElement('div');
+        el.className = 'cell';
+        const row = Math.floor(i / 9);
+        const col = i % 9;
+        if (col === 2 || col === 5) el.classList.add('border-right-thick');
+        if (row === 2 || row === 5) el.classList.add('border-bottom-thick');
+        boardEl.appendChild(el);
     }
 }
 

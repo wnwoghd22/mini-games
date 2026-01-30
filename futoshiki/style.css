@@ -25,59 +25,108 @@ body {
 
 #app {
     width: 100%;
-    max-width: 800px;
-    padding: 2rem;
-    /* Might need adjustment if overflow hidden cuts off */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2rem;
-    box-sizing: border-box;
     height: 100vh;
-    /* Ensure full height */
+    display: flex;
+    /* Row layout */
+    flex-direction: row;
+    padding: 0;
+    max-width: none;
+    overflow: hidden;
 }
 
-header {
+/* Sidebar Styling */
+.sidebar {
+    width: 300px;
+    background-color: var(--board-bg);
+    padding: 2rem;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 1rem;
+    gap: 2rem;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+.sidebar h1 {
+    margin: 0;
+    font-size: 2.5rem;
+    line-height: 1.1;
+    color: var(--accent-color);
 }
 
 .controls {
     display: flex;
+    flex-direction: column;
     gap: 1rem;
+    width: 100%;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group label {
+    font-size: 0.9rem;
+    color: var(--highlight-color);
 }
 
 button,
 select {
-    padding: 0.5rem 1rem;
+    padding: 0.8rem;
     font-size: 1rem;
+    width: 100%;
+    /* Full width in sidebar */
     background-color: var(--cell-bg);
     color: var(--text-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     cursor: pointer;
+    transition: all 0.2s;
 }
 
 button:hover {
     background-color: var(--cell-active);
+    transform: translateY(-1px);
 }
 
+#check-btn {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+    font-weight: bold;
+}
+
+#check-btn:hover {
+    filter: brightness(1.1);
+    background-color: var(--accent-color);
+}
+
+/* Main Area Centering */
+main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-color);
+    position: relative;
+}
+
+/* Board: 9x9 standard grid */
 .board {
     display: grid;
-    /* 9 cells + 8 gaps = 17 columns */
-    grid-template-columns: repeat(17, 1fr);
-    grid-template-rows: repeat(17, 1fr);
-    gap: 2px;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(9, 1fr);
     background-color: var(--board-bg);
-    padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    /* Use box-shadow to simulate outer border */
+    border: 4px solid var(--text-color);
     width: min(80vh, 600px);
-    /* Responsive sizing */
     height: min(80vh, 600px);
     aspect-ratio: 1 / 1;
+    position: relative;
+    /* Anchor for absolute inequalities? No, let's use cell relative */
+    gap: 0;
 }
 
 .cell {
@@ -85,13 +134,24 @@ button:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     font-weight: bold;
     user-select: none;
-    border-radius: 2px;
     color: var(--text-color);
-    grid-column: span 1;
-    grid-row: span 1;
+    border: 1px solid var(--border-color);
+    position: relative;
+    /* Anchor for inequalities */
+}
+
+/* Thick borders for 3x3 blocks */
+/* Right border for col 3, 6 */
+.cell.border-right-thick {
+    border-right: 3px solid var(--text-color);
+}
+
+/* Bottom border for row 3, 6 */
+.cell.border-bottom-thick {
+    border-bottom: 3px solid var(--text-color);
 }
 
 .cell input {
@@ -112,24 +172,33 @@ button:hover {
     color: var(--highlight-color);
 }
 
+/* Inequality Overlay */
 .inequality {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    background-color: var(--board-bg);
+    /* Mask the line */
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--accent-color);
     font-weight: bold;
-    font-size: 1rem;
+    font-size: 1.2rem;
+    /* Slighly larger symbol */
+    z-index: 5;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    /* CRITICAL: Center on the coordinate */
 }
 
-.inequality.h {
-    grid-column: span 1;
-    grid-row: span 1;
-}
-
-.inequality.v {
-    grid-column: span 1;
-    grid-row: span 1;
-}
+/* 
+   We will append inequalities to the board container (not cells) to avoid clipping.
+   So .board needs position: relative.
+   Inequalities will use % positioning.
+*/
 
 /* Status */
 #status-message {

@@ -10,30 +10,29 @@
 
 <body>
     <div id="app">
-        <header>
-            <h1>Futoshiki Sudoku</h1>
+        <aside class="sidebar">
+            <h1>Futoshiki<br>Sudoku</h1>
             <div class="controls">
-                <select id="difficulty">
-                    <option value="Easy">Easy</option>
-                    <option value="Normal" selected>Normal</option>
-                    <option value="Hard">Hard</option>
-                    <option value="Expert">Expert</option>
-                </select>
+                <div class="control-group">
+                    <label for="difficulty">Difficulty</label>
+                    <select id="difficulty">
+                        <option value="Easy">Easy</option>
+                        <option value="Normal" selected>Normal</option>
+                        <option value="Hard">Hard</option>
+                        <option value="Expert">Expert</option>
+                    </select>
+                </div>
                 <button id="new-game-btn">New Game</button>
                 <button id="check-btn">Check</button>
             </div>
-        </header>
+            <div id="status-message"></div>
+        </aside>
 
         <main>
             <div id="game-board" class="board">
                 <!-- Initial Empty Grid -->
             </div>
-            <div id="status-message"></div>
         </main>
-
-        <footer>
-            <p>Static Rust + Wasm</p>
-        </footer>
     </div>
     <!-- Direct Module Import -->
     <script type="module" src="./main.js"></script>
