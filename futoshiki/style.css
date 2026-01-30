@@ -167,6 +167,11 @@ main {
     caret-color: var(--accent-color);
 }
 
+.cell.duplicate,
+.cell.duplicate input {
+    color: var(--error-color);
+}
+
 .cell.fixed {
     background-color: var(--board-bg);
     color: var(--highlight-color);
@@ -192,6 +197,11 @@ main {
     pointer-events: none;
     transform: translate(-50%, -50%);
     /* CRITICAL: Center on the coordinate */
+    transition: color 0.2s;
+}
+
+.inequality.invalid {
+    color: var(--error-color) !important;
 }
 
 /* 
