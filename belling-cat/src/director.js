@@ -18,6 +18,7 @@ export class GameDirector {
 
     start() {
         // Start with the Intro scene
+        console.log("Director: Starting Game...");
         this.narrative.loadScene('intro');
     }
 
