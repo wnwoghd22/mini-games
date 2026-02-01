@@ -75,7 +75,8 @@
 - [x] `intro` - 회의장 장면
 - [x] `step_forward` / `look_around` - 선택지
 - [x] `mission_brief` - 미션 부여
-- [ ] **Action Sequence** - Red Light/Green Light 미니게임
+- [x] **Action Sequence** - Journey + Stealth 통합 레벨
+- [x] `rope_break` - 밧줄 끊어지는 장면 (새로 추가)
 
 ### Phase 2: The Conflict
 - [x] `phase2_return` - 실패 후 귀환
@@ -84,7 +85,7 @@
 - [x] `phase2_attack` - 고양이 습격
 - [x] `phase2_grief` - 선택적 애도 장면
 - [x] `phase2_escape_action` - 탈출
-- [ ] **Action Sequence** - Audio Evasion 미니게임
+- [ ] **Action Sequence** - Audio Evasion 미니게임 (Phase 2 후반)
 
 ### Phase 3: The Climax
 - [ ] `phase3_approach` - 잠든 고양이에게 접근
@@ -104,17 +105,24 @@
 - [x] 기본 대화 시스템 (`narrative.js`)
 - [x] 타이핑 효과
 - [x] 선택지 UI
+- [x] `action:` 접두사로 미니게임 전환
 - [ ] 화면 흔들림 효과 (긴장 장면용)
 - [ ] 텍스트 색상 변화 (빨간색 = 분노/위험)
 
 ### Action System
-- [ ] Red Light/Green Light 구현
-- [ ] Audio Evasion 구현
-- [ ] Balance Bar 구현
-- [ ] QTE (버튼 연타/타이밍) 구현
+- [x] Journey 플랫포밍 구간
+- [x] Stealth 잠입 구간 (Red Light/Green Light 방식)
+- [x] Journey → Stealth 자연스러운 전환 (카메라 이동)
+- [x] 상자 근처에서만 숨기 가능 (`canHide` 체크)
+- [x] Cat Eye HUD (Watching/Sleeping 상태 표시)
+- [x] 고양이 실루엣 시각화
+- [ ] Audio Evasion 구현 (Phase 2용)
+- [ ] Balance Bar 구현 (Phase 3용)
+- [ ] QTE (버튼 연타/타이밍) 구현 (Phase 4용)
 
 ### Director
-- [ ] Narrative ↔ Action 모드 전환
+- [x] Narrative ↔ Action 모드 전환
+- [x] 미니게임 완료 후 씬 분기 처리
 - [ ] 게임 상태 저장/로드
 - [ ] 엔딩 분기 처리
 
@@ -123,6 +131,7 @@
 ## 5. 우선순위
 
 1. **Phase 3-4 스토리 작성** - 엔딩까지 서사 완성
-2. **Red Light/Green Light** - 핵심 게임플레이
-3. **Phase 4 선택 시스템** - 분기 및 결과 처리
-4. **오디오/비주얼 연출** - 분위기 강화
+2. **Audio Evasion** - Phase 2 탈출용 미니게임
+3. **Balance Bar + QTE** - Phase 3-4 클라이맥스
+4. **엔딩 분기 시스템** - 선택에 따른 결과 처리
+5. **오디오/비주얼 연출** - 분위기 강화

@@ -51,12 +51,85 @@ export const storyData = {
             next: "mission_brief"
         }
     ],
+    "stealth_intro": [
+        {
+            id: 1,
+            speaker: "Protagonist",
+            text: "(Whisper) There it is... The Beast.",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Narrator",
+            text: "The Cat sleeps, but its ears twitch at the slightest sound.",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "System",
+            text: "Hide behind objects (DOWN Key) when the Eye opens. Move only when it sleeps.",
+            next: "action:stealth"
+        }
+    ],
+
     "mission_brief": [
         {
             id: 1,
             speaker: "Elder",
             text: "Take this. Use the cover of darkness. Do not fail us.",
             next: "action:journey"
+        }
+    ],
+
+    // ========================================
+    // ROPE BREAK SCENE
+    // Player reaches the Cat but the rope snaps
+    // ========================================
+
+    "rope_break": [
+        {
+            id: 1,
+            speaker: "Narrator",
+            text: "You reach the beast. Its massive form rises and falls with each breath.",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Protagonist",
+            text: "(Internal) This is it. The moment we've waited generations for.",
+            type: "thought",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "Narrator",
+            text: "You loop the rope around its neck. The old bell dangles uselessly—cracked, silent.",
+            next: 4
+        },
+        {
+            id: 4,
+            speaker: "Protagonist",
+            text: "(Internal) Why just replace it? I could pull. I could end this. Right now.",
+            type: "thought",
+            next: 5
+        },
+        {
+            id: 5,
+            speaker: "Narrator",
+            text: "Your paws grip the rope. You pull. Tighter. Tighter.",
+            next: 6
+        },
+        {
+            id: 6,
+            speaker: "Narrator",
+            text: "SNAP.",
+            next: 7
+        },
+        {
+            id: 7,
+            speaker: "Narrator",
+            text: "The rope breaks. The Cat stirs. You flee into the darkness.",
+            next: "phase2_return"
         }
     ],
 

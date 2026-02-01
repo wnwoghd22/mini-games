@@ -44,21 +44,38 @@ export class GameDirector {
 
     onMinigameComplete(result) {
         console.log(`Director: Minigame Result: ${result}`);
+        const minigame = this.action.currentMinigame;
+        const phase = this.action.level.phase;
 
-        // Switch back to narrative regardless, but decide WHICH scene based on result
-        this.switchToMode('narrative');
-
-        if (this.action.currentMinigame === 'journey' || this.action.currentMinigame === 'stealth') {
+        if (minigame === 'journey') {
             if (result) {
-                // Journey Success -> Proceed to next narrative phase (or stealth phase)
-                // For MVP simplicity, Journey leads straight to the "Mission Failed" event for Phase 1
-                console.log("Action Success -> Story Event");
-                this.narrative.loadScene('phase2_return');
+                // Journey (including stealth) Success -> Rope snaps story
+                console.log("Mission Complete -> Rope Break Scene");
+                this.switchToMode('narrative');
+                this.narrative.loadScene('rope_break');
             } else {
-                // Failure: Caught by Cat -> Death -> Retry?
-                console.log("Stealth Fail -> DEATH");
-                alert("You were caught! (Reloading for now)");
-                location.reload();
+                // Failed - check which phase
+                if (phase === 'stealth') {
+                    console.log("Caught by Cat -> Retry from stealth");
+                    alert("Caught by the Cat! Hide behind boxes when the eye opens.");
+                    // Restart from stealth only
+                    this.action.start('stealth');
+                } else {
+                    console.log("Journey Fail -> Restart");
+                    alert("You fell! Try again.");
+                    this.action.start('journey');
+                }
+            }
+        } else if (minigame === 'stealth') {
+            // Standalone stealth (retry mode)
+            if (result) {
+                console.log("Stealth Success -> Rope Break Scene");
+                this.switchToMode('narrative');
+                this.narrative.loadScene('rope_break');
+            } else {
+                console.log("Stealth Fail -> Retry");
+                alert("Caught! Hide behind boxes when the eye opens.");
+                this.action.start('stealth');
             }
         }
     }
