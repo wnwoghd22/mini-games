@@ -4,6 +4,7 @@ export class ActionEngine {
         this.canvas = document.getElementById('action-canvas');
         this.ctx = this.canvas.getContext('2d');
         this.isRunning = false;
+        this.animationFrameId = null; // Track animation frame for proper cleanup
         this.currentMinigame = null; // Track current minigame type
 
         // Physics constants
@@ -64,7 +65,17 @@ export class ActionEngine {
 
     start(levelType) {
         console.log(`Action Engine: Starting Level ${levelType}`);
-        this.currentMinigame = levelType; // Track minigame type
+
+        // Cancel any existing animation frame before starting new one
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+
+        // Reset input state to prevent stuck keys
+        this.keys = { left: false, right: false, up: false, down: false };
+
+        this.currentMinigame = levelType;
         this.isRunning = true;
         this.loadLevel(levelType);
         this.loop();
@@ -72,6 +83,11 @@ export class ActionEngine {
 
     stop() {
         this.isRunning = false;
+        // Cancel any pending animation frame to prevent multiple loops
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         // Reset keys to prevent sticking
         this.keys = { left: false, right: false, up: false, down: false };
@@ -134,18 +150,63 @@ export class ActionEngine {
             // Visual indicator: darker area, sleeping cat silhouette visible
 
             // === STEALTH SECTION (2500 - 5000) ===
-            // Flat ground continues
-            this.level.platforms.push({ x: 2400, y: floorY, width: 2600, height: 100 });
+            // Ground with gaps and platforms at various heights
 
-            // Covers (boxes) - strategic placement
-            const coverPositions = [2600, 2900, 3200, 3600, 4000, 4400, 4700];
-            coverPositions.forEach((xPos, i) => {
+            // Base ground segments (with gaps to force platforming)
+            this.level.platforms.push({ x: 2400, y: floorY, width: 400, height: 100 });  // Entry
+            this.level.platforms.push({ x: 3000, y: floorY, width: 300, height: 100 });  // Mid-ground 1
+            this.level.platforms.push({ x: 3600, y: floorY, width: 400, height: 100 });  // Mid-ground 2
+            this.level.platforms.push({ x: 4300, y: floorY, width: 700, height: 100 });  // Final approach
+
+            // Elevated platforms with covers
+            const stealthPlatforms = [
+                // { x, y (relative to floorY), width, hasCover, coverOffset }
+                { x: 2750, y: -80, width: 150, hasCover: true, coverX: 40 },   // Low platform
+                { x: 2950, y: -150, width: 120, hasCover: true, coverX: 25 },  // High jump
+                { x: 3250, y: -60, width: 180, hasCover: true, coverX: 55 },   // Wide low
+                { x: 3450, y: -120, width: 130, hasCover: true, coverX: 30 },  // Medium
+                { x: 3700, y: -180, width: 100, hasCover: true, coverX: 15 },  // Highest
+                { x: 3950, y: -90, width: 160, hasCover: true, coverX: 45 },   // Descent
+                { x: 4150, y: -50, width: 120, hasCover: true, coverX: 25 },   // Low entry
+                { x: 4500, y: -70, width: 140, hasCover: true, coverX: 35 },   // Final cover
+            ];
+
+            stealthPlatforms.forEach((plat, i) => {
+                // Add platform
+                this.level.platforms.push({
+                    x: plat.x,
+                    y: floorY + plat.y,
+                    width: plat.width,
+                    height: 20,
+                    isStealthPlatform: true
+                });
+
+                // Add cover on platform
+                if (plat.hasCover) {
+                    this.level.covers.push({
+                        x: plat.x + plat.coverX,
+                        y: floorY + plat.y - 55,  // On top of platform
+                        width: 60,
+                        height: 55,
+                        id: i,
+                        platformY: floorY + plat.y  // Reference for alignment
+                    });
+                }
+            });
+
+            // Ground-level covers (fewer, for variety)
+            const groundCovers = [
+                { x: 2550, y: floorY - 55 },
+                { x: 3100, y: floorY - 55 },
+                { x: 4400, y: floorY - 55 },
+            ];
+            groundCovers.forEach((cover, i) => {
                 this.level.covers.push({
-                    x: xPos,
-                    y: floorY - 60,
-                    width: 70,
-                    height: 60,
-                    id: i
+                    x: cover.x,
+                    y: cover.y,
+                    width: 60,
+                    height: 55,
+                    id: 100 + i  // Different ID range
                 });
             });
 
@@ -162,22 +223,121 @@ export class ActionEngine {
             this.level.stealthZoneStart = 0;
             this.level.phase = 'stealth';
 
-            this.level.platforms.push({ x: 0, y: floorY, width: this.level.width, height: 100 });
+            // Ground segments with gaps
+            this.level.platforms.push({ x: 0, y: floorY, width: 300, height: 100 });
+            this.level.platforms.push({ x: 500, y: floorY, width: 250, height: 100 });
+            this.level.platforms.push({ x: 1000, y: floorY, width: 300, height: 100 });
+            this.level.platforms.push({ x: 1600, y: floorY, width: 400, height: 100 });
+            this.level.platforms.push({ x: 2200, y: floorY, width: 300, height: 100 });
 
-            const coverPositions = [200, 500, 800, 1200, 1600, 2000];
-            coverPositions.forEach((xPos, i) => {
-                this.level.covers.push({
-                    x: xPos,
-                    y: floorY - 60,
-                    width: 70,
-                    height: 60,
-                    id: i
+            // Elevated platforms with covers
+            const stealthPlatforms = [
+                { x: 250, y: -70, width: 140, hasCover: true, coverX: 40 },
+                { x: 450, y: -130, width: 120, hasCover: true, coverX: 30 },
+                { x: 700, y: -80, width: 160, hasCover: true, coverX: 50 },
+                { x: 950, y: -150, width: 100, hasCover: true, coverX: 20 },
+                { x: 1250, y: -60, width: 180, hasCover: true, coverX: 60 },
+                { x: 1500, y: -110, width: 130, hasCover: true, coverX: 35 },
+                { x: 1800, y: -90, width: 150, hasCover: true, coverX: 45 },
+                { x: 2100, y: -70, width: 120, hasCover: true, coverX: 30 },
+            ];
+
+            stealthPlatforms.forEach((plat, i) => {
+                this.level.platforms.push({
+                    x: plat.x,
+                    y: floorY + plat.y,
+                    width: plat.width,
+                    height: 20,
+                    isStealthPlatform: true
                 });
+
+                if (plat.hasCover) {
+                    this.level.covers.push({
+                        x: plat.x + plat.coverX,
+                        y: floorY + plat.y - 55,
+                        width: 60,
+                        height: 55,
+                        id: i
+                    });
+                }
             });
+
+            // Ground-level covers
+            this.level.covers.push({ x: 100, y: floorY - 55, width: 60, height: 55, id: 100 });
+            this.level.covers.push({ x: 1100, y: floorY - 55, width: 60, height: 55, id: 101 });
+            this.level.covers.push({ x: 1700, y: floorY - 55, width: 60, height: 55, id: 102 });
 
             this.level.cat.x = 2400;
             this.level.cat.y = floorY - 150;
             this.level.goal = { x: 2350, y: floorY - 100, width: 80, height: 100 };
+        }
+        else if (type === 'escape') {
+            // ========================================
+            // ESCAPE PHASE: Run and Hide from the Bell
+            // ========================================
+            this.level.width = 3500;
+            this.level.phase = 'escape';
+
+            // Ground with some gaps
+            this.level.platforms.push({ x: 0, y: floorY, width: 800, height: 100 });
+            this.level.platforms.push({ x: 900, y: floorY, width: 700, height: 100 });
+            this.level.platforms.push({ x: 1700, y: floorY, width: 600, height: 100 });
+            this.level.platforms.push({ x: 2400, y: floorY, width: 1100, height: 100 });
+
+            // Elevated platforms for variety
+            const escapePlatforms = [
+                { x: 750, y: -60, width: 120 },
+                { x: 1550, y: -80, width: 130 },
+                { x: 2250, y: -70, width: 140 },
+                { x: 2900, y: -60, width: 120 },
+            ];
+            escapePlatforms.forEach(plat => {
+                this.level.platforms.push({
+                    x: plat.x,
+                    y: floorY + plat.y,
+                    width: plat.width,
+                    height: 20,
+                    isStealthPlatform: true
+                });
+            });
+
+            // Covers (boxes) - Hide behind these when bell is loud!
+            const escapeCoverPositions = [
+                { x: 200, y: floorY - 55 },
+                { x: 500, y: floorY - 55 },
+                { x: 780, y: floorY - 60 - 55 },  // On platform
+                { x: 1000, y: floorY - 55 },
+                { x: 1300, y: floorY - 55 },
+                { x: 1580, y: floorY - 80 - 55 },  // On platform
+                { x: 1850, y: floorY - 55 },
+                { x: 2100, y: floorY - 55 },
+                { x: 2280, y: floorY - 70 - 55 },  // On platform
+                { x: 2550, y: floorY - 55 },
+                { x: 2800, y: floorY - 55 },
+                { x: 2930, y: floorY - 60 - 55 },  // On platform
+                { x: 3150, y: floorY - 55 },
+            ];
+            escapeCoverPositions.forEach((cover, i) => {
+                this.level.covers.push({
+                    x: cover.x,
+                    y: cover.y,
+                    width: 60,
+                    height: 55,
+                    id: i
+                });
+            });
+
+            // Goal - Exit point
+            this.level.goal = { x: 3400, y: floorY - 150, width: 80, height: 150 };
+
+            // Escape Specific Data
+            this.level.escape = {
+                wallX: -300, // Starts behind player
+                wallSpeed: 2.0, // Slower, more manageable
+                bellState: 'quiet', // 'quiet', 'warning', 'loud'
+                bellTimer: 0,
+                debris: []
+            };
         }
     }
 
@@ -185,8 +345,12 @@ export class ActionEngine {
         if (!this.isRunning) return;
 
         this.update();
+
+        // Check again after update (failLevel/winLevel may have called stop())
+        if (!this.isRunning) return;
+
         this.draw();
-        requestAnimationFrame(() => this.loop());
+        this.animationFrameId = requestAnimationFrame(() => this.loop());
     }
 
     update() {
@@ -195,16 +359,21 @@ export class ActionEngine {
             this.enterStealthPhase();
         }
 
-        // 1. Stealth Logic (Cat State) - Only in stealth phase
+        // 1. Stealth Logic
         if (this.level.phase === 'stealth') {
             this.updateCatLogic();
         }
 
-        // 2. Check if player is near a cover (can hide)
+        // 1.5 Escape Logic
+        if (this.level.phase === 'escape') {
+            this.updateEscapeLogic();
+        }
+
+        // 2. Check if player is near a cover (can hide) - works in stealth AND escape
         this.player.canHide = false;
         this.player.nearCover = null;
 
-        if (this.level.covers && this.level.phase === 'stealth') {
+        if (this.level.covers && (this.level.phase === 'stealth' || this.level.phase === 'escape')) {
             for (const cover of this.level.covers) {
                 // Check if player is within hiding range of cover (slightly larger hitbox)
                 const hideRange = 20;
@@ -221,13 +390,16 @@ export class ActionEngine {
         // 3. Horizontal Movement & Hiding
         this.player.isHiding = false;
 
-        // Can only hide if near a cover, grounded, and pressing DOWN
+        // Can only hide if near a cover, grounded, and pressing DOWN (stealth & escape)
         if (this.keys.down && this.player.isGrounded && this.player.canHide) {
             this.player.isHiding = true;
             this.player.vx = 0; // Stop moving while hiding
         } else {
-            if (this.keys.left) this.player.vx = -this.MOVE_SPEED;
-            if (this.keys.right) this.player.vx = this.MOVE_SPEED;
+            // In escape phase during loud bell, only allow slow movement if not hiding
+            const escapeSlowdown = (this.level.phase === 'escape' &&
+                                    this.level.escape?.bellState === 'loud') ? 0.3 : 1.0;
+            if (this.keys.left) this.player.vx = -this.MOVE_SPEED * escapeSlowdown;
+            if (this.keys.right) this.player.vx = this.MOVE_SPEED * escapeSlowdown;
         }
 
         // Friction when no key pressed
@@ -235,10 +407,9 @@ export class ActionEngine {
             this.player.vx *= this.FRICTION;
         }
 
-        // 4. Jump (Cannot jump while hiding, reduced in stealth phase)
+        // 4. Jump (Cannot jump while hiding)
         if (this.keys.up && this.player.isGrounded && !this.player.isHiding) {
-            const jumpForce = this.level.phase === 'stealth' ? this.JUMP_FORCE * 0.5 : this.JUMP_FORCE;
-            this.player.vy = -jumpForce;
+            this.player.vy = -this.JUMP_FORCE;
             this.player.isGrounded = false;
         }
 
@@ -278,6 +449,86 @@ export class ActionEngine {
         // 10. Fall Check (Death)
         if (this.player.y > this.canvas.height) {
             this.failLevel();
+        }
+    }
+
+    updateEscapeLogic() {
+        const esc = this.level.escape;
+
+        // 1. Wall Chase (slower when bell is loud to give player a chance)
+        const wallSpeedModifier = esc.bellState === 'loud' ? 0.3 : 1.0;
+        esc.wallX += esc.wallSpeed * wallSpeedModifier;
+
+        if (this.player.x < esc.wallX + 50) {
+            console.log("Crushed by Wall");
+            this.failLevel();
+            return;
+        }
+
+        // 2. Bell Rhythm
+        // Quiet (Run!) -> Warning (Find cover!) -> Loud (Hide or die!)
+        esc.bellTimer++;
+
+        // Adjusted timing - more forgiving
+        const T_QUIET = 180;   // ~3 seconds to run
+        const T_WARNING = 45;  // ~0.75 seconds warning
+        const T_LOUD = 70;     // ~1.2 seconds to hide (shorter!)
+
+        if (esc.bellState === 'quiet') {
+            if (esc.bellTimer > T_QUIET) {
+                esc.bellState = 'warning';
+                esc.bellTimer = 0;
+            }
+        } else if (esc.bellState === 'warning') {
+            if (esc.bellTimer > T_WARNING) {
+                esc.bellState = 'loud';
+                esc.bellTimer = 0;
+            }
+        } else if (esc.bellState === 'loud') {
+            // DANGER CHECK - Must be hiding behind cover!
+            // Same mechanic as stealth phase for consistency
+            let isSafe = false;
+
+            if (this.player.isHiding && this.player.nearCover) {
+                isSafe = true;
+            }
+
+            if (!isSafe) {
+                console.log("Not hiding during Loud Bell -> Death");
+                this.failLevel();
+                return;
+            }
+
+            if (esc.bellTimer > T_LOUD) {
+                esc.bellState = 'quiet';
+                esc.bellTimer = 0;
+            }
+        }
+
+        // 3. Falling Debris (less frequent)
+        if (Math.random() < 0.02) {
+            esc.debris.push({
+                x: this.player.x + (Math.random() * 400 - 200),
+                y: -50,
+                vy: 3 + Math.random() * 3,
+                width: 15 + Math.random() * 20,
+                height: 15 + Math.random() * 20
+            });
+        }
+
+        // Update Debris
+        for (let i = esc.debris.length - 1; i >= 0; i--) {
+            const d = esc.debris[i];
+            d.y += d.vy;
+            // Collision with player
+            if (this.checkCollision(this.player, d)) {
+                console.log("Hit by debris");
+                this.failLevel();
+            }
+            // Remove if off screen
+            if (d.y > this.canvas.height) {
+                esc.debris.splice(i, 1);
+            }
         }
     }
 
@@ -367,22 +618,71 @@ export class ActionEngine {
             gradient.addColorStop(1, '#0a0505');
             this.ctx.fillStyle = gradient;
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        } else if (this.level.phase === 'escape') {
+            // Red tint for danger
+            const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+            gradient.addColorStop(0, '#331111');
+            gradient.addColorStop(1, '#110505');
+            this.ctx.fillStyle = gradient;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
         this.ctx.save();
-        this.ctx.translate(-this.level.cameraX, 0);
+
+        // SCREEN SHAKE for Escape Loud
+        let shakeX = 0;
+        let shakeY = 0;
+        if (this.level.phase === 'escape' && this.level.escape.bellState === 'loud') {
+            shakeX = (Math.random() - 0.5) * 10;
+            shakeY = (Math.random() - 0.5) * 10;
+        }
+        this.ctx.translate(-this.level.cameraX + shakeX, 0 + shakeY);
 
         // Draw transition zone indicator
-        if (this.level.stealthZoneStart > 0) {
+        if (this.level.stealthZoneStart > 0 && this.level.phase !== 'escape') {
             // Dark overlay for stealth zone
             this.ctx.fillStyle = 'rgba(50, 0, 0, 0.3)';
             this.ctx.fillRect(this.level.stealthZoneStart, 0, this.level.width - this.level.stealthZoneStart, this.canvas.height);
         }
 
+        // ESCAPE: Draw Wall
+        if (this.level.phase === 'escape') {
+            // The Wall
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(this.level.escape.wallX - 5000, 0, 5000 + 50, this.canvas.height); // Huge black block
+
+            // Visual Edge of wall
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 100) * 0.2;
+            this.ctx.fillRect(this.level.escape.wallX, 0, 50, this.canvas.height);
+            this.ctx.globalAlpha = 1.0;
+        }
+
         // Draw Platforms
-        this.ctx.fillStyle = this.level.phase === 'stealth' ? '#2a2a2a' : '#444';
         for (const plat of this.level.platforms) {
-            this.ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+            if (plat.isStealthPlatform) {
+                // Elevated stealth platforms - darker with subtle highlight
+                this.ctx.fillStyle = '#1a1a1a';
+                this.ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+                // Top edge highlight
+                this.ctx.fillStyle = '#333';
+                this.ctx.fillRect(plat.x, plat.y, plat.width, 3);
+                // Side shadows for depth
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(plat.x, plat.y + plat.height, plat.width, 8);
+            } else {
+                // Ground platforms
+                this.ctx.fillStyle = this.level.phase === 'stealth' ? '#2a2a2a' : '#444';
+                this.ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+            }
+        }
+
+        // ESCAPE: Draw Debris
+        if (this.level.phase === 'escape') {
+            this.ctx.fillStyle = '#553333';
+            for (const d of this.level.escape.debris) {
+                this.ctx.fillRect(d.x, d.y, d.width, d.height);
+            }
         }
 
         // Draw Covers (boxes) with highlight if player can hide
@@ -499,6 +799,40 @@ export class ActionEngine {
 
         if (this.level.phase === 'journey') {
             this.ctx.fillText("→ Keep moving right", 20, 30);
+        } else if (this.level.phase === 'escape') {
+            const esc = this.level.escape;
+            this.ctx.textAlign = 'center';
+            const cx = this.canvas.width / 2;
+
+            if (esc.bellState === 'quiet') {
+                this.ctx.fillStyle = '#aaffaa';
+                this.ctx.font = 'bold 20px Courier New';
+                this.ctx.fillText("RUN! Find the next cover!", cx, 50);
+            } else if (esc.bellState === 'warning') {
+                this.ctx.fillStyle = '#ffaa00';
+                this.ctx.font = 'bold 22px Courier New';
+                this.ctx.fillText("!! FIND COVER NOW !!", cx, 50);
+            } else {
+                this.ctx.fillStyle = '#ff3333';
+                this.ctx.font = 'bold 26px Courier New';
+                this.ctx.fillText("!!! HIDE !!!", cx, 50);
+            }
+            this.ctx.textAlign = 'left';
+
+            // Hide indicator (bottom left)
+            this.ctx.font = '14px Courier New';
+            if (this.player.canHide) {
+                if (this.player.isHiding) {
+                    this.ctx.fillStyle = '#66ff66';
+                    this.ctx.fillText("✓ HIDDEN - Stay down!", 20, 30);
+                } else {
+                    this.ctx.fillStyle = '#aaffaa';
+                    this.ctx.fillText("[DOWN] to hide behind box", 20, 30);
+                }
+            } else {
+                this.ctx.fillStyle = '#ff9999';
+                this.ctx.fillText("→ Run to next box!", 20, 30);
+            }
         } else {
             // Stealth HUD
             const cat = this.level.cat;

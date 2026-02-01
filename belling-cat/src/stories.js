@@ -431,7 +431,7 @@ export const storyData = {
             id: 4,
             speaker: "Narrator",
             text: "Strong enough to kill.",
-            next: null // End of Phase 2 -> Transition to Phase 3 Action
+            next: "action:escape"
         }
     ]
 };

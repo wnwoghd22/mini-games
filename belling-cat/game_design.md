@@ -73,13 +73,21 @@ The player must choose between two actions:
     -   **Mechanic:** Platformer + Vision Cones.
     -   **Hiding:** Player must duck behind objects (books, cups) when the Cat shifts gaze.
 
-3.  **The Escape (Chase Sequence):**
-    -   **Context:** Fleeing after failure or the final act.
-    -   **Mechanic:** Auto-scroller or fast-paced running. Obstacles appear (falling objects, paw swipes).
+3.  **The Escape (The Crumbling Path):**
+    -   **Context:** The Hideout is destroyed. The Protagonist flees through the collapsing tunnels while the Cat tears the village apart from above.
+    -   **Core Conflict:** **Speed vs. Silence.**
+    -   **Mechanic A (Urgency):** The ceiling is collapsing behind and above the player. A "Collapse Wall" chases the player from the left. Debris falls from above (indicated by dust/shadows).
+    -   **Mechanic B (The Bell - The Listener):**
+        -   The Cat isn't visible, but the **Bell** rings.
+        -   **Visual Cue:** Screen shakes, red vignette pulses.
+        -   **Soft Ring:** Cat is distracted. **Run (Dash).**
+        -   **Loud Ring:** Cat is listening near the surface. **Walk/Crawl** (Move slowly). Running creates "Noise" -> Instant Death (Paw crushes the tunnel).
+    -   **Goal:** Reach the surface/sewers before being buried or caught.
 
 4.  **The Climb (Boss Fight/Puzzle):**
     -   **Context:** Climbing the sleeping Cat to reach the neck.
     -   **Mechanic:** Vertical platforming on the Cat's fur. Don't wake it up (avoid sensitive spots).
+    -   *Note: Direct Cat attacks (Paw swipes) reserved for this or final phase.*
 
 ## 4. Technical Requirements
 -   **Input:** Keyboard (Arrows + Space) or Touch (Tap/Hold).

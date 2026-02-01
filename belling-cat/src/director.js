@@ -73,9 +73,20 @@ export class GameDirector {
                 this.switchToMode('narrative');
                 this.narrative.loadScene('rope_break');
             } else {
-                console.log("Stealth Fail -> Retry");
-                alert("Caught! Hide behind boxes when the eye opens.");
+                console.log("Stealth Fail -> Caught");
+                alert("Caught by the Cat! Be sure to hide BEHIND cover (DOWN key).");
                 this.action.start('stealth');
+            }
+        } else if (this.action.currentMinigame === 'escape') {
+            if (result) {
+                console.log("Escape Success -> Phase 3");
+                this.switchToMode('narrative');
+                // TODO: Add phase3_start scene
+                alert("Escape Success! (End of Demo for now)");
+            } else {
+                console.log("Escape Fail -> Crushed");
+                alert("You were crushed! Watch the bell status!");
+                this.action.start('escape');
             }
         }
     }
