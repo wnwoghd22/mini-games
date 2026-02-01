@@ -57,25 +57,29 @@ The player must choose between two actions:
 -   Dark/Red text for the Protagonist's angry thoughts.
 -   Shaking text effects for tension.
 
-### **Action Mode (Mini-games)**
-1.  **Red Light / Green Light (Stealth):**
-    -   Move when the Cat snores (visual sound waves).
-    -   Freeze when the Cat shifts or eyes open slightly.
-    -   *Fail State:* Instant death -> Retry.
+### **Action Mode (Unified Side-View Platformer)**
+**Core Mechanic:** The game plays as a side-scrolling platformer.
+-   **Controls:** Arrow Keys (Move), Space (Jump), Down (Hide/Crouch).
+-   **Physics:** Gravity, platform collision.
 
-2.  **The Escape (Audio Evasion):**
-    -   **Context:** Used when fleeing after a failed attempt or during the final escape.
-    -   **Mechanic:** The screen is dark/blurred. The player hears the Bell sound from Left or Right.
-    -   **Action:** Influence the mouse to run *away* from the sound.
-    -   *Nuance:* The bell is "failing", so sometimes it makes a "clunk" instead of a "ding". This might be a trick (Cat is stalking silently).
+**Levels:**
+1.  **The Journey (Exploration):**
+    -   **Goal:** Travel from the Mouse Village Hideout to the Cat's Lair.
+    -   **Hazards:** Falling debris, gaps, maybe other small predators (spiders?).
+    -   **Purpose:** Builds tension and establishes the scale of the world.
 
-3.  **The Approach (Skill Check):**
-    -   Walking on the sleeping Cat. Balance mechanic (keep a bar centered).
-    -   If the bar hits the edge, the Cat stirs.
+2.  **The Stealth (Red Light/Green Light):**
+    -   **Context:** Approaching the Cat.
+    -   **Mechanic:** Platformer + Vision Cones.
+    -   **Hiding:** Player must duck behind objects (books, cups) when the Cat shifts gaze.
 
-4.  **The Decision (QTE):**
-    -   **Bell:** Precision timing to tie the knot.
-    -   **Kill:** Rapid button mashing to tighten the noose.
+3.  **The Escape (Chase Sequence):**
+    -   **Context:** Fleeing after failure or the final act.
+    -   **Mechanic:** Auto-scroller or fast-paced running. Obstacles appear (falling objects, paw swipes).
+
+4.  **The Climb (Boss Fight/Puzzle):**
+    -   **Context:** Climbing the sleeping Cat to reach the neck.
+    -   **Mechanic:** Vertical platforming on the Cat's fur. Don't wake it up (avoid sensitive spots).
 
 ## 4. Technical Requirements
 -   **Input:** Keyboard (Arrows + Space) or Touch (Tap/Hold).
