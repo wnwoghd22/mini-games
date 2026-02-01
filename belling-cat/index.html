@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Belling the Cat</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="game-container">
+        <!-- Background Layer -->
+        <div id="background-layer"></div>
+
+        <!-- Action Layer (Canvas) -->
+        <canvas id="action-canvas"></canvas>
+
+        <!-- Story/UI Layer -->
+        <div id="ui-layer">
+            <div id="dialogue-box" class="hidden">
+                <div id="speaker-name"></div>
+                <div id="dialogue-text"></div>
+                <div id="options-container"></div>
+            </div>
+            <div id="hud" class="hidden">
+                <!-- Action prompts, QTE indicators will go here -->
+            </div>
+        </div>
+
+        <!-- Overlay Layer (Fade/Blood effects) -->
+        <div id="overlay-layer"></div>
+    </div>
+    <script type="module" src="src/main.js"></script>
+</body>
+
+</html>
