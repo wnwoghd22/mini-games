@@ -48,11 +48,11 @@ export class GameDirector {
         // Switch back to narrative regardless, but decide WHICH scene based on result
         this.switchToMode('narrative');
 
-        if (this.action.currentMinigame === 'stealth') {
+        if (this.action.currentMinigame === 'journey' || this.action.currentMinigame === 'stealth') {
             if (result) {
-                // Success: However, in our story, the ROPE BREAKS even if we succeed stealth
-                // So we transition to the "Mission Failed (Story Event)" scene
-                console.log("Stealth Success -> Story Failure (Rope Break)");
+                // Journey Success -> Proceed to next narrative phase (or stealth phase)
+                // For MVP simplicity, Journey leads straight to the "Mission Failed" event for Phase 1
+                console.log("Action Success -> Story Event");
                 this.narrative.loadScene('phase2_return');
             } else {
                 // Failure: Caught by Cat -> Death -> Retry?

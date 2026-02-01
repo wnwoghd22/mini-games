@@ -5,15 +5,42 @@ export class ActionEngine {
         this.ctx = this.canvas.getContext('2d');
         this.isRunning = false;
 
-        this.currentMinigame = null; // 'stealth', 'escape', 'balance', 'qte'
-        this.gameData = {}; // Store minigame-specific data
+        // Physics constants
+        this.GRAVITY = 0.6;
+        this.FRICTION = 0.8;
+        this.MOVE_SPEED = 5;
+        this.JUMP_FORCE = 12;
+
+        this.player = {
+            x: 0,
+            y: 0,
+            width: 30,
+            height: 30,
+            vx: 0,
+            vy: 0,
+            isGrounded: false
+        };
+
+        this.level = {
+            platforms: [],
+            goal: { x: 0, y: 0, width: 0, height: 0 },
+            width: 2000, // Total level width
+            cameraX: 0
+        };
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
 
-        // Input handling
-        window.addEventListener('keydown', (e) => this.handleInput(e));
-        this.canvas.addEventListener('touchstart', (e) => this.handleTouch(e));
+        // Input state
+        this.keys = {
+            left: false,
+            right: false,
+            up: false,
+            down: false
+        };
+
+        window.addEventListener('keydown', (e) => this.handleKey(e, true));
+        window.addEventListener('keyup', (e) => this.handleKey(e, false));
     }
 
     resize() {
@@ -21,36 +48,58 @@ export class ActionEngine {
         this.canvas.height = window.innerHeight;
     }
 
-    start(minigameType) {
-        console.log(`Action Engine: Starting ${minigameType}`);
+    handleKey(e, isDown) {
+        if (e.code === 'ArrowLeft') this.keys.left = isDown;
+        if (e.code === 'ArrowRight') this.keys.right = isDown;
+        if (e.code === 'ArrowUp' || e.code === 'Space') this.keys.up = isDown;
+        if (e.code === 'ArrowDown') this.keys.down = isDown;
+    }
+
+    start(levelType) {
+        console.log(`Action Engine: Starting Level ${levelType}`);
         this.isRunning = true;
-        this.currentMinigame = minigameType;
-        this.initMinigame(minigameType);
+        this.loadLevel(levelType);
         this.loop();
     }
 
     stop() {
         this.isRunning = false;
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Reset keys to prevent sticking
+        this.keys = { left: false, right: false, up: false, down: false };
     }
 
-    initMinigame(type) {
-        // Reset data for the specific minigame
-        if (type === 'stealth') {
-            this.gameData = {
-                playerPos: 0,
-                goal: 100,
-                catState: 'sleeping', // sleeping, waking, watching
-                catTimer: 0,
-                alertLevel: 0
-            };
-        } else if (type === 'escape') {
-            this.gameData = {
-                playerX: this.canvas.width / 2,
-                playerY: this.canvas.height / 2,
-                dangerDir: 'left', // Sound source
-                score: 0
-            };
+    loadLevel(type) {
+        // Placeholder level generation
+        // In the future, this should load from a JSON or distinct file
+
+        const floorY = this.canvas.height - 100;
+
+        this.player.x = 50;
+        this.player.y = floorY - 50;
+        this.player.vx = 0;
+        this.player.vy = 0;
+
+        this.level.platforms = [];
+        this.level.cameraX = 0;
+
+        if (type === 'journey' || type === 'stealth') {
+            // Ground
+            this.level.platforms.push({ x: 0, y: floorY, width: 3000, height: 100 });
+
+            // Random Platforms
+            for (let i = 0; i < 10; i++) {
+                this.level.platforms.push({
+                    x: 300 + (i * 200),
+                    y: floorY - 50 - (Math.random() * 100),
+                    width: 100,
+                    height: 20
+                });
+            }
+
+            // Goal
+            this.level.goal = { x: 2800, y: floorY - 100, width: 50, height: 100 };
+            this.level.width = 3000;
         }
     }
 
@@ -63,114 +112,110 @@ export class ActionEngine {
     }
 
     update() {
-        if (this.currentMinigame === 'stealth') {
-            this.updateStealth();
-        } else if (this.currentMinigame === 'escape') {
-            this.updateEscape();
+        // 1. Horizontal Movement
+        if (this.keys.left) this.player.vx = -this.MOVE_SPEED;
+        if (this.keys.right) this.player.vx = this.MOVE_SPEED;
+
+        // Friction when no key pressed
+        if (!this.keys.left && !this.keys.right) {
+            this.player.vx *= this.FRICTION;
         }
+
+        // 2. Jump
+        if (this.keys.up && this.player.isGrounded) {
+            this.player.vy = -this.JUMP_FORCE;
+            this.player.isGrounded = false;
+        }
+
+        // 3. Gravity
+        this.player.vy += this.GRAVITY;
+
+        // 4. Apply Velocity
+        this.player.x += this.player.vx;
+        this.player.y += this.player.vy;
+
+        // 5. Collision Detection
+        this.player.isGrounded = false;
+
+        // Floor/Platform Collision
+        for (const plat of this.level.platforms) {
+            if (this.checkCollision(this.player, plat)) {
+                // Landed on top
+                if (this.player.vy > 0 && this.player.y + this.player.height - this.player.vy <= plat.y) {
+                    this.player.y = plat.y - this.player.height;
+                    this.player.vy = 0;
+                    this.player.isGrounded = true;
+                }
+                // Hit head? (Optional for now)
+            }
+        }
+
+        // 6. Camera Follow
+        const centerScreen = this.canvas.width / 2;
+        if (this.player.x > centerScreen) {
+            this.level.cameraX = this.player.x - centerScreen;
+        }
+        // Clamp camera
+        if (this.level.cameraX < 0) this.level.cameraX = 0;
+        if (this.level.cameraX > this.level.width - this.canvas.width) {
+            this.level.cameraX = this.level.width - this.canvas.width;
+        }
+
+        // 7. Goal Check
+        if (this.checkCollision(this.player, this.level.goal)) {
+            this.winLevel();
+        }
+
+        // 8. Fall Check (Death)
+        if (this.player.y > this.canvas.height) {
+            this.failLevel();
+        }
+    }
+
+    checkCollision(rect1, rect2) {
+        return (
+            rect1.x < rect2.x + rect2.width &&
+            rect1.x + rect1.width > rect2.x &&
+            rect1.y < rect2.y + rect2.height &&
+            rect1.y + rect1.height > rect2.y
+        );
     }
 
     draw() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.save();
+        this.ctx.translate(-this.level.cameraX, 0);
 
-        if (this.currentMinigame === 'stealth') {
-            this.drawStealth();
-        } else if (this.currentMinigame === 'escape') {
-            this.drawEscape();
-        } else {
-            this.ctx.fillStyle = '#800000';
-            this.ctx.font = '20px Courier New';
-            this.ctx.fillText('Action Mode: Unknown Minigame', 50, 50);
+        // Draw Platforms
+        this.ctx.fillStyle = '#444'; // Dark stone color
+        for (const plat of this.level.platforms) {
+            this.ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
         }
-    }
 
-    // ==========================================
-    // STEALTH MINIGAME (Red Light / Green Light)
-    // ==========================================
-    updateStealth() {
-        // Placeholder logic
-        this.gameData.catTimer++;
-        if (this.gameData.catTimer > 200) {
-            this.gameData.catState = this.gameData.catState === 'sleeping' ? 'watching' : 'sleeping';
-            this.gameData.catTimer = 0;
-        }
-    }
+        // Draw Goal
+        this.ctx.fillStyle = '#ffff00'; // Light at the end
+        this.ctx.fillRect(this.level.goal.x, this.level.goal.y, this.level.goal.width, this.level.goal.height);
 
-    drawStealth() {
-        const { playerPos, goal, catState } = this.gameData;
-
-        // Cat Eye (Top center)
-        this.ctx.fillStyle = catState === 'watching' ? '#ffff00' : '#444';
-        this.ctx.beginPath();
-        this.ctx.arc(this.canvas.width / 2, 100, 50, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillText(catState.toUpperCase(), this.canvas.width / 2 - 40, 100);
-
-        // Player (Bottom)
-        const progress = playerPos / goal;
-        const playerY = this.canvas.height - 50 - (progress * (this.canvas.height - 200));
-
+        // Draw Player
         this.ctx.fillStyle = '#fff';
-        this.ctx.beginPath();
-        this.ctx.arc(this.canvas.width / 2, playerY, 20, 0, Math.PI * 2);
-        this.ctx.fill();
+        this.ctx.fillRect(this.player.x, this.player.y, this.player.width, this.player.height);
 
-        // Progress Bar
-        this.ctx.fillStyle = '#222';
-        this.ctx.fillRect(50, this.canvas.height / 2, 20, 200);
-        this.ctx.fillStyle = '#0f0';
-        this.ctx.fillRect(50, this.canvas.height / 2 + (200 * (1 - progress)), 20, 200 * progress);
-    }
+        this.ctx.restore();
 
-    // ==========================================
-    // ESCAPE MINIGAME (Audio Cues)
-    // ==========================================
-    updateEscape() {
-        // Placeholder
-    }
-
-    drawEscape() {
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
+        // Draw HUD
         this.ctx.fillStyle = '#fff';
-        this.ctx.fillText("Escape Mode: RUN AWAY FROM SOUND", 100, 100);
+        this.ctx.font = '20px Courier New';
+        this.ctx.fillText("Controls: Arrows to Move/Jump", 20, 30);
     }
 
-    // ==========================================
-    // INPUT
-    // ==========================================
-    handleInput(e) {
-        if (!this.isRunning) return;
-
-        if (this.currentMinigame === 'stealth') {
-            if (e.code === 'Space' || e.code === 'ArrowUp') {
-                if (this.gameData.catState === 'sleeping') {
-                    this.gameData.playerPos += 5;
-                    if (this.gameData.playerPos >= this.gameData.goal) {
-                        this.winMinigame();
-                    }
-                } else {
-                    this.failMinigame();
-                }
-            }
-        }
-    }
-
-    handleTouch(e) {
-        // Simple touch to move for now
-        this.handleInput({ code: 'Space' });
-    }
-
-    winMinigame() {
-        console.log("Minigame Won!");
+    winLevel() {
+        console.log("Level Complete!");
         this.stop();
         this.director.onMinigameComplete(true);
     }
 
-    failMinigame() {
-        console.log("Minigame Failed!");
+    failLevel() {
+        console.log("Level Failed!");
         this.stop();
         this.director.onMinigameComplete(false);
     }
