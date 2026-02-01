@@ -85,17 +85,26 @@
 - [x] `phase2_attack` - 고양이 습격
 - [x] `phase2_grief` - 선택적 애도 장면
 - [x] `phase2_escape_action` - 탈출
-- [ ] **Action Sequence** - Audio Evasion 미니게임 (Phase 2 후반)
+- [x] **Action Sequence** - Escape 미니게임 (상자 숨기 + 벽 추격)
 
-### Phase 3: The Climax
-- [ ] `phase3_approach` - 잠든 고양이에게 접근
-- [ ] **Action Sequence** - Balance 미니게임 (고양이 위를 걷기)
+### Phase 3: The Climb (완다와 거상 스타일)
+- [x] `phase3_approach` - 잠든 고양이에게 접근
+- [x] **Action Sequence** - Climb 미니게임 (수직 플랫포밍)
+  - 고양이 숨결에 따라 플랫폼(갈비뼈/털) 움직임
+  - Twitch 시 DOWN 홀드로 버티기
+  - Wakefulness 게이지 관리
+- [x] `phase3_summit` - 정상 도달, 최종 선택
 
 ### Phase 4: The Choice
-- [ ] `phase4_decision` - 최종 선택 장면
-- [ ] `ending_bell` - 방울 엔딩
-- [ ] `ending_kill` - 살해 엔딩
-- [ ] `ending_kill_aftermath` - 새 고양이 출현
+- [x] `ending_bell_start` - 방울 달기 선택
+- [x] **Action Sequence** - Chase 미니게임 (오토러너)
+  - High/Low 공격 회피 (Duck/Jump)
+- [x] `ending_bell_escape` - 방울 엔딩 (The Devil We Know)
+
+- [x] `ending_kill_start` - 목 조르기 선택
+- [x] **Action Sequence** - QTE 미니게임 (Space 연타)
+- [x] `ending_kill_victory` - 킬 엔딩 (The Devil We Made)
+  - 새 고양이 출현 → 멸망
 
 ---
 
@@ -116,22 +125,22 @@
 - [x] 상자 근처에서만 숨기 가능 (`canHide` 체크)
 - [x] Cat Eye HUD (Watching/Sleeping 상태 표시)
 - [x] 고양이 실루엣 시각화
-- [ ] Audio Evasion 구현 (Phase 2용)
-- [ ] Balance Bar 구현 (Phase 3용)
-- [ ] QTE (버튼 연타/타이밍) 구현 (Phase 4용)
+- [x] Escape 구간 (상자 숨기 + 벽 추격 + Bell 리듬)
+- [x] Climb 구간 (수직 플랫포밍 + 숨결 + Twitch)
+- [x] Chase 구간 (오토러너 + High/Low 회피)
+- [x] QTE 구간 (Space 연타)
 
 ### Director
 - [x] Narrative ↔ Action 모드 전환
 - [x] 미니게임 완료 후 씬 분기 처리
+- [x] 엔딩 분기 처리 (Bell/Kill)
 - [ ] 게임 상태 저장/로드
-- [ ] 엔딩 분기 처리
 
 ---
 
-## 5. 우선순위
+## 5. 남은 작업
 
-1. **Phase 3-4 스토리 작성** - 엔딩까지 서사 완성
-2. **Audio Evasion** - Phase 2 탈출용 미니게임
-3. **Balance Bar + QTE** - Phase 3-4 클라이맥스
-4. **엔딩 분기 시스템** - 선택에 따른 결과 처리
-5. **오디오/비주얼 연출** - 분위기 강화
+1. **폴리싱** - 밸런스 조정, 버그 수정
+2. **오디오** - 심장박동, 숨소리, 긴장 음악
+3. **시각 효과** - 화면 흔들림, 비네트 효과
+4. **게임 저장/로드** - 진행 상황 저장

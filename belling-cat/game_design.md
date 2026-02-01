@@ -84,10 +84,32 @@ The player must choose between two actions:
         -   **Loud Ring:** Cat is listening near the surface. **Walk/Crawl** (Move slowly). Running creates "Noise" -> Instant Death (Paw crushes the tunnel).
     -   **Goal:** Reach the surface/sewers before being buried or caught.
 
-4.  **The Climb (Boss Fight/Puzzle):**
-    -   **Context:** Climbing the sleeping Cat to reach the neck.
-    -   **Mechanic:** Vertical platforming on the Cat's fur. Don't wake it up (avoid sensitive spots).
-    -   *Note: Direct Cat attacks (Paw swipes) reserved for this or final phase.*
+4.  **Phase 3: The Approach (Silent Infiltration):**
+    -   **Context:** Crossing the room to reach the Sleeping Cat.
+    -   **View:** Side-scrolling Platformer (Horizontal).
+    -   **Core Mechanic:** **Surface Noise & Stealth Platforming.**
+        -   **Soft Surfaces (Carpet, Sofa, Curtains):** Silent. Safe to run.
+        -   **Hard Surfaces (Wood Floor, Tables, Shelves):** Noisy.
+    -   **Rules:**
+        -   Running on Hard Surface -> **Wakefulness UP**.
+        -   Landing Hard (High Fall) on Hard Surface -> **Wakefulness SPIKE**.
+        -   **Crawl (Down Key)** on Hard Surface -> **Silent**.
+    -   **Goal:** Navigate across furniture obstacles to reach the Cat without waking it.
+
+5.  **The Finale (Choice & Consequence):**
+    -   **The Collar:** Reaching the Cat triggers the final choice.
+    -   **Option A: Bell (Peace):** Tie the bell.
+        -   **Action:** Precision QTE (Timing).
+        -   **Result:** The Cat wakes up. Final Chase.
+    -   **Option B: Kill (Revenge):** Strangle using the rope.
+        -   **Action:** Button Mashing.
+        -   **Result:** The Cat dies. Dark ending.
+
+6.  **The Final Chase (Bell Ending Only):**
+    -   **Context:** Escaping the enraged, belled Cat.
+    -   **Mechanic:** High speed auto-runner.
+    -   **Gimmick:** **High/Low Road.**
+    -   **Visual Cue:** Cat swipe High (Show Red Top) -> **Slide (Down)**. Cat swipe Low (Show Red Bottom) -> **Jump (Up)**.
 
 ## 4. Technical Requirements
 -   **Input:** Keyboard (Arrows + Space) or Touch (Tap/Hold).

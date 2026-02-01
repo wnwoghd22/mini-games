@@ -433,5 +433,305 @@ export const storyData = {
             text: "Strong enough to kill.",
             next: "action:escape"
         }
+    ],
+
+    // ========================================
+    // PHASE 3: THE CLIMB
+    // Ascending the sleeping giant
+    // ========================================
+
+    "phase3_approach": [
+        {
+            id: 1,
+            speaker: "Narrator",
+            text: "You emerge from the tunnels. The night air is cold.",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Narrator",
+            text: "And there it lies. The Beast. A mountain of fur and death.",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "Protagonist",
+            text: "(Internal) It's... enormous. How did I ever think I could kill this thing?",
+            type: "thought",
+            next: 4
+        },
+        {
+            id: 4,
+            speaker: "Narrator",
+            text: "Its chest rises and falls like the tide. Each breath could be your last.",
+            next: 5
+        },
+        {
+            id: 5,
+            speaker: "Protagonist",
+            text: "(Internal) No. The Elder died for this. They ALL died for this.",
+            type: "thought",
+            next: 6
+        },
+        {
+            id: 6,
+            speaker: "Protagonist",
+            text: "(Internal) I will climb. I will reach its throat. And then...",
+            type: "thought",
+            next: 7
+        },
+        {
+            id: 7,
+            speaker: "System",
+            text: "Climb the Cat. Hold DOWN when it twitches. Don't wake the beast.",
+            next: "action:climb"
+        }
+    ],
+
+    "phase3_summit": [
+        {
+            id: 1,
+            speaker: "Narrator",
+            text: "You reach the collar. The old bell hangs silent—cracked and useless.",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Narrator",
+            text: "Below you, the Cat's throat pulses with life. So fragile. So close.",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "Protagonist",
+            text: "(Internal) This is it. The moment that will define everything.",
+            type: "thought",
+            next: 4
+        },
+        {
+            id: 4,
+            speaker: "Narrator",
+            text: "The Elder's last words echo in your mind: 'The bell is a warning for THEM...'",
+            next: 5
+        },
+        {
+            id: 5,
+            speaker: "Protagonist",
+            text: "...",
+            choices: [
+                { text: "Tie the bell. Honor the old ways.", nextId: "ending_bell_start" },
+                { text: "Strangle the Cat. End this forever.", nextId: "ending_kill_start" }
+            ]
+        }
+    ],
+
+    // ========================================
+    // ENDING A: THE BELL (The Coward's Way)
+    // ========================================
+
+    "ending_bell_start": [
+        {
+            id: 1,
+            speaker: "Protagonist",
+            text: "(Internal) I... I can't do it. Not like this.",
+            type: "thought",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Narrator",
+            text: "Your paws tremble as you loop the rope around the collar.",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "Narrator",
+            text: "The new bell gleams in the moonlight. One knot. Two knots.",
+            next: 4
+        },
+        {
+            id: 4,
+            speaker: "Narrator",
+            text: "DING.",
+            next: 5
+        },
+        {
+            id: 5,
+            speaker: "Narrator",
+            text: "The Cat's eye snaps open.",
+            next: 6
+        },
+        {
+            id: 6,
+            speaker: "System",
+            text: "RUN! Escape the awakened beast!",
+            next: "action:chase"
+        }
+    ],
+
+    "ending_bell_escape": [
+        {
+            id: 1,
+            speaker: "Narrator",
+            text: "You tumble into the darkness. Behind you, the Cat's roar shakes the world.",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Narrator",
+            text: "But it doesn't follow. The bell rings with every movement now.",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "Narrator",
+            text: "A warning. For all who would be hunted.",
+            next: 4
+        },
+        {
+            id: 4,
+            speaker: "Protagonist",
+            text: "(Internal) The Elder was right. This is how we survive.",
+            type: "thought",
+            next: 5
+        },
+        {
+            id: 5,
+            speaker: "Protagonist",
+            text: "(Internal) Not by killing our devils... but by knowing when they come.",
+            type: "thought",
+            next: 6
+        },
+        {
+            id: 6,
+            speaker: "Narrator",
+            text: "The village will rebuild. The mice will remember. And the bell will ring.",
+            next: 7
+        },
+        {
+            id: 7,
+            speaker: "Narrator",
+            text: "[ END - The Devil We Know ]",
+            next: null
+        }
+    ],
+
+    // ========================================
+    // ENDING B: THE KILL (The Hero's Way)
+    // ========================================
+
+    "ending_kill_start": [
+        {
+            id: 1,
+            speaker: "Protagonist",
+            text: "No more running. No more hiding. NO MORE FEAR!",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Narrator",
+            text: "You wrap the rope around its throat. Once. Twice.",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "Narrator",
+            text: "The Cat's eyes fly open. But you pull. PULL!",
+            next: 4
+        },
+        {
+            id: 4,
+            speaker: "System",
+            text: "MASH SPACE to strangle the Cat!",
+            next: "action:qte_kill"
+        }
+    ],
+
+    "ending_kill_victory": [
+        {
+            id: 1,
+            speaker: "Narrator",
+            text: "The beast convulses. Its claws tear the air. But you hold.",
+            next: 2
+        },
+        {
+            id: 2,
+            speaker: "Narrator",
+            text: "And then... silence.",
+            next: 3
+        },
+        {
+            id: 3,
+            speaker: "Narrator",
+            text: "The Cat is dead. You have done what no mouse has ever done.",
+            next: 4
+        },
+        {
+            id: 4,
+            speaker: "Narrator",
+            text: "Days pass. The village celebrates. They dance on the corpse of their oppressor.",
+            next: 5
+        },
+        {
+            id: 5,
+            speaker: "Protagonist",
+            text: "We're free. Finally, truly FREE!",
+            next: 6
+        },
+        {
+            id: 6,
+            speaker: "Narrator",
+            text: "And then, on the seventh night... a shadow falls across the moon.",
+            next: 7
+        },
+        {
+            id: 7,
+            speaker: "Narrator",
+            text: "A shape. Sleek. Young. Fast.",
+            next: 8
+        },
+        {
+            id: 8,
+            speaker: "Narrator",
+            text: "Another Cat. The old one's offspring.",
+            next: 9
+        },
+        {
+            id: 9,
+            speaker: "Narrator",
+            text: "It has no bell. It makes no sound. And it is HUNGRY.",
+            next: 10
+        },
+        {
+            id: 10,
+            speaker: "Protagonist",
+            text: "(Internal) No... no, no, NO—",
+            type: "thought",
+            next: 11
+        },
+        {
+            id: 11,
+            speaker: "Narrator",
+            text: "The screaming lasts until dawn. By sunrise, there are no mice left to scream.",
+            next: 12
+        },
+        {
+            id: 12,
+            speaker: "Narrator",
+            text: "The Elder's final words were never heard. But they were true.",
+            next: 13
+        },
+        {
+            id: 13,
+            speaker: "Narrator",
+            text: "'The bell is a warning for THEM... to stay away.'",
+            next: 14
+        },
+        {
+            id: 14,
+            speaker: "Narrator",
+            text: "[ END - The Devil We Made ]",
+            next: null
+        }
     ]
 };

@@ -30,6 +30,25 @@
 
         <!-- Overlay Layer (Fade/Blood effects) -->
         <div id="overlay-layer"></div>
+
+        <!-- Debug Panel -->
+        <div id="debug-panel">
+            <div id="debug-toggle">DEBUG</div>
+            <div id="debug-buttons" class="hidden">
+                <button data-scene="intro">Intro</button>
+                <button data-action="journey">P1: Journey</button>
+                <button data-scene="rope_break">P1: Rope Break</button>
+                <button data-scene="phase2_return">P2: Return</button>
+                <button data-action="escape">P2: Escape</button>
+                <button data-scene="phase3_approach">P3: Approach</button>
+                <button data-action="climb">P3: Climb</button>
+                <button data-scene="phase3_summit">P3: Summit</button>
+                <button data-action="chase">P4: Chase (Bell)</button>
+                <button data-scene="ending_bell_escape">End: Bell</button>
+                <button data-action="qte_kill">P4: QTE (Kill)</button>
+                <button data-scene="ending_kill_victory">End: Kill</button>
+            </div>
+        </div>
     </div>
     <script type="module" src="src/main.js"></script>
 </body>

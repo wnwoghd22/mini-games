@@ -59,12 +59,26 @@ export class ActionEngine {
     handleKey(e, isDown) {
         if (e.code === 'ArrowLeft') this.keys.left = isDown;
         if (e.code === 'ArrowRight') this.keys.right = isDown;
-        if (e.code === 'ArrowUp' || e.code === 'Space') this.keys.up = isDown;
+        if (e.code === 'ArrowUp') this.keys.up = isDown;
         if (e.code === 'ArrowDown') this.keys.down = isDown;
+
+        // Space key handling
+        if (e.code === 'Space') {
+            if (this.level.phase === 'qte' && isDown) {
+                // QTE mashing
+                this.handleQTEMash();
+            } else {
+                // Normal jump
+                this.keys.up = isDown;
+            }
+        }
     }
 
     start(levelType) {
         console.log(`Action Engine: Starting Level ${levelType}`);
+
+        // IMPORTANT: Stop any existing game first
+        this.isRunning = false;
 
         // Cancel any existing animation frame before starting new one
         if (this.animationFrameId) {
@@ -75,10 +89,13 @@ export class ActionEngine {
         // Reset input state to prevent stuck keys
         this.keys = { left: false, right: false, up: false, down: false };
 
-        this.currentMinigame = levelType;
-        this.isRunning = true;
-        this.loadLevel(levelType);
-        this.loop();
+        // Use setTimeout to ensure previous loop has fully stopped
+        setTimeout(() => {
+            this.currentMinigame = levelType;
+            this.isRunning = true;
+            this.loadLevel(levelType);
+            this.loop();
+        }, 0);
     }
 
     stop() {
@@ -339,6 +356,101 @@ export class ActionEngine {
                 debris: []
             };
         }
+        else if (type === 'climb') {
+            // ========================================
+            // PHASE 3: THE APPROACH (Horizontal)
+            // ========================================
+            const H = this.canvas.height;
+            const fY = H - 100;
+
+            this.level.width = 3000;
+            this.level.height = H;
+            this.level.phase = 'climb';
+
+            // Start at left
+            this.player.x = 50;
+            this.player.y = fY - 50;
+            this.level.cameraX = 0;
+            this.level.cameraY = 0; // Reset vertical camera
+
+            // --- FURNITURE LAYOUT (Horizontal) ---
+
+            // 1. Floor (Hard Wood)
+            this.level.platforms.push({ x: 0, y: fY, width: 600, height: 100, type: 'floor', surface: 'hard' });
+            this.level.platforms.push({ x: 900, y: fY, width: 800, height: 100, type: 'floor', surface: 'hard' });
+            this.level.platforms.push({ x: 2000, y: fY, width: 1000, height: 100, type: 'floor', surface: 'hard' });
+
+            // 2. Sofa (Soft)
+            this.level.platforms.push({ x: 400, y: fY - 60, width: 250, height: 60, type: 'sofa', surface: 'soft' });
+            this.level.platforms.push({ x: 400, y: fY - 100, width: 250, height: 20, type: 'sofa_back', surface: 'soft' });
+
+            // 3. Bookshelf Bridge (Hard)
+            this.level.platforms.push({ x: 700, y: fY - 150, width: 150, height: 20, type: 'shelf', surface: 'hard' });
+            this.level.platforms.push({ x: 900, y: fY - 200, width: 200, height: 20, type: 'shelf', surface: 'hard' });
+
+            // 4. Curtains (Soft)
+            this.level.platforms.push({ x: 1200, y: fY - 250, width: 120, height: 20, type: 'curtain', surface: 'soft' });
+            this.level.platforms.push({ x: 1400, y: fY - 200, width: 120, height: 20, type: 'curtain', surface: 'soft' });
+
+            // 5. Dining Table (Hard)
+            this.level.platforms.push({ x: 1600, y: fY - 100, width: 400, height: 20, type: 'table', surface: 'hard' });
+
+            // 6. Cat's Bed (Soft)
+            this.level.platforms.push({ x: 2400, y: fY - 50, width: 300, height: 50, type: 'bed', surface: 'soft' });
+
+            // Populate initial baseYs
+            this.level.platforms.forEach(p => p.baseY = p.y);
+
+            // Goal - Sleeping Cat
+            this.level.goal = { x: 2600, y: fY - 150, width: 100, height: 100 };
+
+            // Climb-specific data
+            this.level.climb = {
+                wakefulnessLevel: 0,
+                noiseLevel: 0,
+                catState: 'sleeping'
+            };
+        }
+        else if (type === 'chase') {
+            // ========================================
+            // FINAL CHASE: Escaping the awakened Cat
+            // ========================================
+            this.level.width = 5000;
+            this.level.phase = 'chase';
+
+            this.player.x = 200;
+            this.player.y = floorY - 50;
+
+            // Ground
+            this.level.platforms.push({ x: 0, y: floorY, width: this.level.width, height: 100 });
+
+            // Goal
+            this.level.goal = { x: 4800, y: floorY - 150, width: 100, height: 150 };
+
+            this.level.chase = {
+                scrollSpeed: 6,
+                attackTimer: 0,
+                attackType: null,
+                attackWarning: false,
+                attackActive: false,
+                cameraX: 0
+            };
+        }
+        else if (type === 'qte_kill') {
+            // ========================================
+            // QTE: Strangling the Cat
+            // ========================================
+            this.level.phase = 'qte';
+
+            this.level.qte = {
+                progress: 0,
+                decay: 0.3,
+                required: 100,
+                mashCount: 0,
+                timeLimit: 600,
+                timer: 0
+            };
+        }
     }
 
     loop() {
@@ -362,11 +474,31 @@ export class ActionEngine {
         // 1. Stealth Logic
         if (this.level.phase === 'stealth') {
             this.updateCatLogic();
+            if (!this.isRunning) return; // Exit if game ended
         }
 
         // 1.5 Escape Logic
         if (this.level.phase === 'escape') {
             this.updateEscapeLogic();
+            if (!this.isRunning) return;
+        }
+
+        // 1.6 Climb Logic
+        if (this.level.phase === 'climb') {
+            this.updateClimbLogic();
+            if (!this.isRunning) return;
+        }
+
+        // 1.7 Chase Logic
+        if (this.level.phase === 'chase') {
+            this.updateChaseLogic();
+            if (!this.isRunning) return;
+        }
+
+        // 1.8 QTE Logic
+        if (this.level.phase === 'qte') {
+            this.updateQTELogic();
+            if (!this.isRunning) return;
         }
 
         // 2. Check if player is near a cover (can hide) - works in stealth AND escape
@@ -397,7 +529,7 @@ export class ActionEngine {
         } else {
             // In escape phase during loud bell, only allow slow movement if not hiding
             const escapeSlowdown = (this.level.phase === 'escape' &&
-                                    this.level.escape?.bellState === 'loud') ? 0.3 : 1.0;
+                this.level.escape?.bellState === 'loud') ? 0.3 : 1.0;
             if (this.keys.left) this.player.vx = -this.MOVE_SPEED * escapeSlowdown;
             if (this.keys.right) this.player.vx = this.MOVE_SPEED * escapeSlowdown;
         }
@@ -441,14 +573,20 @@ export class ActionEngine {
         // 8. Camera Follow (smooth in stealth phase)
         this.updateCamera();
 
-        // 9. Goal Check
-        if (this.checkCollision(this.player, this.level.goal)) {
-            this.winLevel();
+        // 9. Goal Check (not for climb/chase/qte - they handle it themselves)
+        if (this.level.phase !== 'climb' && this.level.phase !== 'chase' && this.level.phase !== 'qte') {
+            if (this.checkCollision(this.player, this.level.goal)) {
+                this.winLevel();
+                return;
+            }
         }
 
-        // 10. Fall Check (Death)
-        if (this.player.y > this.canvas.height) {
-            this.failLevel();
+        // 10. Fall Check (Death) - not for climb/chase/qte (different coordinate systems)
+        if (this.level.phase !== 'climb' && this.level.phase !== 'chase' && this.level.phase !== 'qte') {
+            if (this.player.y > this.canvas.height) {
+                this.failLevel();
+                return;
+            }
         }
     }
 
@@ -532,6 +670,155 @@ export class ActionEngine {
         }
     }
 
+    updateClimbLogic() {
+        const climb = this.level.climb;
+        climb.noiseLevel = 0;
+
+        // 1. Noise Logic (Running on Hard Surfaces)
+        if (this.player.isGrounded && this.player.stoodPlatform) {
+            const plat = this.player.stoodPlatform;
+
+            if (plat.surface === 'hard') {
+                // If moving fast (> 1) and NOT crawling (down key), make noise
+                if (Math.abs(this.player.vx) > 1.0 && !this.keys.down) {
+                    climb.noiseLevel = 1;
+                    climb.wakefulnessLevel += 0.3;
+                }
+            }
+        }
+
+        // 2. Decay wakefulness
+        climb.wakefulnessLevel = Math.max(0, climb.wakefulnessLevel - 0.05);
+
+        // 3. Game over check
+        if (climb.wakefulnessLevel >= 100) {
+            console.log("Cat woke up from NOISE!");
+            this.failLevel();
+            return;
+        }
+
+        // 4. Horizontal Camera Follow (Standard)
+        const centerScreen = this.canvas.width / 2;
+        let targetCameraX = this.player.x - centerScreen;
+
+        // Clamp camera
+        if (targetCameraX < 0) targetCameraX = 0;
+        if (targetCameraX > this.level.width - this.canvas.width) {
+            targetCameraX = this.level.width - this.canvas.width;
+        }
+
+        // Smooth lerp
+        this.level.cameraX += (targetCameraX - this.level.cameraX) * 0.1;
+
+        // 5. Goal check
+        if (this.checkCollision(this.player, this.level.goal)) {
+            this.winLevel();
+            return;
+        }
+    }
+
+    updateChaseLogic() {
+        const chase = this.level.chase;
+
+        // 1. Auto-scroll
+        chase.cameraX += chase.scrollSpeed;
+        this.player.x += chase.scrollSpeed * 0.8; // Player moves slightly slower than camera
+
+        // Player can speed up or slow down slightly
+        if (this.keys.right) this.player.x += 2;
+        if (this.keys.left) this.player.x -= 1;
+
+        // Keep player on screen
+        if (this.player.x < chase.cameraX + 50) {
+            this.player.x = chase.cameraX + 50;
+        }
+        if (this.player.x > chase.cameraX + this.canvas.width - 100) {
+            this.player.x = chase.cameraX + this.canvas.width - 100;
+        }
+
+        this.level.cameraX = chase.cameraX;
+
+        // 2. Attack patterns
+        chase.attackTimer++;
+
+        if (!chase.attackWarning && !chase.attackActive) {
+            // Start new attack warning every 1.5-2.5 seconds
+            if (chase.attackTimer > 90 + Math.random() * 60) {
+                chase.attackWarning = true;
+                chase.attackType = Math.random() < 0.5 ? 'high' : 'low';
+                chase.attackTimer = 0;
+            }
+        } else if (chase.attackWarning) {
+            // Warning lasts ~0.7 seconds
+            if (chase.attackTimer > 40) {
+                chase.attackWarning = false;
+                chase.attackActive = true;
+                chase.attackTimer = 0;
+            }
+        } else if (chase.attackActive) {
+            // Check if player dodged correctly
+            const playerDucking = this.keys.down;
+            const playerJumping = !this.player.isGrounded;
+
+            if (chase.attackType === 'high' && !playerDucking) {
+                // High attack - player should duck
+                console.log("Hit by high attack!");
+                this.failLevel();
+                return;
+            } else if (chase.attackType === 'low' && !playerJumping) {
+                // Low attack - player should jump
+                console.log("Hit by low attack!");
+                this.failLevel();
+                return;
+            }
+
+            // Attack lasts ~0.3 seconds
+            if (chase.attackTimer > 20) {
+                chase.attackActive = false;
+                chase.attackTimer = 0;
+            }
+        }
+
+        // 3. Win condition
+        if (this.player.x >= this.level.goal.x) {
+            this.winLevel();
+            return;
+        }
+    }
+
+    updateQTELogic() {
+        const qte = this.level.qte;
+
+        qte.timer++;
+
+        // Progress decays over time
+        qte.progress = Math.max(0, qte.progress - qte.decay);
+
+        // Check for space key press (handled in handleKey with a flag)
+        // We'll use a different approach - check if space was just pressed
+
+        // Win condition
+        if (qte.progress >= qte.required) {
+            this.winLevel();
+            return;
+        }
+
+        // Time limit
+        if (qte.timer >= qte.timeLimit) {
+            console.log("Failed to strangle the cat in time!");
+            this.failLevel();
+            return;
+        }
+    }
+
+    // Special key handler for QTE
+    handleQTEMash() {
+        if (this.level.phase === 'qte' && this.level.qte) {
+            this.level.qte.progress += 3;
+            this.level.qte.mashCount++;
+        }
+    }
+
     enterStealthPhase() {
         console.log("Entering Stealth Phase...");
         this.level.phase = 'stealth';
@@ -543,6 +830,15 @@ export class ActionEngine {
     }
 
     updateCamera() {
+        // Climb phase uses vertical camera (handled in updateClimbLogic)
+        if (this.level.phase === 'climb') return;
+
+        // Chase phase camera is handled in updateChaseLogic
+        if (this.level.phase === 'chase') return;
+
+        // QTE doesn't need camera
+        if (this.level.phase === 'qte') return;
+
         const centerScreen = this.canvas.width / 2;
         let targetCameraX = this.player.x - centerScreen;
 
@@ -610,6 +906,20 @@ export class ActionEngine {
 
     draw() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Special renders for specific phases
+        if (this.level.phase === 'climb') {
+            this.drawClimb();
+            return;
+        }
+        if (this.level.phase === 'chase') {
+            this.drawChase();
+            return;
+        }
+        if (this.level.phase === 'qte') {
+            this.drawQTE();
+            return;
+        }
 
         // Background gradient based on phase
         if (this.level.phase === 'stealth') {
@@ -740,6 +1050,251 @@ export class ActionEngine {
 
         // Draw HUD
         this.drawHUD();
+    }
+
+    drawClimb() {
+        const climb = this.level.climb;
+
+        // Background - Dark Room
+        this.ctx.fillStyle = '#050505';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.save();
+        this.ctx.translate(-this.level.cameraX, 0); // Horizontal scroll
+
+        // Draw Platforms (Furniture)
+        for (const plat of this.level.platforms) {
+            // Fill
+            if (plat.surface === 'soft') {
+                this.ctx.fillStyle = '#4a2a2a'; // Reddish/Soft
+            } else if (plat.surface === 'hard') {
+                this.ctx.fillStyle = '#2a2a3a'; // Blueish/Hard
+            } else {
+                this.ctx.fillStyle = '#333';
+            }
+            this.ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+
+            // Border/Detail
+            this.ctx.strokeStyle = plat.surface === 'soft' ? '#885555' : '#555588';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(plat.x, plat.y, plat.width, plat.height);
+
+            // Text visual for furniture
+            this.ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            this.ctx.font = '20px serif';
+            this.ctx.fillText(plat.type, plat.x + 10, plat.y + 30);
+        }
+
+        // Goal (Cat Visual)
+        const goal = this.level.goal;
+        this.ctx.fillStyle = '#aa8833'; // Cat color
+        this.ctx.beginPath();
+        this.ctx.ellipse(goal.x + goal.width / 2, goal.y + goal.height / 2, 60, 40, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.font = '12px Courier New';
+        this.ctx.fillText("ZZZ", goal.x + goal.width / 2, goal.y - 10);
+        this.ctx.textAlign = 'left';
+
+
+        // Player
+        if (climb.noiseLevel > 0) {
+            // Making noise! Flash red
+            this.ctx.fillStyle = '#ff0000';
+            // Draw noise ripples
+            this.ctx.strokeStyle = '#ff0000';
+            this.ctx.beginPath();
+            this.ctx.arc(this.player.x + this.player.width / 2, this.player.y + this.player.height, 20 + Math.random() * 10, 0, Math.PI * 2);
+            this.ctx.stroke();
+        } else {
+            this.ctx.fillStyle = '#fff';
+        }
+
+        // Crouch visual
+        if (this.keys.down) {
+            this.ctx.fillRect(this.player.x, this.player.y + 10, this.player.width, this.player.height - 10);
+        } else {
+            this.ctx.fillRect(this.player.x, this.player.y, this.player.width, this.player.height);
+        }
+
+        this.ctx.restore();
+
+        // HUD - Wakefulness
+        const meterWidth = 300;
+        const meterX = this.canvas.width / 2 - meterWidth / 2;
+
+        // Background
+        this.ctx.fillStyle = '#220000';
+        this.ctx.fillRect(meterX, 50, meterWidth, 25);
+
+        // Bar
+        const wakeP = Math.min(100, climb.wakefulnessLevel) / 100;
+        this.ctx.fillStyle = wakeP > 0.8 ? '#ff0000' : '#ffaa00';
+        this.ctx.fillRect(meterX, 50, meterWidth * wakeP, 25);
+
+        // Border
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.strokeRect(meterX, 50, meterWidth, 25);
+
+        // Text
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = 'bold 16px Courier New';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText("CAT WAKEFULNESS", this.canvas.width / 2, 40);
+
+        let hint = 'Air';
+        if (this.player.stoodPlatform) {
+            hint = this.player.stoodPlatform.surface === 'hard' ? 'Hard Surface (CRAWL!)' : 'Soft Surface (Run OK)';
+        }
+        this.ctx.font = '14px Courier New';
+        this.ctx.fillText(hint, this.canvas.width / 2, 95);
+
+        this.ctx.textAlign = 'left';
+    }
+
+    drawChase() {
+        const chase = this.level.chase;
+
+        // Background - rushing blur effect
+        const gradient = this.ctx.createLinearGradient(0, 0, this.canvas.width, 0);
+        gradient.addColorStop(0, '#1a0505');
+        gradient.addColorStop(1, '#0a0a0a');
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Motion lines
+        this.ctx.strokeStyle = 'rgba(255, 100, 100, 0.3)';
+        this.ctx.lineWidth = 2;
+        for (let i = 0; i < 10; i++) {
+            const y = Math.random() * this.canvas.height;
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(100 + Math.random() * 100, y);
+            this.ctx.stroke();
+        }
+
+        this.ctx.save();
+        this.ctx.translate(-chase.cameraX, 0);
+
+        // Draw ground
+        const floorY = this.canvas.height - 100;
+        this.ctx.fillStyle = '#2a2a2a';
+        this.ctx.fillRect(0, floorY, this.level.width, 100);
+
+        // Draw player
+        let pHeight = this.player.height;
+        let pY = this.player.y;
+        if (this.keys.down && this.player.isGrounded) {
+            // Ducking
+            pHeight = this.player.height / 2;
+            pY = this.player.y + pHeight;
+        }
+        this.ctx.fillStyle = '#fff';
+        this.ctx.fillRect(this.player.x, pY, this.player.width, pHeight);
+
+        this.ctx.restore();
+
+        // Attack warning/indicator
+        if (chase.attackWarning || chase.attackActive) {
+            const attackY = chase.attackType === 'high' ? 100 : this.canvas.height - 150;
+            const attackHeight = 80;
+
+            if (chase.attackWarning) {
+                // Warning - flashing
+                this.ctx.fillStyle = `rgba(255, 255, 0, ${0.3 + Math.sin(Date.now() * 0.02) * 0.2})`;
+            } else {
+                // Active attack - red
+                this.ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
+            }
+
+            this.ctx.fillRect(0, attackY, this.canvas.width, attackHeight);
+
+            // Attack indicator text
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = 'bold 24px Courier New';
+            this.ctx.textAlign = 'center';
+            if (chase.attackType === 'high') {
+                this.ctx.fillText(chase.attackActive ? "DUCK!" : "HIGH ATTACK!", this.canvas.width / 2, attackY + 50);
+            } else {
+                this.ctx.fillText(chase.attackActive ? "JUMP!" : "LOW ATTACK!", this.canvas.width / 2, attackY + 50);
+            }
+        }
+
+        // HUD
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = 'bold 20px Courier New';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText("ESCAPE! (↓ Duck, ↑ Jump)", this.canvas.width / 2, 40);
+        this.ctx.textAlign = 'left';
+
+        // Progress bar
+        const progress = (this.player.x / this.level.goal.x) * 100;
+        const barWidth = 300;
+        const barX = this.canvas.width / 2 - barWidth / 2;
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(barX, 60, barWidth, 15);
+        this.ctx.fillStyle = '#66ff66';
+        this.ctx.fillRect(barX, 60, barWidth * (progress / 100), 15);
+    }
+
+    drawQTE() {
+        const qte = this.level.qte;
+
+        // Dark red background
+        const gradient = this.ctx.createRadialGradient(
+            this.canvas.width / 2, this.canvas.height / 2, 0,
+            this.canvas.width / 2, this.canvas.height / 2, this.canvas.width / 2
+        );
+        gradient.addColorStop(0, '#2a0a0a');
+        gradient.addColorStop(1, '#0a0505');
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Cat's eye in background
+        this.ctx.fillStyle = '#ffcc00';
+        this.ctx.globalAlpha = 0.3 + (qte.progress / 100) * 0.3;
+        this.ctx.beginPath();
+        this.ctx.ellipse(this.canvas.width / 2, this.canvas.height / 2, 150, 200, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Pupil (shrinks as you strangle)
+        this.ctx.fillStyle = '#000';
+        const pupilWidth = 20 - (qte.progress / 100) * 15;
+        this.ctx.beginPath();
+        this.ctx.ellipse(this.canvas.width / 2, this.canvas.height / 2, pupilWidth, 180, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.globalAlpha = 1.0;
+
+        // Progress bar
+        const barWidth = 400;
+        const barX = this.canvas.width / 2 - barWidth / 2;
+        const barY = this.canvas.height - 150;
+
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(barX, barY, barWidth, 40);
+        this.ctx.fillStyle = '#ff3333';
+        this.ctx.fillRect(barX, barY, barWidth * (qte.progress / 100), 40);
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(barX, barY, barWidth, 40);
+
+        // Text
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = 'bold 36px Courier New';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText("MASH SPACE!", this.canvas.width / 2, 100);
+
+        // Mash count
+        this.ctx.font = '24px Courier New';
+        this.ctx.fillText(`Mashes: ${qte.mashCount}`, this.canvas.width / 2, 150);
+
+        // Time remaining
+        const timeLeft = Math.ceil((qte.timeLimit - qte.timer) / 60);
+        this.ctx.fillStyle = timeLeft <= 3 ? '#ff3333' : '#fff';
+        this.ctx.fillText(`Time: ${timeLeft}s`, this.canvas.width / 2, barY + 80);
+
+        this.ctx.textAlign = 'left';
     }
 
     drawCat() {
