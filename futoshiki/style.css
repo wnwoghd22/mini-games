@@ -214,3 +214,84 @@ main {
     height: 1.5rem;
     color: var(--success-color);
 }
+
+@media (max-width: 768px) {
+    #app {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        padding: 1rem;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        box-sizing: border-box;
+    }
+
+    .sidebar h1 {
+        font-size: 1.5rem;
+        width: auto;
+        margin-right: auto;
+    }
+
+    .controls {
+        flex-direction: row;
+        width: auto;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .control-group {
+        width: auto;
+    }
+
+    .control-group label {
+        display: none;
+        /* Save space */
+    }
+
+    /* Make buttons/selects smaller on mobile header */
+    button,
+    select {
+        padding: 0.5rem;
+        width: auto;
+        font-size: 0.9rem;
+    }
+
+    #status-message {
+        width: 100%;
+        text-align: center;
+        order: 10;
+        /* Move to bottom of header */
+        margin-top: 0.5rem;
+        height: auto;
+    }
+
+    main {
+        padding: 1rem;
+        justify-content: flex-start;
+    }
+
+    .board {
+        width: min(90vw, 500px);
+        height: min(90vw, 500px);
+        margin-top: 1rem;
+    }
+
+    .cell {
+        font-size: 1.2rem;
+    }
+
+    .inequality {
+        width: 18px;
+        height: 18px;
+        font-size: 0.9rem;
+    }
+}
