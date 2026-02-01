@@ -16,7 +16,11 @@ export class NarrativeEngine {
 
         // Advance dialogue on click
         // Note: Using arrow function to bind 'this' correctly
-        this.dialogueBox.addEventListener('click', (e) => this.advance(e));
+        // Advance dialogue on click anywhere in narrative mode
+        window.addEventListener('click', (e) => this.advance(e));
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'Enter') this.advance(e);
+        });
     }
 
     loadScene(sceneId) {
@@ -68,8 +72,11 @@ export class NarrativeEngine {
     }
 
     advance(e) {
+        // Only allow advance if in narrative mode
+        if (this.director.state.currentMode !== 'narrative') return;
+
         // Prevent advance if clicking an option button
-        if (e && e.target.classList.contains('option-btn')) return;
+        if (e && e.target && e.target.classList.contains('option-btn')) return;
 
         if (this.isTyping) {
             // Instant finish
@@ -88,8 +95,14 @@ export class NarrativeEngine {
 
         // Logic for 'next'
         if (typeof currentNode.next === 'string') {
-            // Jump to a new scene ID
-            this.loadScene(currentNode.next);
+            if (currentNode.next.startsWith('action:')) {
+                const actionType = currentNode.next.split(':')[1];
+                console.log(`Transitioning to Action: ${actionType}`);
+                this.director.startAction(actionType);
+            } else {
+                // Jump to a new scene ID
+                this.loadScene(currentNode.next);
+            }
         } else if (typeof currentNode.next === 'number') {
             // Go to next node in valid array
             const nextNode = this.currentScene.find(n => n.id === currentNode.next);

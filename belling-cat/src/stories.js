@@ -56,7 +56,7 @@ export const storyData = {
             id: 1,
             speaker: "Elder",
             text: "Take this. Use the cover of darkness. Do not fail us.",
-            next: null // End of scene -> Transition to Phase 1 Action
+            next: "action:stealth"
         }
     ],
 
