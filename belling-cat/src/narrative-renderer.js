@@ -1,5 +1,6 @@
 export class NarrativeRenderer {
     constructor(canvasId) {
+        console.log(`NarrativeRenderer initialized with ${canvasId}`);
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
 
@@ -19,6 +20,7 @@ export class NarrativeRenderer {
     }
 
     render(visualId) {
+        console.log(`NarrativeRenderer: render(${visualId})`);
         this.clear();
         if (!visualId) return;
 

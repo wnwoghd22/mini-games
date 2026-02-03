@@ -31,6 +31,7 @@ export class GameDirector {
     }
 
     setVisual(visualId) {
+        console.log(`Director: setVisual(${visualId})`);
         if (this.state.currentMode === 'narrative') {
             this.renderer.render(visualId);
         }

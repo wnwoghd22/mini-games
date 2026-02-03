@@ -48,6 +48,7 @@ export class NarrativeEngine {
 
         // Visual update
         if (node.visual) {
+            console.log(`Narrative: Found visual tag: ${node.visual}`);
             this.director.setVisual(node.visual);
         }
 
