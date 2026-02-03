@@ -130,8 +130,38 @@ export class GameDirector {
         }
     }
 
+    startAction(minigameType) {
+        if (minigameType === 'resume_stealth') {
+            console.log("Director: Resuming Stealth Action");
+            // Don't fully switch mode, just hide UI and tell action engine to proceed
+            const dialogueBox = document.getElementById('dialogue-box');
+            dialogueBox.classList.add('hidden');
+            this.action.completeStealthTransition();
+            return;
+        }
+
+        console.log(`Director: Switching to Action Mode (${minigameType})`);
+        this.switchToMode('action');
+        this.action.start(minigameType);
+    }
+
+    // ... (existing setVisual and switchToMode)
+
     triggerEvent(eventData) {
         console.log('Event triggered:', eventData);
-        // Handle global events (e.g., Minigame success/fail)
+
+        if (eventData === 'stealth_intro_start') {
+            console.log("Director: Starting Stealth Intro Cutscene");
+            // Show dialogue OVER the action canvas (don't stop action engine)
+            const dialogueBox = document.getElementById('dialogue-box');
+            dialogueBox.classList.remove('hidden');
+
+            // Load the story
+            this.narrative.loadScene('stealth_intro');
+
+            // IMPORTANT: set mode to 'narrative' so click advances text, 
+            // BUT do not call switchToMode('narrative') because that hides canvas/stops action
+            this.state.currentMode = 'narrative';
+        }
     }
 }

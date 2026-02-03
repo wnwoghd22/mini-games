@@ -69,7 +69,7 @@ export const storyData = {
             id: 3,
             speaker: "System",
             text: "Hide behind objects (DOWN Key) when the Eye opens. Move only when it sleeps.",
-            next: "action:stealth"
+            next: "action:resume_stealth"
         }
     ],
 

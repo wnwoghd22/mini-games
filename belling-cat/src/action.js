@@ -522,8 +522,12 @@ export class ActionEngine {
         // 3. Horizontal Movement & Hiding
         this.player.isHiding = false;
 
+        // Block movement during transition
+        if (this.level.phase === 'stealth_transition') {
+            this.player.vx = 0;
+        }
         // Can only hide if near a cover, grounded, and pressing DOWN (stealth & escape)
-        if (this.keys.down && this.player.isGrounded && this.player.canHide) {
+        else if (this.keys.down && this.player.isGrounded && this.player.canHide) {
             this.player.isHiding = true;
             this.player.vx = 0; // Stop moving while hiding
         } else {
@@ -820,13 +824,28 @@ export class ActionEngine {
     }
 
     enterStealthPhase() {
-        console.log("Entering Stealth Phase...");
+        if (this.level.phase === 'stealth_transition' || this.level.phase === 'stealth') return;
+
+        console.log("Entering Stealth Phase (Transition)...");
+        this.level.phase = 'stealth_transition';
+
+        // Stop player
+        this.player.vx = 0;
+        this.keys = { left: false, right: false, up: false, down: false };
+
+        // Trigger Director Event
+        this.director.triggerEvent('stealth_intro_start');
+    }
+
+    completeStealthTransition() {
+        console.log("Stealth Transition Complete -> Active Stealth");
         this.level.phase = 'stealth';
-        // Slow down player for dramatic effect
-        this.player.vx *= 0.3;
-        // Reset cat timer for fair start
+        // Reset cat timer
         this.level.cat.timer = 0;
         this.level.cat.state = 'sleeping';
+
+        // Ensure player controls are reset (Director handles UI hiding)
+        this.state = 'running';
     }
 
     updateCamera() {
@@ -840,6 +859,15 @@ export class ActionEngine {
         if (this.level.phase === 'qte') return;
 
         const centerScreen = this.canvas.width / 2;
+
+        if (this.level.phase === 'stealth_transition') {
+            // Pan to Cat
+            let targetCameraX = this.level.cat.x - centerScreen; // Center on cat
+            // Smooth pan
+            this.level.cameraX += (targetCameraX - this.level.cameraX) * 0.05;
+            return;
+        }
+
         let targetCameraX = this.player.x - centerScreen;
 
         // Smooth camera transition
@@ -922,7 +950,7 @@ export class ActionEngine {
         }
 
         // Background gradient based on phase
-        if (this.level.phase === 'stealth') {
+        if (this.level.phase === 'stealth' || this.level.phase === 'stealth_transition') {
             const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
             gradient.addColorStop(0, '#1a0a0a');
             gradient.addColorStop(1, '#0a0505');
@@ -1014,7 +1042,9 @@ export class ActionEngine {
         }
 
         // Draw Cat silhouette (in stealth phase)
-        if (this.level.phase === 'stealth' || this.player.x > this.level.stealthZoneStart - 500) {
+        if (this.level.phase === 'stealth' ||
+            this.level.phase === 'stealth_transition' ||
+            this.player.x > this.level.stealthZoneStart - 500) {
             this.drawCat();
         }
 
