@@ -40,6 +40,15 @@ export class GameEngine {
     }
 
     update(dt) {
+        // Check for active modal
+        const modal = document.getElementById('swap-modal');
+        if (modal && !modal.classList.contains('hidden')) {
+            // Pause interactions if modal is open
+            // Update inputs just to flush them, or ignore
+            this.input.update();
+            return;
+        }
+
         // Handle Input
         if (this.input.keys.includes('Escape')) {
             // Pause menu or similar
@@ -54,16 +63,17 @@ export class GameEngine {
         const promptParams = this.levelManager.nearbyInteractable;
         const promptEl = document.getElementById('interaction-prompt');
 
-        if (promptParams) {
+        if (promptParams && (!modal || modal.classList.contains('hidden'))) {
             promptEl.classList.remove('hidden');
             promptEl.style.left = `${promptParams.x + promptParams.w / 2}px`;
-            promptEl.style.top = `${promptParams.y - 20}px`;
-            promptEl.innerText = `[E] Inspect ${promptParams.label}`;
 
-            if (this.input.isPressed('KeyE')) {
-                console.log('Interacting with ' + promptParams.label);
-                // Trigger interaction logic here
+            if (promptParams.y < 200) {
+                promptEl.style.top = `${promptParams.y + promptParams.h + 10}px`;
+            } else {
+                promptEl.style.top = `${promptParams.y - 20}px`;
             }
+
+            promptEl.innerText = `[E] ${promptParams.type === 'PORTAL' ? 'Inspect' : 'Take'} ${promptParams.label}`;
         } else {
             promptEl.classList.add('hidden');
         }
@@ -72,10 +82,18 @@ export class GameEngine {
     render() {
         this.ctx.clearRect(0, 0, this.width, this.height);
 
-        // Background - Rice Paper Effect
+        // 1. Draw Background & Room Perspective
         this.renderer.drawBackground();
+        if (this.levelManager.scene) {
+            this.renderer.drawRoom(this.levelManager.scene);
+        }
 
-        // Render World
+        // 2. Draw Scene Content (Interactables, Items)
+        if (this.levelManager.scene) {
+            this.renderer.drawSceneObjects(this.levelManager.scene);
+        }
+
+        // 3. Draw Player
         this.levelManager.render(this.renderer);
     }
 }

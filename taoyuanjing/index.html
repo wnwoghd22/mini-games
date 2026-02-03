@@ -12,15 +12,25 @@
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
         <div id="ui-layer">
-            <div id="dialogue-box" class="hidden">
-                <p id="dialogue-text"></p>
-                <button id="dialogue-next">▼</button>
-            </div>
-            <div id="inventory-bar">
-                <!-- Fragments will be draggable from here -->
-            </div>
+            <div id="inventory-bar"></div>
+
             <div id="interaction-prompt" class="hidden">
                 PRESS [E]
+            </div>
+
+            <!-- New Swap Modal -->
+            <div id="swap-modal" class="hidden">
+                <div class="modal-content">
+                    <h3>Painting Frame</h3>
+                    <div class="swap-area">
+                        <div id="frame-slot" class="slot empty">Empty</div>
+                        <div class="arrows">⇅</div>
+                        <div id="player-inventory-list" class="inventory-grid">
+                            <!-- Items go here -->
+                        </div>
+                    </div>
+                    <button id="close-modal">Close</button>
+                </div>
             </div>
         </div>
     </div>
