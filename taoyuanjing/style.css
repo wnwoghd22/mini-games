@@ -1,0 +1,94 @@
+:root {
+    --bg-color: #f4f1ea;
+    /* Rice paper color */
+    --ink-color: #1a1a1a;
+    --accent-color: #d64541;
+    /* Seal red */
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: 'Courier New', Courier, monospace;
+    /* Placeholder for a better serif font */
+}
+
+#game-container {
+    position: relative;
+    width: 1024px;
+    height: 768px;
+    background-color: var(--bg-color);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* Let clicks pass through to canvas unless on UI elements */
+}
+
+#dialogue-box {
+    position: absolute;
+    bottom: 50px;
+    left: 50px;
+    right: 50px;
+    height: 150px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid var(--ink-color);
+    padding: 20px;
+    font-size: 18px;
+    color: var(--ink-color);
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+#dialogue-box.hidden,
+#interaction-prompt.hidden {
+    display: none;
+}
+
+#interaction-prompt {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -100px);
+    background: var(--ink-color);
+    color: var(--bg-color);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#inventory-bar {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.fragment-slot {
+    width: 50px;
+    height: 50px;
+    border: 2px dashed var(--ink-color);
+    background: rgba(255, 255, 255, 0.5);
+}
