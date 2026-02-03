@@ -2,118 +2,123 @@ export class LevelManager {
     constructor() {
         // Global Game State
         this.globalState = {
-            inventory: [], // 'WINTER', 'SPRING', 'SUMMER', 'AUTUMN'
-            flags: {}      // e.g. 'has_key': true
+            inventory: ['SPRING'], // Start with SPRING to solve the first puzzle
+            flags: {}
         };
 
-        // --- SCENE DEFINITIONS ---
+        // --- CONSTANTS ---
         const W = 1024, H = 768;
+        const WALL_THICK = 50;
         const BOUNDS = [
             { x: 0, y: 0, w: W, h: 50 },      // Top
-            { x: 0, y: H - 50, w: W, h: 50 },   // Bottom
+            { x: 0, y: H - 50, w: W, h: 50 }, // Bottom
             { x: 0, y: 0, w: 50, h: H },      // Left
-            { x: W - 50, y: 0, w: 50, h: H }    // Right
+            { x: W - 50, y: 0, w: 50, h: H }  // Right
         ];
 
+        // --- SCENE DEFINITIONS ---
         this.scenes = {
             'GALLERY_HUB': {
                 id: 'GALLERY_HUB',
                 playerStart: { x: 512, y: 400 },
                 obstacles: [
-                    { x: 0, y: 0, w: 1024, h: 160 }, // North Wall (Visual)
+                    { x: 0, y: 0, w: 1024, h: 160 }, // North Wall
                     ...BOUNDS
                 ],
                 portals: [
-                    {
-                        id: 'frame_river', x: 200, y: 40, w: 80, h: 100,
-                        label: 'River', season: 'WINTER',
-                        targetScene: 'RIVER_WINTER', targetX: 100, targetY: 400
-                    },
-                    {
-                        id: 'frame_field', x: 400, y: 40, w: 80, h: 100,
-                        label: 'Field', season: 'SPRING',
-                        targetScene: 'FIELD_SPRING', targetX: 100, targetY: 400
-                    },
-                    {
-                        id: 'frame_waterfall', x: 600, y: 40, w: 80, h: 100,
-                        label: 'Waterfall', season: 'SUMMER',
-                        targetScene: 'WATERFALL_SUMMER', targetX: 100, targetY: 400
-                    },
-                    {
-                        id: 'frame_bamboo', x: 800, y: 40, w: 80, h: 100,
-                        label: 'Bamboo', season: 'AUTUMN',
-                        targetScene: 'BAMBOO_AUTUMN', targetX: 100, targetY: 400
-                    }
+                    // Frames: River(Winter), Field(Empty), Waterfall(Empty), Bamboo(Empty)
+                    { id: 'frame_river', x: 200, y: 40, w: 80, h: 100, label: 'River', season: 'WINTER', targetScene: 'RIVER_WINTER', targetX: 100, targetY: 400 },
+                    { id: 'frame_field', x: 400, y: 40, w: 80, h: 100, label: 'Field', season: null, targetScene: null, targetX: 100, targetY: 400 },
+                    { id: 'frame_waterfall', x: 600, y: 40, w: 80, h: 100, label: 'Waterfall', season: null, targetScene: null, targetX: 100, targetY: 400 },
+                    { id: 'frame_bamboo', x: 800, y: 40, w: 80, h: 100, label: 'Bamboo', season: null, targetScene: null, targetX: 100, targetY: 400 }
                 ],
                 items: []
             },
 
             // --- RIVER SCENES ---
+            // Winter: Frozen River (Walkable)
             'RIVER_WINTER': {
                 id: 'RIVER_WINTER',
                 obstacles: [...BOUNDS],
                 portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 250, targetY: 400 }],
                 items: []
             },
+            // Spring: Dry River (Walkable) -> Contains SUMMER TILE
             'RIVER_SPRING': {
                 id: 'RIVER_SPRING',
-                obstacles: [...BOUNDS],
+                obstacles: [...BOUNDS,
+                { x: 300, y: 200, w: 50, h: 50 } // Rock
+                ],
                 portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 250, targetY: 400 }],
                 items: [
-                    { id: 'item_summer', x: 800, y: 200, w: 30, h: 30, label: 'Summer Tile', type: 'COLLECTIBLE', value: 'SUMMER' }
+                    { id: 'item_summer', x: 900, y: 384, w: 30, h: 30, label: 'Summer Tile', type: 'COLLECTIBLE', value: 'SUMMER' }
                 ]
             },
+            // Summer: Flooded (Blocked)
             'RIVER_SUMMER': {
                 id: 'RIVER_SUMMER',
-                obstacles: [...BOUNDS, { x: 400, y: 50, w: 224, h: 718 }],
+                obstacles: [...BOUNDS, { x: 350, y: 50, w: 300, h: 718 }], // The River
                 portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 250, targetY: 400 }],
                 items: []
             },
+            // Autumn: Flowing (Blocked)
             'RIVER_AUTUMN': {
                 id: 'RIVER_AUTUMN',
-                obstacles: [...BOUNDS, { x: 400, y: 50, w: 224, h: 718 }],
+                obstacles: [...BOUNDS, { x: 350, y: 50, w: 300, h: 718 }], // The River
                 portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 250, targetY: 400 }],
                 items: []
             },
 
             // --- WATERFALL SCENES ---
+            // Winter: Ice Ladder -> Leads to Cave
             'WATERFALL_WINTER': {
                 id: 'WATERFALL_WINTER',
-                obstacles: [...BOUNDS],
+                obstacles: [...BOUNDS, { x: 600, y: 50, w: 424, h: 718 }], // Cliff Face
                 portals: [
                     { id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 650, targetY: 400 },
-                    { id: 'ice_ladder', x: 800, y: 100, w: 100, h: 200, label: 'Climb Ice', targetScene: 'SECRET_CAVE', targetX: 100, targetY: 400 }
+                    // Ladder overlaps cliff, accessible
+                    { id: 'ice_ladder', x: 550, y: 300, w: 50, h: 200, label: 'Climb Ice', targetScene: 'SECRET_CAVE', targetX: 100, targetY: 400 }
                 ],
                 items: []
             },
-            'WATERFALL_SPRING': { id: 'WATERFALL_SPRING', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 650, targetY: 400 }], items: [] },
-            'WATERFALL_AUTUMN': { id: 'WATERFALL_AUTUMN', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 650, targetY: 400 }], items: [] },
-            'WATERFALL_SUMMER': { id: 'WATERFALL_SUMMER', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 650, targetY: 400 }], items: [] },
+            // Others: Just Cliff, no ladder
+            'WATERFALL_SUMMER': { id: 'WATERFALL_SUMMER', obstacles: [...BOUNDS, { x: 600, y: 50, w: 424, h: 718 }], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 650, targetY: 400 }], items: [] },
+            'WATERFALL_SPRING': { id: 'WATERFALL_SPRING', obstacles: [...BOUNDS, { x: 600, y: 50, w: 424, h: 718 }], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 650, targetY: 400 }], items: [] },
+            'WATERFALL_AUTUMN': { id: 'WATERFALL_AUTUMN', obstacles: [...BOUNDS, { x: 600, y: 50, w: 424, h: 718 }], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 650, targetY: 400 }], items: [] },
 
             // --- SECRET CAVE ---
+            // Contains AUTUMN TILE
             'SECRET_CAVE': {
                 id: 'SECRET_CAVE',
                 obstacles: [...BOUNDS],
-                portals: [{ id: 'down', x: 0, y: 350, w: 40, h: 100, label: 'Slide Down', targetScene: 'WATERFALL_WINTER', targetX: 800, targetY: 400 }],
+                portals: [{ id: 'down', x: 0, y: 350, w: 40, h: 100, label: 'Slide Down', targetScene: 'WATERFALL_WINTER', targetX: 500, targetY: 400 }],
                 items: [
                     { id: 'item_autumn', x: 500, y: 384, w: 30, h: 30, label: 'Autumn Tile', type: 'COLLECTIBLE', value: 'AUTUMN' }
                 ]
             },
 
             // --- FIELD SCENES ---
+            // Autumn: Harvest -> PEACH SEED
             'FIELD_AUTUMN': {
                 id: 'FIELD_AUTUMN',
                 obstacles: [...BOUNDS],
                 portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 450, targetY: 400 }],
                 items: [
-                    { id: 'item_peach_seed', x: 800, y: 600, w: 30, h: 30, label: 'Peach Seed', type: 'COLLECTIBLE', value: 'PEACH_SEED' }
+                    { id: 'item_seed', x: 800, y: 384, w: 30, h: 30, label: 'Peach Seed', type: 'COLLECTIBLE', value: 'PEACH_SEED' }
                 ]
             },
             'FIELD_SPRING': { id: 'FIELD_SPRING', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 450, targetY: 400 }], items: [] },
-            'FIELD_SUMMER': { id: 'FIELD_SUMMER', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 450, targetY: 400 }], items: [] },
+            // Summer: Bushes
+            'FIELD_SUMMER': {
+                id: 'FIELD_SUMMER',
+                obstacles: [...BOUNDS,
+                { x: 200, y: 200, w: 100, h: 100 }, { x: 500, y: 500, w: 100, h: 100 }, // Bushes
+                ],
+                portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 450, targetY: 400 }], items: []
+            },
             'FIELD_WINTER': { id: 'FIELD_WINTER', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 450, targetY: 400 }], items: [] },
 
-            // --- BAMBOO SCENES ---
+            // --- BAMBOO SCENES (Filler for now) ---
             'BAMBOO_SPRING': { id: 'BAMBOO_SPRING', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 850, targetY: 400 }], items: [] },
             'BAMBOO_SUMMER': { id: 'BAMBOO_SUMMER', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 850, targetY: 400 }], items: [] },
             'BAMBOO_AUTUMN': { id: 'BAMBOO_AUTUMN', obstacles: [...BOUNDS], portals: [{ id: 'ret', x: 0, y: 350, w: 40, h: 100, label: 'Gallery', targetScene: 'GALLERY_HUB', targetX: 850, targetY: 400 }], items: [] },
@@ -197,11 +202,9 @@ export class LevelManager {
 
     triggerInteraction(interactable) {
         if (interactable.type === 'PORTAL') {
-            // Distinguish between Frames (Swap UI) and standard Portals (Direct Travel)
             if (interactable.id.startsWith('frame')) {
                 this.openSwapUI(interactable);
             } else {
-                // Direct travel for return portals/doors
                 this.enterPortal(interactable);
             }
         } else if (interactable.type === 'ITEM') {
@@ -214,8 +217,6 @@ export class LevelManager {
     }
 
     openSwapUI(portalData) {
-        // IMPORTANT: Find the REAL portal reference from the scene
-        // because portalData might be a shallow copy from checkInteractions
         const portal = this.scene.portals.find(p => p.id === portalData.id);
         if (!portal) return;
 

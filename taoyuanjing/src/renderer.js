@@ -19,7 +19,10 @@ export class Renderer {
         this.ctx.fillStyle = '#f4f1ea'; // Rice Paper
         this.ctx.fillRect(0, this.floorY, this.width, this.height - this.floorY);
 
-        // 2. Draw North Wall
+        // 2. Draw Environment Details (River, Cliff, etc.)
+        this.drawEnvironment(scene);
+
+        // 3. Draw North Wall
         this.ctx.fillStyle = '#e8e5de'; // Slightly darker paper
         this.ctx.fillRect(0, 0, this.width, this.wallHeight);
 
@@ -27,7 +30,49 @@ export class Renderer {
         this.drawLine(0, this.floorY, this.width, this.floorY, 4);
     }
 
+    drawEnvironment(scene) {
+        // Visuals based on Scene ID
+        if (scene.id.includes('RIVER')) {
+            // Draw River Bed
+            this.ctx.fillStyle = scene.id.includes('WINTER') ? '#e0f7fa' : '#81d4fa'; // Ice vs Water
+            if (scene.id.includes('SPRING')) this.ctx.fillStyle = '#d7ccc8'; // Dry Bed
+
+            // River Location (Central)
+            this.ctx.fillRect(350, this.floorY, 300, this.height - this.floorY);
+
+            // Banks
+            this.drawLine(350, this.floorY, 350, this.height, 2);
+            this.drawLine(650, this.floorY, 650, this.height, 2);
+        }
+
+        if (scene.id.includes('WATERFALL')) {
+            // Draw Cliff Face
+            this.ctx.fillStyle = '#bdbdbd';
+            this.ctx.fillRect(600, this.floorY, 424, this.height - this.floorY);
+            this.drawLine(600, this.floorY, 600, this.height, 3);
+
+            // Waterfall (Visual)
+            let waterColor = '#29b6f6';
+            if (scene.id.includes('WINTER')) waterColor = '#e0f7fa'; // Ice
+            if (scene.id.includes('SPRING')) waterColor = '#4fc3f7';
+
+            this.ctx.fillStyle = waterColor;
+            this.ctx.fillRect(700, this.floorY, 150, this.height - this.floorY);
+        }
+
+        if (scene.id.includes('FIELD')) {
+            // Field Texture
+            this.ctx.fillStyle = scene.id.includes('AUTUMN') ? '#fff9c4' : '#c8e6c9';
+            this.ctx.fillRect(50, this.floorY + 50, this.width - 100, this.height - 200);
+        }
+    }
+
     drawSceneObjects(scene) {
+        // Draw Obstacles (Debug/Visual Style)
+        if (scene.obstacles) {
+            scene.obstacles.forEach(obs => this.drawObstacle(obs, scene));
+        }
+
         // Draw Portals (Paintings)
         scene.portals.forEach(p => {
             this.drawPainting(p);
@@ -37,6 +82,22 @@ export class Renderer {
         scene.items.forEach(i => {
             this.drawItem(i);
         });
+    }
+
+    drawObstacle(obs, scene) {
+        // Skip drawing the North Wall collision box (it's handled by drawRoom borders)
+        if (obs.y === 0 && obs.w > 800) return;
+
+        // Skip drawing large environment blockers if we handled them in drawEnvironment
+        // But drawing a faint outline helps for collisions
+
+        // Generic Obstacle Style
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        this.ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+
+        // Border
+        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        this.ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
     }
 
     drawPainting(portal) {
