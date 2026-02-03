@@ -43,7 +43,13 @@ export class NarrativeEngine {
         this.speakerEl.textContent = node.speaker;
         this.textEl.textContent = "";
         this.optionsEl.innerHTML = "";
+        this.optionsEl.innerHTML = "";
         this.fullText = node.text;
+
+        // Visual update
+        if (node.visual) {
+            this.director.setVisual(node.visual);
+        }
 
         // Handle styling based on type (e.g., thought vs speech)
         if (node.type === 'thought') {

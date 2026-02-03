@@ -1,10 +1,12 @@
 import { NarrativeEngine } from './narrative.js';
 import { ActionEngine } from './action.js';
+import { NarrativeRenderer } from './narrative-renderer.js';
 
 export class GameDirector {
     constructor() {
         this.narrative = new NarrativeEngine(this);
         this.action = new ActionEngine(this);
+        this.renderer = new NarrativeRenderer('action-canvas');
 
         this.state = {
             currentMode: 'narrative', // 'narrative' or 'action'
@@ -28,6 +30,12 @@ export class GameDirector {
         this.action.start(minigameType);
     }
 
+    setVisual(visualId) {
+        if (this.state.currentMode === 'narrative') {
+            this.renderer.render(visualId);
+        }
+    }
+
     switchToMode(mode) {
         this.state.currentMode = mode;
         const uiLayer = document.getElementById('ui-layer');
@@ -36,6 +44,7 @@ export class GameDirector {
         if (mode === 'action') {
             dialogueBox.classList.add('hidden');
             // We might want to keep HUD visible, but hide dialogue
+            this.renderer.clear(); // Clear narrative visuals
         } else {
             dialogueBox.classList.remove('hidden');
             this.action.stop();

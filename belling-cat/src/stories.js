@@ -4,6 +4,7 @@ export const storyData = {
             id: 1,
             speaker: "Narrator",
             text: "The meeting hall reeks of damp fur and fear.",
+            visual: "council",
             next: 2
         },
         {
