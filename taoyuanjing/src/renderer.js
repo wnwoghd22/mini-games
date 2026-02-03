@@ -4,169 +4,270 @@ export class Renderer {
         this.width = width;
         this.height = height;
 
-        // Visual Constants
-        this.wallHeight = 150; // The "North Wall" height
-        this.floorY = 150;     // Where the floor starts (visual horizon)
+        this.wallHeight = 150;
+        this.floorY = 150;
+
+        // Simple pseudo-random for consistent terrain generation
+        this.seed = 12345;
+    }
+
+    random() {
+        // Simple LCG for deterministic terrain
+        this.seed = (this.seed * 9301 + 49297) % 233280;
+        return this.seed / 233280;
     }
 
     drawBackground() {
-        this.ctx.fillStyle = '#111'; // Void
+        this.ctx.fillStyle = '#f4f1ea'; // Rice Paper
         this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Optional: Paper Grain
+        // (Skipped for performance, but color sets the tone)
     }
 
     drawRoom(scene) {
-        // 1. Draw Floor
-        this.ctx.fillStyle = '#f4f1ea'; // Rice Paper
+        // 1. Draw Floor (Subtle Gradient?)
+        this.ctx.fillStyle = '#f4f1ea';
         this.ctx.fillRect(0, this.floorY, this.width, this.height - this.floorY);
 
-        // 2. Draw Environment Details (River, Cliff, etc.)
+        // 2. Draw Environment (The Painting World)
         this.drawEnvironment(scene);
 
-        // 3. Draw North Wall
-        this.ctx.fillStyle = '#e8e5de'; // Slightly darker paper
+        // 3. Draw North Wall (Top Mask)
+        this.ctx.fillStyle = '#e8e5de';
         this.ctx.fillRect(0, 0, this.width, this.wallHeight);
 
-        // Wall Border (Floor/Wall separation)
-        this.drawLine(0, this.floorY, this.width, this.floorY, 4);
+        // Wall Border (Ink Stroke)
+        this.drawInkStroke(0, this.floorY, this.width, this.floorY, 4);
     }
 
     drawEnvironment(scene) {
-        // Visuals based on Scene ID
+        // Reset seed per frame so terrain doesn't jitter
+        this.seed = scene.id.length * 123;
+
+        // --- RIVER SCENE ---
         if (scene.id.includes('RIVER')) {
-            // Draw River Bed
-            this.ctx.fillStyle = scene.id.includes('WINTER') ? '#e0f7fa' : '#81d4fa'; // Ice vs Water
-            if (scene.id.includes('SPRING')) this.ctx.fillStyle = '#d7ccc8'; // Dry Bed
+            // Distant Mountains
+            this.drawMountain(200, 100, '#d7ccc8');
 
-            // River Location (Central)
-            this.ctx.fillRect(350, this.floorY, 300, this.height - this.floorY);
+            // The River
+            const riverColor = this.getRiverColor(scene.id);
+            this.ctx.fillStyle = riverColor;
 
-            // Banks
-            this.drawLine(350, this.floorY, 350, this.height, 2);
-            this.drawLine(650, this.floorY, 650, this.height, 2);
+            // Draw a flowing river path (Trapezoid for perspective)
+            this.ctx.beginPath();
+            this.ctx.moveTo(450, this.floorY); // Top Left
+            this.ctx.lineTo(574, this.floorY); // Top Right
+            this.ctx.lineTo(700, this.height); // Bottom Right
+            this.ctx.lineTo(324, this.height); // Bottom Left
+            this.ctx.fill();
+
+            // River Banks (Ink Lines)
+            this.drawInkStroke(450, this.floorY, 324, this.height, 3);
+            this.drawInkStroke(574, this.floorY, 700, this.height, 3);
+
+            // Trees on banks
+            if (!scene.id.includes('WINTER')) {
+                this.drawTree(200, 300, 60, scene.id);
+                this.drawTree(150, 450, 80, scene.id);
+                this.drawTree(850, 350, 70, scene.id);
+            } else {
+                // Dead trees in winter
+                this.drawTree(200, 300, 60, 'WINTER');
+            }
         }
 
+        // --- WATERFALL SCENE ---
         if (scene.id.includes('WATERFALL')) {
-            // Draw Cliff Face
-            this.ctx.fillStyle = '#bdbdbd';
-            this.ctx.fillRect(600, this.floorY, 424, this.height - this.floorY);
-            this.drawLine(600, this.floorY, 600, this.height, 3);
+            // Cliff Face
+            this.ctx.fillStyle = '#cfd8dc';
+            this.ctx.fillRect(600, this.floorY, 400, this.height);
 
-            // Waterfall (Visual)
-            let waterColor = '#29b6f6';
-            if (scene.id.includes('WINTER')) waterColor = '#e0f7fa'; // Ice
-            if (scene.id.includes('SPRING')) waterColor = '#4fc3f7';
+            // Rough Ink Vertical Strokes for Cliff texture
+            for (let i = 0; i < 10; i++) {
+                let x = 600 + this.random() * 400;
+                this.drawInkStroke(x, this.floorY, x, this.height, 1 + this.random() * 2);
+            }
 
+            // The Water
+            const waterColor = scene.id.includes('WINTER') ? '#e1f5fe' : '#81d4fa';
             this.ctx.fillStyle = waterColor;
-            this.ctx.fillRect(700, this.floorY, 150, this.height - this.floorY);
+            this.ctx.fillRect(750, this.floorY, 100, this.height);
+
+            // Waterfall Lines
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                this.ctx.moveTo(760 + i * 20, this.floorY);
+                this.ctx.lineTo(760 + i * 20 + (Math.random() * 10 - 5), this.height);
+            }
+            this.ctx.stroke();
+
+            // Cave Entrance (Hidden or Open)
+            if (!scene.id.includes('SUMMER')) {
+                this.ctx.fillStyle = '#263238'; // Dark Hole
+                this.ctx.beginPath();
+                this.ctx.ellipse(800, 300, 30, 50, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
         }
 
+        // --- FIELD SCENE ---
         if (scene.id.includes('FIELD')) {
-            // Field Texture
-            this.ctx.fillStyle = scene.id.includes('AUTUMN') ? '#fff9c4' : '#c8e6c9';
-            this.ctx.fillRect(50, this.floorY + 50, this.width - 100, this.height - 200);
+            // Grass Texture
+            const color = scene.id.includes('AUTUMN') ? '#fff59d' : '#c8e6c9';
+            if (scene.id.includes('WINTER')) return; // Empty in winter
+
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 2;
+
+            // Draw many small grass blades
+            for (let i = 0; i < 100; i++) {
+                let x = 50 + this.random() * (this.width - 100);
+                let y = this.floorY + this.random() * (this.height - this.floorY);
+                this.ctx.beginPath();
+                this.ctx.moveTo(x, y);
+                this.ctx.lineTo(x + 5, y - 10);
+                this.ctx.stroke();
+            }
         }
+    }
+
+    getRiverColor(id) {
+        if (id.includes('WINTER')) return '#e0f7fa'; // Ice
+        if (id.includes('SPRING')) return '#efebe9'; // Dry/Mud
+        if (id.includes('SUMMER')) return '#0288d1'; // Deep Blue
+        return '#4fc3f7'; // Normal
     }
 
     drawSceneObjects(scene) {
-        // Draw Obstacles (Debug/Visual Style)
+        // Draw Obstacles (Faint Ink Outline)
         if (scene.obstacles) {
-            scene.obstacles.forEach(obs => this.drawObstacle(obs, scene));
+            this.ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+            this.ctx.lineWidth = 1;
+            scene.obstacles.forEach(obs => {
+                this.ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+            });
         }
 
-        // Draw Portals (Paintings)
-        scene.portals.forEach(p => {
-            this.drawPainting(p);
-        });
+        // Draw Portals
+        scene.portals.forEach(p => this.drawPainting(p));
 
         // Draw Items
-        scene.items.forEach(i => {
-            this.drawItem(i);
-        });
-    }
-
-    drawObstacle(obs, scene) {
-        // Skip drawing the North Wall collision box (it's handled by drawRoom borders)
-        if (obs.y === 0 && obs.w > 800) return;
-
-        // Skip drawing large environment blockers if we handled them in drawEnvironment
-        // But drawing a faint outline helps for collisions
-
-        // Generic Obstacle Style
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-        this.ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
-
-        // Border
-        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-        this.ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+        scene.items.forEach(i => this.drawItem(i));
     }
 
     drawPainting(portal) {
-        // Frame
-        this.ctx.fillStyle = '#333';
+        this.ctx.fillStyle = '#3e2723'; // Dark Wood Frame
         this.ctx.fillRect(portal.x, portal.y, portal.w, portal.h);
 
-        // Canvas content
         this.ctx.fillStyle = this.getSeasonColor(portal.season);
-        this.ctx.fillRect(portal.x + 5, portal.y + 5, portal.w - 10, portal.h - 10);
+        this.ctx.fillRect(portal.x + 4, portal.y + 4, portal.w - 8, portal.h - 8);
 
         // Label
-        this.ctx.fillStyle = '#fff';
-        this.ctx.font = '12px Courier New';
+        this.ctx.fillStyle = '#000';
+        this.ctx.font = '10px serif';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText(portal.label || 'Painting', portal.x + portal.w / 2, portal.y - 10);
+        this.ctx.fillText(portal.label || '', portal.x + portal.w / 2, portal.y - 15);
     }
 
     getSeasonColor(season) {
+        if (!season) return '#d7ccc8'; // Empty Paper
         switch (season) {
-            case 'SPRING': return '#a8e6cf'; // Pastel Green
-            case 'SUMMER': return '#ff8b94'; // Reddish/Warm
-            case 'AUTUMN': return '#ffaaa5'; // Orange-ish
-            case 'WINTER': return '#dcedc1'; // Pale/Icy
-            default: return '#555'; // Empty/Grey
+            case 'WINTER': return '#cfd8dc';
+            case 'SPRING': return '#f8bbd0'; // Pink wash
+            case 'SUMMER': return '#c8e6c9'; // Green wash
+            case 'AUTUMN': return '#ffe0b2'; // Orange wash
         }
+        return '#fff';
     }
 
     drawItem(item) {
-        this.ctx.fillStyle = '#d64541'; // Seal Red
+        // Red Seal (Stamp) style for items
+        this.ctx.fillStyle = '#b71c1c';
         this.ctx.beginPath();
-        this.ctx.arc(item.x + item.w / 2, item.y + item.h / 2, 10, 0, Math.PI * 2);
+        this.ctx.rect(item.x + 5, item.y + 5, 20, 20);
         this.ctx.fill();
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = 'bold 12px serif';
+        this.ctx.fillText("Item", item.x + 15, item.y + 20);
     }
 
-    // "Ink" style line drawing
-    drawLine(x1, y1, x2, y2, thickness = 2) {
+    // --- PROCEDURAL BRUSHES ---
+
+    drawInkStroke(x1, y1, x2, y2, width) {
+        this.ctx.strokeStyle = '#212121';
+        this.ctx.lineWidth = width;
+        this.ctx.lineCap = 'round';
+
+        // Quadratic curve for slight imperfection
         this.ctx.beginPath();
         this.ctx.moveTo(x1, y1);
-        this.ctx.lineTo(x2, y2);
-        this.ctx.strokeStyle = '#1a1a1a';
-        this.ctx.lineWidth = thickness;
-        this.ctx.lineCap = 'round';
-        this.ctx.lineJoin = 'round';
+        const cx = (x1 + x2) / 2 + (Math.random() * 4 - 2);
+        const cy = (y1 + y2) / 2 + (Math.random() * 4 - 2);
+        this.ctx.quadraticCurveTo(cx, cy, x2, y2);
         this.ctx.stroke();
     }
 
-    drawPlayer(player) {
-        // Shadow
-        this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    drawMountain(x, y, color) {
+        this.ctx.fillStyle = color;
         this.ctx.beginPath();
-        this.ctx.ellipse(player.x, player.y + 15, 15, 5, 0, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        // Character (Simple ink blot)
-        this.ctx.fillStyle = '#1a1a1a';
-        this.ctx.beginPath();
-        this.ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
+        this.ctx.moveTo(x, this.floorY);
+        // Peak
+        this.ctx.lineTo(x + 150, y);
+        this.ctx.lineTo(x + 300, this.floorY);
         this.ctx.fill();
     }
 
-    drawRect(x, y, w, h, filled = false) {
-        // Fallback
-        if (filled) {
-            this.ctx.fillStyle = '#1a1a1a';
-            this.ctx.fillRect(x, y, w, h);
-        } else {
-            this.ctx.strokeStyle = '#1a1a1a';
-            this.ctx.strokeRect(x, y, w, h);
+    drawTree(x, y, size, season) {
+        // Trunk
+        this.drawInkStroke(x, y, x, y - size, size / 10);
+
+        // Branches
+        this.drawBranch(x, y - size, size * 0.7, -Math.PI / 4);
+        this.drawBranch(x, y - size, size * 0.7, Math.PI / 4);
+
+        // Foliage (Dots/Blobs)
+        if (season === 'WINTER') return;
+
+        let color = '#2e7d32'; // Summer Green
+        if (season === 'SPRING') color = '#f48fb1'; // Pink
+        if (season === 'AUTUMN') color = '#ff9800'; // Orange
+
+        this.ctx.fillStyle = color;
+        this.ctx.globalAlpha = 0.6;
+
+        // Simple cluster of dots
+        for (let i = 0; i < 10; i++) {
+            this.ctx.beginPath();
+            this.ctx.arc(x + (Math.random() - 0.5) * size, y - size + (Math.random() - 0.5) * size, 8, 0, Math.PI * 2);
+            this.ctx.fill();
         }
+        this.ctx.globalAlpha = 1.0;
+    }
+
+    drawBranch(x, y, len, angle) {
+        if (len < 10) return;
+        const x2 = x + Math.cos(angle) * len;
+        const y2 = y + Math.sin(angle) * len;
+
+        this.drawInkStroke(x, y, x2, y2, len / 10);
+
+        // Recursive
+        this.drawBranch(x2, y2, len * 0.7, angle - 0.3);
+        this.drawBranch(x2, y2, len * 0.7, angle + 0.3);
+    }
+
+    drawPlayer(player) {
+        // Ink Blot Character
+        this.ctx.fillStyle = '#000';
+        this.ctx.beginPath();
+        this.ctx.arc(player.x, player.y, 12, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Brush stroke body
+        this.drawInkStroke(player.x, player.y + 10, player.x, player.y + 25, 4);
     }
 }
