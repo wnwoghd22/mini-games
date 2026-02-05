@@ -10,13 +10,19 @@
     - [ ] Define `Knight` (Enemy) AI and stats structure <!-- id: 6 -->
     - [ ] Implement `GameState` (Resources, Turn, HP) <!-- id: 7 -->
 
-- [ ] **System: Dialogue & Narrative** <!-- id: 8 -->
-    - [ ] Implement `DialogueManager` (Script parser, UI overlay) <!-- id: 9 -->
-    - [ ] Create initial story script (Intro) <!-- id: 10 -->
+- [x] **System: Dialogue & Narrative** <!-- id: 8 -->
+    - [x] Implement `DialogueManager` (Script parser, UI overlay) <!-- id: 9 -->
+    - [x] Create initial story script (Intro) <!-- id: 10 -->
 
-- [ ] **System: Deck Building & Shop** <!-- id: 11 -->
-    - [ ] Implement `CardManager` (Deck, Hand, Discard) <!-- id: 12 -->
+- [x] **System: Deck Building & Shop** <!-- id: 11 -->
+    - [x] Implement `CardManager` (Deck, Hand, Discard) <!-- id: 12 -->
     - [ ] Create Shop UI and purchase logic <!-- id: 13 -->
+
+- [x] **System: Waiting Room (Preparation Phase)** <!-- id: 24 -->
+    - [x] Implement `PreparationState` in GameManager <!-- id: 25 -->
+    - [x] Create **Enemy Preview UI** (Knight party stats) <!-- id: 26 -->
+    - [x] Create **Deck Manager UI** (View/Edit Deck) <!-- id: 27 -->
+    - [ ] Create **Crafting/Upgrade UI** (Combine cards) <!-- id: 28 -->
 
 - [ ] **System: Dungeon & Placement Phase** <!-- id: 14 -->
     - [ ] Create Dungeon Grid/Layout visuals <!-- id: 15 -->

@@ -29,6 +29,21 @@
         <div id="ui-layer"></div>
         <canvas id="game-canvas"></canvas>
     </div>
+    <!-- Error Reporting for Debugging -->
+    <script>
+        window.addEventListener('error', function (e) {
+            const errorBox = document.createElement('div');
+            errorBox.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:darkred;color:white;padding:20px;z-index:9999;font-family:monospace;white-space:pre-wrap;';
+            errorBox.innerText = 'JS Error: ' + e.message + '\nAt: ' + e.filename + ':' + e.lineno;
+            document.body.appendChild(errorBox);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+            const errorBox = document.createElement('div');
+            errorBox.style.cssText = 'position:fixed;top:50px;left:0;width:100%;background:darkred;color:white;padding:20px;z-index:9999;font-family:monospace;white-space:pre-wrap;';
+            errorBox.innerText = 'Promise Error: ' + e.reason;
+            document.body.appendChild(errorBox);
+        });
+    </script>
     <script type="module" src="./src/main.js"></script>
 </body>
 

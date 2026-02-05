@@ -4,9 +4,10 @@
 Build a "Reverse Dungeon Crawler" game where the player, a female Warlock, summons monsters and traps to assassinate the Knight Commander. The game combines **Deck Building**, **Tower Defense (Placement)**, and **Turn-Based RPG** elements with a strong narrative focus.
 
 ## Tech Stack
--   **Core**: Vanilla JavaScript
--   **Styling**: CSS (Modern Variables, Flexbox/Grid) for a custom "Noir Fantasy" aesthetic.
--   **State Management**: Custom Event-driven State Store (Observer Pattern).
+-   **Core**: Vanilla JavaScript (ES Modules, loaded via `<script type="module">` or standard scripts)
+-   **Styling**: Vanilla CSS (CSS Variables for theming).
+-   **State Management**: Simple Global State Object or Custom Event System.
+-   **No Build Tools**: Pure HTML/CSS/JS architecture.
 
 ## User Review Required
 > [!IMPORTANT]
@@ -55,13 +56,26 @@ killing-the-knight-commander/
     -   `Spell`: Direct effect during Battle Phase (Heal, Damage, Buff).
     -   `Trap`: Hidden unit triggered by enemy movement.
 
-#### Battle System (The Logic Core)
--   **Grid-based**: 1D or 2D lane system? *Proposal: 3-Lane System or simple 2D Grid (e.g., 3x5)* to allow tactical placement.
--   **Phases**:
-    1.  **Placement**: Player spends Mana to place units from Hand.
-    2.  **Knight Action**: Knight moves/attacks/interacts.
-    3.  **Monster Action**: Summoned units attack.
-    4.  **Player Intervention**: Player casts Spell cards.
+#### Waiting Room (Preparation Phase)
+-   **Goal**: Strategic preparation based on intelligence.
+-   **Features**:
+    1.  **Enemy Intel**: Show the Knight's class, stats, and accompanying party members.
+    2.  **Deck Lab**:
+        -   *Edit*: Swap cards between "Library" (Collection) and "Active Deck".
+        -   *Craft*: Combine 2 weak cards to make a stronger one.
+    3.  **Start Mission**: Button to commit to the loadout and enter the Dungeon.
+
+#### Dungeon Path System (Darkest Dungeon Style)
+-   **Structure**: A series of **Rooms** connected by **Corridors** (Paths).
+-   **Visuals**: Side-scrolling or Map View? *Decision: Linear Node Map (Left to Right)*.
+-   **Flow**:
+    1.  **Warlock Phase (Placement)**: Player views the empty dungeon path. Plays generic "Summon" or "Trap" cards into specific *Rooms* or *Corridors*.
+    2.  **Knight Phase (Movement)**: Knight party advances room by room.
+    3.  **Encounter**: When Knight enters a room with a Summon, Combat begins.
+
+#### Combat System
+-   **Auto-Battler**: Units fight automatically based on stats.
+-   **Intervention**: Player can use Spell cards during combat.
 
 ### 3. Verification Plan
 -   **Automated**: Unit tests for Card logic (Draw, Shuffle) and Battle logic (Damage calculation).

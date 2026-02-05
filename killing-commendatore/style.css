@@ -7,7 +7,7 @@
     /* Deep Red for blood/danger */
     --highlight-color: #d4af37;
     /* Gold for shop/value */
-    --ui-bg: rgba(20, 20, 20, 0.9);
+    --ui-bg: rgba(20, 20, 20, 0.95);
     --border-color: #333;
 
     /* Typography */
@@ -65,4 +65,656 @@ body {
     background: var(--accent-color);
     border-color: var(--accent-color);
     color: white;
+}
+
+/* Dialogue System Styles */
+.dialogue-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    pointer-events: auto;
+    /* Catch clicks to advance */
+}
+
+.portrait-container {
+    position: absolute;
+    bottom: 200px;
+    /* Above text box */
+    width: 100%;
+    height: 60%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 5%;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.portrait {
+    height: 100%;
+    max-width: 40%;
+    object-fit: contain;
+    transition: opacity 0.3s, transform 0.3s;
+    filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.8));
+    opacity: 0;
+    /* Hidden by default */
+}
+
+.portrait.active {
+    opacity: 1;
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 15px var(--accent-color));
+}
+
+.portrait.inactive {
+    opacity: 0.5;
+    transform: scale(1.0);
+    filter: grayscale(80%);
+}
+
+.dialogue-box {
+    background: linear-gradient(to bottom, #1a1a1a, #000);
+    border: 2px solid var(--text-dim);
+    border-radius: 4px;
+    width: 80%;
+    height: 180px;
+    margin-bottom: 40px;
+    padding: 20px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+    position: relative;
+    z-index: 10;
+}
+
+.dialogue-name {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--highlight-color);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.dialogue-text {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-main);
+    white-space: pre-wrap;
+}
+
+.dialogue-hint {
+    position: absolute;
+    bottom: 10px;
+    right: 20px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+
+    0%,
+    100% {
+        opacity: 0.3;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Hand Container */
+.hand-container {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 140px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 10px;
+    z-index: 100;
+    pointer-events: auto;
+    /* Enable clicks */
+}
+
+/* Card Visuals */
+.card {
+    width: 100px;
+    height: 140px;
+    background: #1e1e1e;
+    border: 2px solid #555;
+    border-radius: 6px;
+    padding: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    position: relative;
+    user-select: none;
+}
+
+.card:hover {
+    transform: translateY(-15px) scale(1.05);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.8);
+    border-color: var(--highlight-color);
+    z-index: 10;
+}
+
+.card.selected {
+    transform: translateY(-20px) scale(1.08);
+    border-color: #7ed321;
+    box-shadow: 0 0 20px rgba(126, 211, 33, 0.6);
+    z-index: 15;
+}
+
+/* Spell cards cannot be placed - show red on hover */
+.card.card-spell:hover {
+    border-color: #d0021b;
+    box-shadow: 0 0 15px rgba(208, 2, 27, 0.5);
+}
+
+.card.dragging {
+    opacity: 0.5;
+    transform: scale(0.9);
+}
+
+/* Drop target highlight */
+.room-node.drop-target {
+    border-color: #7ed321 !important;
+    background: rgba(126, 211, 33, 0.3) !important;
+    transform: scale(1.15);
+}
+
+.card-cost {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    width: 24px;
+    height: 24px;
+    background: #2b3a99;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    color: white;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.card-title {
+    text-align: center;
+    font-weight: bold;
+    color: var(--text-main);
+    border-bottom: 1px solid #444;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+}
+
+.card-type {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.card-desc {
+    font-size: 0.7rem;
+    color: #ccc;
+    text-align: center;
+    line-height: 1.2;
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Waiting Room Styles */
+.waiting-room {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 600px;
+    background: rgba(10, 10, 15, 0.95);
+    border: 2px solid var(--border-color);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+    color: var(--text-main);
+}
+
+.waiting-room h2 {
+    text-align: center;
+    color: var(--highlight-color);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    margin-top: 0;
+}
+
+.intel-box {
+    background: rgba(30, 30, 30, 0.5);
+    padding: 1rem;
+    border-radius: 4px;
+}
+
+.intel-box h3,
+.deck-management h3 {
+    margin-top: 0;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.weakness {
+    color: var(--accent-color);
+    font-weight: bold;
+}
+
+.deck-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 100px;
+    overflow-y: auto;
+    padding: 5px;
+    background: #000;
+}
+
+.mini-card {
+    background: #222;
+    border: 1px solid #444;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    border-radius: 2px;
+}
+
+.btn-start {
+    background: var(--accent-color);
+    color: white;
+    font-weight: bold;
+    padding: 1rem;
+    border: none;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: transform 0.2s;
+}
+
+.btn-start:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 15px var(--accent-color);
+}
+
+/* Dungeon Visuals */
+.dungeon-view {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    height: 60%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.dungeon-map {
+    display: flex;
+    align-items: center;
+    margin-top: 50px;
+    overflow-x: auto;
+    width: 100%;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    justify-content: center;
+}
+
+.room-node {
+    width: 80px;
+    height: 80px;
+    background: #333;
+    border: 3px solid #666;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s, border-color 0.2s;
+    user-select: none;
+    flex-shrink: 0;
+    color: #fff;
+}
+
+.room-node:hover {
+    transform: scale(1.1);
+    border-color: var(--highlight-color);
+}
+
+.room-node.start {
+    border-color: #4a90e2;
+    background: #1a2a40;
+    font-size: 0.7rem;
+}
+
+.room-node.boss {
+    border-color: #d0021b;
+    background: #4a0a0a;
+    width: 100px;
+    height: 100px;
+    font-size: 0.9rem;
+}
+
+.room-node.occupied {
+    border-color: #7ed321;
+}
+
+.room-node.knight-here {
+    border-color: #ff6600 !important;
+    box-shadow: 0 0 15px rgba(255, 102, 0, 0.8);
+}
+
+.knight-marker {
+    font-size: 1.5rem;
+    margin-bottom: 5px;
+}
+
+.btn-end-turn {
+    position: absolute;
+    bottom: 180px;
+    right: 30px;
+    background: #4a90e2;
+    color: white;
+    font-weight: bold;
+    padding: 1rem 2rem;
+    border: none;
+    font-size: 1rem;
+    text-transform: uppercase;
+    transition: transform 0.2s;
+}
+
+.btn-end-turn:hover {
+    transform: scale(1.05);
+    background: #357abd;
+}
+
+.btn-end-turn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Knight Movement Animation */
+.room-node.knight-leaving .knight-marker {
+    animation: knight-leave 0.8s ease-out forwards;
+}
+
+.room-node.knight-incoming {
+    animation: pulse-incoming 0.8s ease-in-out;
+}
+
+@keyframes knight-leave {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: translateX(30px) scale(0.8);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: translateX(60px) scale(0);
+        opacity: 0;
+    }
+}
+
+@keyframes pulse-incoming {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 rgba(255, 102, 0, 0);
+    }
+
+    50% {
+        box-shadow: 0 0 30px rgba(255, 102, 0, 0.8);
+    }
+}
+
+/* Encounter Overlay */
+.encounter-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fade-in 0.3s ease-out;
+    pointer-events: auto;
+}
+
+.encounter-overlay.fade-out {
+    animation: fade-out 0.5s ease-out forwards;
+}
+
+.encounter-text {
+    font-size: 3rem;
+    color: #d0021b;
+    text-shadow: 0 0 20px rgba(208, 2, 27, 0.8);
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-10px);
+    }
+
+    75% {
+        transform: translateX(10px);
+    }
+}
+
+.occupant-marker {
+    position: absolute;
+    bottom: -25px;
+    background: #111;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    border: 1px solid #7ed321;
+    color: #7ed321;
+}
+
+.room-path {
+    width: 50px;
+    height: 4px;
+    background: #555;
+    flex-shrink: 0;
+}
+
+/* ===== COMBAT UI ===== */
+
+.combat-view {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    pointer-events: auto;
+}
+
+.combat-view h2 {
+    text-align: center;
+    color: #d0021b;
+    margin-bottom: 1.5rem;
+}
+
+.combat-unit {
+    background: #1a1a2e;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.knight-unit {
+    border: 2px solid #4a90e2;
+}
+
+.enemy-unit {
+    border: 2px solid #7ed321;
+}
+
+.unit-name {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+}
+
+.hp-bar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.hp-fill {
+    height: 100%;
+    transition: width 0.3s ease-out;
+}
+
+.knight-hp {
+    background: linear-gradient(90deg, #4a90e2, #357abd);
+}
+
+.enemy-hp {
+    background: linear-gradient(90deg, #7ed321, #5cb010);
+}
+
+.hp-text {
+    text-align: right;
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-top: 0.3rem;
+}
+
+.vs-divider {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: bold;
+    color: #d0021b;
+    margin: 1rem 0;
+}
+
+.enemy-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.no-enemies {
+    text-align: center;
+    color: #7ed321;
+    font-size: 1.2rem;
+    padding: 1rem;
+}
+
+.combat-log {
+    background: #111;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.combat-log h3 {
+    margin-bottom: 0.5rem;
+    color: #888;
+}
+
+.log-entries {
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.log-entry {
+    padding: 0.2rem 0;
+    border-bottom: 1px solid #222;
+}
+
+.combat-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.btn-combat {
+    background: #d0021b;
+    color: white;
+    font-weight: bold;
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+    border: none;
+    text-transform: uppercase;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.btn-combat:hover {
+    transform: scale(1.05);
+    background: #a50216;
 }
