@@ -1,7 +1,7 @@
 # Tasks: Killing Commendatore
 
 - [ ] **Project Setup** <!-- id: 0 -->
-    - [ ] Initialize Vite project in `killing-commendatore` <!-- id: 1 -->
+    - [ ] Create `index.html` and `style.css` (No Build Tool) <!-- id: 1 -->
     - [ ] Set up basic HTML/CSS structure (Dark/Noir theme) <!-- id: 2 -->
     - [ ] Create core game loop state machine (Phase Manager) <!-- id: 3 -->
 
