@@ -7,43 +7,57 @@ export class Renderer {
         this.wallHeight = 150;
         this.floorY = 150;
 
-        // Simple pseudo-random for consistent terrain generation
         this.seed = 12345;
+        this.currentSceneId = '';
+    }
+
+    // Improved Seeding for better distribution
+    resetSeed(str) {
+        if (!str) str = 'default';
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < str.length; i++) {
+            h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+        }
+        this.seed = h >>> 0;
     }
 
     random() {
-        // Simple LCG for deterministic terrain
-        this.seed = (this.seed * 9301 + 49297) % 233280;
-        return this.seed / 233280;
+        // Mulberry32 - Deterministic PRNG
+        let t = this.seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     }
 
     drawBackground() {
         this.ctx.fillStyle = '#f4f1ea'; // Rice Paper
         this.ctx.fillRect(0, 0, this.width, this.height);
-
-        // Optional: Paper Grain
-        // (Skipped for performance, but color sets the tone)
     }
 
     drawRoom(scene) {
-        // 1. Draw Floor (Subtle Gradient?)
+        // 1. Draw Floor
         this.ctx.fillStyle = '#f4f1ea';
         this.ctx.fillRect(0, this.floorY, this.width, this.height - this.floorY);
 
         // 2. Draw Environment (The Painting World)
         this.drawEnvironment(scene);
 
-        // 3. Draw North Wall (Top Mask)
+        // 3. Draw North Wall
         this.ctx.fillStyle = '#e8e5de';
         this.ctx.fillRect(0, 0, this.width, this.wallHeight);
 
-        // Wall Border (Ink Stroke)
+        // Wall Border
+        // Use a fixed seed for the room frame itself so it doesn't wobble
+        let oldSeed = this.seed;
+        this.resetSeed('ROOM_BORDER');
         this.drawInkStroke(0, this.floorY, this.width, this.floorY, 4);
+        this.seed = oldSeed;
     }
 
     drawEnvironment(scene) {
-        // Reset seed per frame so terrain doesn't jitter
-        this.seed = scene.id.length * 123;
+        // Reset seed deterministically based on Scene ID
+        // This ensures the scene draws exactly the same every frame
+        this.resetSeed(scene.id);
 
         // --- RIVER SCENE ---
         if (scene.id.includes('RIVER')) {
@@ -100,7 +114,7 @@ export class Renderer {
             this.ctx.beginPath();
             for (let i = 0; i < 5; i++) {
                 this.ctx.moveTo(760 + i * 20, this.floorY);
-                this.ctx.lineTo(760 + i * 20 + (Math.random() * 10 - 5), this.height);
+                this.ctx.lineTo(760 + i * 20 + (this.random() * 10 - 5), this.height);
             }
             this.ctx.stroke();
 
@@ -142,12 +156,17 @@ export class Renderer {
     }
 
     drawSceneObjects(scene) {
+        // We do typically NOT want randomness for obstacles/items each frame
+        // But let's use the scene seed + unique ID to keep them stable
+
+        let initialSeed = this.seed;
+
         // Draw Obstacles (Faint Ink Outline)
         if (scene.obstacles) {
             this.ctx.strokeStyle = 'rgba(0,0,0,0.1)';
             this.ctx.lineWidth = 1;
-            scene.obstacles.forEach(obs => {
-                this.ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+            scene.obstacles.forEach((obs, index) => {
+                this.drawRect(obs.x, obs.y, obs.w, obs.h);
             });
         }
 
@@ -156,6 +175,8 @@ export class Renderer {
 
         // Draw Items
         scene.items.forEach(i => this.drawItem(i));
+
+        this.seed = initialSeed; // Restore main seed if needed
     }
 
     drawPainting(portal) {
@@ -184,7 +205,6 @@ export class Renderer {
     }
 
     drawItem(item) {
-        // Red Seal (Stamp) style for items
         this.ctx.fillStyle = '#b71c1c';
         this.ctx.beginPath();
         this.ctx.rect(item.x + 5, item.y + 5, 20, 20);
@@ -202,11 +222,11 @@ export class Renderer {
         this.ctx.lineWidth = width;
         this.ctx.lineCap = 'round';
 
-        // Quadratic curve for slight imperfection
+        // Quadratic curve using deterministic random
         this.ctx.beginPath();
         this.ctx.moveTo(x1, y1);
-        const cx = (x1 + x2) / 2 + (Math.random() * 4 - 2);
-        const cy = (y1 + y2) / 2 + (Math.random() * 4 - 2);
+        const cx = (x1 + x2) / 2 + (this.random() * 4 - 2);
+        const cy = (y1 + y2) / 2 + (this.random() * 4 - 2);
         this.ctx.quadraticCurveTo(cx, cy, x2, y2);
         this.ctx.stroke();
     }
@@ -242,7 +262,7 @@ export class Renderer {
         // Simple cluster of dots
         for (let i = 0; i < 10; i++) {
             this.ctx.beginPath();
-            this.ctx.arc(x + (Math.random() - 0.5) * size, y - size + (Math.random() - 0.5) * size, 8, 0, Math.PI * 2);
+            this.ctx.arc(x + (this.random() - 0.5) * size, y - size + (this.random() - 0.5) * size, 8, 0, Math.PI * 2);
             this.ctx.fill();
         }
         this.ctx.globalAlpha = 1.0;
@@ -267,7 +287,18 @@ export class Renderer {
         this.ctx.arc(player.x, player.y, 12, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // Brush stroke body
+        // Use fixed seed for player anim or it shakes too much?
+        // Let's allow player to shake slightly for "alive" ink effect
         this.drawInkStroke(player.x, player.y + 10, player.x, player.y + 25, 4);
+    }
+
+    drawRect(x, y, w, h, filled = false) {
+        if (filled) {
+            this.ctx.fillStyle = '#1a1a1a';
+            this.ctx.fillRect(x, y, w, h);
+        } else {
+            this.ctx.strokeStyle = '#1a1a1a';
+            this.ctx.strokeRect(x, y, w, h);
+        }
     }
 }
