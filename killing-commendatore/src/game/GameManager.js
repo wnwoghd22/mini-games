@@ -86,4 +86,33 @@ export class GameManager {
                 break;
         }
     }
+
+    nextLevel() {
+        this.currentLevel++;
+        console.log(`Advancing to Level ${this.currentLevel}`);
+
+        // Reset systems for new level
+        this.cardSystem.hand = [];
+        this.cardSystem.discardPile = [];
+        this.cardSystem.initializeDeck();
+        this.dungeonSystem.currentKnightPosition = 0;
+        this.combatSystem.knightParty.hp = this.combatSystem.knightParty.maxHp;
+
+        // Go to preparation for new level
+        this.changeState('DIALOGUE');
+    }
+
+    restart() {
+        console.log("Restarting Game...");
+        this.currentLevel = 1;
+
+        // Reset all systems
+        this.cardSystem = new CardSystem(this);
+        this.waitingRoomSystem = new WaitingRoomSystem(this);
+        this.dungeonSystem = new DungeonSystem(this);
+        this.combatSystem = new CombatSystem(this);
+
+        this.cardSystem.initializeDeck();
+        this.changeState('DIALOGUE');
+    }
 }

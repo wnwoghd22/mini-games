@@ -57,6 +57,9 @@ export class UIManager {
                 // Hand is drawn by GameManager, UI just shows container
                 // Dungeon rendering is triggered by 'dungeon-updated' event
                 break;
+            case 'RESULT':
+                this.renderResult();
+                break;
         }
     }
 
@@ -654,6 +657,48 @@ export class UIManager {
         } else {
             // Knight survived - back to placement for next room
             this.game.changeState('PLACEMENT');
+        }
+    }
+
+    // --- Result Screen ---
+
+    renderResult() {
+        const container = document.createElement('div');
+        container.id = 'result-view';
+        container.className = 'panel result-view';
+        this.uiLayer.appendChild(container);
+
+        const knightDead = this.game.combatSystem.knightParty.hp <= 0;
+        // Boss defeated = Knight is at boss room AND survived the combat (enemies cleared)
+        const atBossRoom = this.game.dungeonSystem.currentKnightPosition >= this.game.dungeonSystem.rooms.length - 1;
+        const bossDefeated = atBossRoom && !knightDead;
+
+        if (knightDead) {
+            // Player wins! Knight Commander is dead
+            container.innerHTML = `
+                <div class="result-icon">🎉</div>
+                <h1 class="result-title victory">VICTORY!</h1>
+                <p class="result-text">The Knight Commander has fallen!</p>
+                <p class="result-text">The Warlock's domain is safe... for now.</p>
+                <button class="btn btn-result" id="btn-next-level">NEXT LEVEL</button>
+            `;
+
+            document.getElementById('btn-next-level').addEventListener('click', () => {
+                this.game.nextLevel();
+            });
+        } else if (bossDefeated) {
+            // Knight defeated the boss - player loses
+            container.innerHTML = `
+                <div class="result-icon">💀</div>
+                <h1 class="result-title defeat">GAME OVER</h1>
+                <p class="result-text">The Knight Commander has defeated your forces!</p>
+                <p class="result-text">Your reign of terror ends here.</p>
+                <button class="btn btn-result" id="btn-restart">RESTART</button>
+            `;
+
+            document.getElementById('btn-restart').addEventListener('click', () => {
+                this.game.restart();
+            });
         }
     }
 }

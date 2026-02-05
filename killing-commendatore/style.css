@@ -718,3 +718,60 @@ body {
     transform: scale(1.05);
     background: #a50216;
 }
+
+/* ===== RESULT SCREEN ===== */
+
+.result-view {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 500px;
+    text-align: center;
+    pointer-events: auto;
+    padding: 3rem;
+}
+
+.result-icon {
+    font-size: 5rem;
+    margin-bottom: 1rem;
+}
+
+.result-title {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+}
+
+.result-title.victory {
+    color: #7ed321;
+    text-shadow: 0 0 20px rgba(126, 211, 33, 0.5);
+}
+
+.result-title.defeat {
+    color: #d0021b;
+    text-shadow: 0 0 20px rgba(208, 2, 27, 0.5);
+}
+
+.result-text {
+    font-size: 1.2rem;
+    color: #aaa;
+    margin-bottom: 0.5rem;
+}
+
+.btn-result {
+    margin-top: 2rem;
+    background: #4a90e2;
+    color: white;
+    font-weight: bold;
+    padding: 1rem 3rem;
+    font-size: 1.2rem;
+    border: none;
+    text-transform: uppercase;
+    transition: transform 0.2s;
+}
+
+.btn-result:hover {
+    transform: scale(1.05);
+    background: #357abd;
+}
