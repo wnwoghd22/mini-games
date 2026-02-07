@@ -81,11 +81,18 @@ export class CardSystem {
 
     playCard(cardIndex) {
         const card = this.hand[cardIndex];
-        if (!card) return;
+        if (!card) return null;
 
-        // Logic to check if playable (cost vs mana) will go here
+        // 마나 체크
+        if (!this.game.state.spendMana(card.cost)) {
+            // 마나 부족 이벤트 발송 (UI 피드백용)
+            window.dispatchEvent(new CustomEvent('mana-insufficient', {
+                detail: { required: card.cost, current: this.game.state.mana }
+            }));
+            return null;
+        }
 
-        console.log(`Played card: ${card.name}`);
+        console.log(`Played card: ${card.name} (Cost: ${card.cost})`);
 
         this.hand.splice(cardIndex, 1);
         this.discardPile.push(card);

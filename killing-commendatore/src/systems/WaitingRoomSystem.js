@@ -9,15 +9,22 @@ export class WaitingRoomSystem {
 
     enter() {
         console.log("Entered Waiting Room");
+
+        // 현재 레벨의 기사 스탯 가져오기
+        const knight = this.game.combatSystem.knightParty;
+
         // Trigger UI update
         window.dispatchEvent(new CustomEvent('waiting-room-entered', {
             detail: {
                 deck: this.game.cardSystem.deck,
-                library: this.game.cardSystem.library, // Now real data
+                library: this.game.cardSystem.library,
+                level: this.game.currentLevel,
                 enemyIntel: {
-                    name: "Knight Commander",
+                    name: knight.name,
                     class: "Paladin",
-                    hp: 500,
+                    hp: knight.maxHp,
+                    atk: knight.atk,
+                    def: knight.def,
                     weakness: "Dark Magic"
                 }
             }

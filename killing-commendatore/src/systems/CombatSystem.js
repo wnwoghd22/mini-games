@@ -7,14 +7,8 @@ export class CombatSystem {
     constructor(gameManager) {
         this.game = gameManager;
 
-        // Knight Party (example stats)
-        this.knightParty = {
-            name: 'Knight Commander',
-            hp: 100,
-            maxHp: 100,
-            atk: 15,
-            def: 5
-        };
+        // Knight Party - 레벨 기반 스케일링
+        this.knightParty = this.createKnight(1);
 
         // Current encounter data
         this.currentRoom = null;
@@ -22,6 +16,24 @@ export class CombatSystem {
         this.combatLog = [];
         this.isCombatActive = false;
         this.turnNumber = 0;
+    }
+
+    // 레벨에 따른 기사 스탯 생성
+    createKnight(level) {
+        const baseHp = 40 + (level * 15);   // Lv1: 55, Lv2: 70, Lv3: 85
+        return {
+            name: 'Knight Commander',
+            hp: baseHp,
+            maxHp: baseHp,
+            atk: 6 + (level * 2),           // Lv1: 8, Lv2: 10, Lv3: 12
+            def: Math.floor(level / 2)       // Lv1: 0, Lv2: 1, Lv3: 1
+        };
+    }
+
+    // 레벨 변경 시 기사 리셋
+    resetForLevel(level) {
+        this.knightParty = this.createKnight(level);
+        console.log(`Knight reset for Level ${level}:`, this.knightParty);
     }
 
     // Initialize combat with the current room's occupants

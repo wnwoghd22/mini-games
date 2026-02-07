@@ -36,6 +36,14 @@ export class UIManager {
         window.addEventListener('combat-updated', (e) => {
             this.renderCombat(e.detail);
         });
+
+        // 마나 관련 이벤트
+        window.addEventListener('gamestate-updated', (e) => {
+            this.updateManaDisplay(e.detail);
+        });
+        window.addEventListener('mana-insufficient', (e) => {
+            this.showManaWarning(e.detail);
+        });
     }
 
     onStateChanged(state) {
@@ -190,12 +198,12 @@ export class UIManager {
         }
 
         container.innerHTML = `
-            <h2>Mission Preparation</h2>
+            <h2>Mission Preparation - Level ${data.level || this.game.currentLevel}</h2>
             <div class="intel-box">
                 <h3>Target Intel</h3>
                 <p><strong>Name:</strong> ${data.enemyIntel.name}</p>
                 <p><strong>Class:</strong> ${data.enemyIntel.class}</p>
-                <p><strong>HP:</strong> ${data.enemyIntel.hp}</p>
+                <p><strong>HP:</strong> ${data.enemyIntel.hp} | <strong>ATK:</strong> ${data.enemyIntel.atk} | <strong>DEF:</strong> ${data.enemyIntel.def}</p>
                 <p class="weakness">Weakness: ${data.enemyIntel.weakness}</p>
             </div>
             
@@ -265,10 +273,60 @@ export class UIManager {
     // --- Hand / Card Rendering ---
 
     showHandContainer() {
+        // 마나 표시 영역
+        let manaBar = document.getElementById('mana-bar');
+        if (!manaBar) {
+            manaBar = document.createElement('div');
+            manaBar.id = 'mana-bar';
+            manaBar.className = 'mana-bar';
+            this.uiLayer.appendChild(manaBar);
+        }
+        this.updateManaDisplay(this.game.state.getState());
+
+        // 핸드 컨테이너
         const container = document.createElement('div');
         container.id = 'hand-container';
         container.className = 'hand-container';
         this.uiLayer.appendChild(container);
+    }
+
+    updateManaDisplay(stateData) {
+        const manaBar = document.getElementById('mana-bar');
+        if (!manaBar) return;
+
+        const { mana, maxMana, gold } = stateData;
+
+        // 마나 크리스탈 시각화
+        let crystals = '';
+        for (let i = 0; i < maxMana; i++) {
+            crystals += i < mana ? '💎' : '◇';
+        }
+
+        manaBar.innerHTML = `
+            <div class="mana-display">
+                <span class="mana-crystals">${crystals}</span>
+                <span class="mana-text">${mana}/${maxMana}</span>
+            </div>
+            <div class="gold-display">💰 ${gold}</div>
+        `;
+    }
+
+    showManaWarning(detail) {
+        // 마나 부족 경고 표시
+        const warning = document.createElement('div');
+        warning.className = 'mana-warning';
+        warning.innerText = `마나 부족! (필요: ${detail.required}, 보유: ${detail.current})`;
+        this.uiLayer.appendChild(warning);
+
+        // 마나바 흔들림 효과
+        const manaBar = document.getElementById('mana-bar');
+        if (manaBar) {
+            manaBar.classList.add('shake');
+            setTimeout(() => manaBar.classList.remove('shake'), 500);
+        }
+
+        // 1.5초 후 경고 제거
+        setTimeout(() => warning.remove(), 1500);
     }
 
     renderHand(hand) {
@@ -280,14 +338,22 @@ export class UIManager {
 
         container.innerHTML = ''; // Clear current hand
 
+        const currentMana = this.game.state.mana;
+
         hand.forEach((card, index) => {
             const cardEl = document.createElement('div');
             cardEl.className = 'card';
             cardEl.dataset.index = index;
 
+            // 마나 부족 시 비활성화 표시
+            const canAfford = currentMana >= card.cost;
+            if (!canAfford) {
+                cardEl.classList.add('card-disabled');
+            }
+
             // Card visual structure
             cardEl.innerHTML = `
-                <div class="card-cost">${card.cost}</div>
+                <div class="card-cost ${canAfford ? '' : 'cost-unaffordable'}">${card.cost}</div>
                 <div class="card-title">${card.name}</div>
                 <div class="card-type">${card.type}</div>
                 <div class="card-desc">${card.description}</div>
@@ -296,15 +362,17 @@ export class UIManager {
             // Add card type class for styling
             cardEl.classList.add(`card-${card.type.toLowerCase()}`);
 
-            // Drag support
-            cardEl.draggable = true;
-            cardEl.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('cardIndex', index.toString());
-                cardEl.classList.add('dragging');
-            });
-            cardEl.addEventListener('dragend', () => {
-                cardEl.classList.remove('dragging');
-            });
+            // Drag support (마나 있을 때만)
+            cardEl.draggable = canAfford;
+            if (canAfford) {
+                cardEl.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('cardIndex', index.toString());
+                    cardEl.classList.add('dragging');
+                });
+                cardEl.addEventListener('dragend', () => {
+                    cardEl.classList.remove('dragging');
+                });
+            }
 
             cardEl.addEventListener('click', () => {
                 this.selectCard(index);
