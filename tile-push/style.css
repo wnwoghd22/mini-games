@@ -1,0 +1,214 @@
+:root {
+    --bg-color: #0f172a;
+    --board-bg: #1e293b;
+    --tile-bg: #334155;
+    --pipe-color: #64748b;
+    --pipe-active: #0ea5e9; /* Neon Blue */
+    --pipe-source: #22c55e; /* Green */
+    --pipe-sink: #ef4444;   /* Red */
+    --accent-color: #38bdf8;
+    --text-color: #f1f5f9;
+    
+    --cell-size: 60px;
+    --gap: 4px;
+}
+
+* {
+    box-sizing: border-box;
+    user-select: none;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 20px;
+}
+
+header {
+    text-align: center;
+}
+
+h1 {
+    margin: 0;
+    font-size: 2.5rem;
+    color: var(--accent-color);
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+.game-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+}
+
+.game-board {
+    display: grid;
+    /* 1 row for top buttons, 5 rows for grid, 1 row for bottom buttons */
+    /* 1 col for left buttons, 5 cols for grid, 1 col for right buttons */
+    grid-template-columns: var(--cell-size) repeat(5, var(--cell-size)) var(--cell-size);
+    grid-template-rows: var(--cell-size) repeat(5, var(--cell-size)) var(--cell-size);
+    gap: var(--gap);
+    background-color: var(--board-bg);
+    padding: var(--gap);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.cell {
+    width: 100%;
+    height: 100%;
+    background-color: var(--tile-bg);
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    transition: transform 0.2s ease-in-out;
+}
+
+.control-btn {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: var(--accent-color);
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.control-btn:hover {
+    background-color: rgba(56, 189, 248, 0.1);
+    color: #fff;
+    text-shadow: 0 0 5px var(--accent-color);
+}
+
+.control-btn:disabled {
+    color: #475569;
+    cursor: default;
+}
+
+.hand-area {
+    text-align: center;
+}
+
+.hand-container {
+    width: var(--cell-size);
+    height: var(--cell-size);
+    background-color: var(--board-bg);
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    margin: 10px auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+}
+
+/* Pipe Styles */
+.pipe {
+    position: absolute;
+    background-color: var(--pipe-color);
+}
+
+.pipe.connected {
+    background-color: var(--pipe-active);
+    box-shadow: 0 0 5px var(--pipe-active);
+}
+
+/* Pipe Segments (Center is the reference) */
+.pipe-center {
+    width: 30%;
+    height: 30%;
+    border-radius: 50%;
+}
+
+.pipe-arm {
+    position: absolute;
+    background-color: var(--pipe-color);
+}
+.pipe.connected .pipe-arm {
+    background-color: var(--pipe-active);
+}
+
+/* Directions */
+.pipe-arm.top {
+    width: 30%;
+    height: 50%; /* Center to top */
+    top: 0;
+    left: 35%;
+}
+.pipe-arm.bottom {
+    width: 30%;
+    height: 50%;
+    bottom: 0;
+    left: 35%;
+}
+.pipe-arm.left {
+    height: 30%;
+    width: 50%;
+    left: 0;
+    top: 35%;
+}
+.pipe-arm.right {
+    height: 30%;
+    width: 50%;
+    right: 0;
+    top: 35%;
+}
+
+/* Start/End Markers */
+.marker {
+    position: absolute;
+    width: 20%;
+    height: 20%;
+    border-radius: 50%;
+    z-index: 10;
+}
+.marker.source { background-color: var(--pipe-source); box-shadow: 0 0 8px var(--pipe-source); }
+.marker.sink { background-color: var(--pipe-sink); box-shadow: 0 0 8px var(--pipe-sink); }
+
+.controls {
+    display: flex;
+    gap: 15px;
+}
+
+.btn {
+    padding: 10px 20px;
+    background-color: var(--board-bg);
+    border: 1px solid var(--accent-color);
+    color: var(--text-color);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+.btn:hover {
+    background-color: var(--accent-color);
+    color: #000;
+}
+
+.message-area {
+    min-height: 24px;
+    color: var(--pipe-source);
+    font-weight: bold;
+}
