@@ -1,0 +1,359 @@
+:root {
+    --bg-color: #0f172a;
+    --board-bg: #1e293b;
+    --tile-bg: #334155;
+    --pipe-color: #64748b;
+    --pipe-active: #0ea5e9;
+    /* Neon Blue */
+    --pipe-source: #22c55e;
+    /* Green */
+    --pipe-sink: #ef4444;
+    /* Red */
+    --accent-color: #38bdf8;
+    --text-color: #f1f5f9;
+
+    --cell-size: 60px;
+    --gap: 4px;
+}
+
+@keyframes pulse-glow {
+    0% {
+        box-shadow: 0 0 5px var(--pipe-active);
+        filter: brightness(1);
+    }
+
+    50% {
+        box-shadow: 0 0 15px var(--pipe-active);
+        filter: brightness(1.3);
+    }
+
+    100% {
+        box-shadow: 0 0 5px var(--pipe-active);
+        filter: brightness(1);
+    }
+}
+
+* {
+    box-sizing: border-box;
+    user-select: none;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 20px;
+}
+
+header {
+    /* Hidden visual title, or minimal */
+    display: none;
+}
+
+/* 
+h1 {
+    margin: 0;
+    font-size: 2.5rem;
+    color: var(--accent-color);
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+} 
+*/
+
+.game-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+}
+
+.game-board {
+    display: grid;
+    /* 1 row for top buttons, 5 rows for grid, 1 row for bottom buttons */
+    /* 1 col for left buttons, 5 cols for grid, 1 col for right buttons */
+    grid-template-columns: var(--cell-size) repeat(5, var(--cell-size)) var(--cell-size);
+    grid-template-rows: var(--cell-size) repeat(5, var(--cell-size)) var(--cell-size);
+    gap: var(--gap);
+    background-color: var(--board-bg);
+    padding: var(--gap);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    /* Mask tiles sliding out */
+    position: relative;
+}
+
+.cell {
+    width: 100%;
+    height: 100%;
+    background-color: var(--tile-bg);
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    transition: transform 0.2s ease-in-out;
+    z-index: 1;
+    /* Ensure tiles are above background but below UI overlays if any */
+}
+
+/* Slide Animation Classes */
+.cell.sliding {
+    transition: transform 0.3s ease-out;
+    z-index: 10;
+}
+
+/* Locked Tile Style */
+.cell.locked {
+    border: 2px solid #fbbf24;
+    /* Amber border */
+    box-shadow: inset 0 0 10px rgba(251, 191, 36, 0.3);
+}
+
+.cell.locked::after {
+    content: '🔒';
+    /* Simple lock icon for now */
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 1rem;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.control-btn {
+    width: 100%;
+    height: 100%;
+    background-color: var(--board-bg);
+    /* Match board to mask sliding tiles */
+    border: none;
+    color: var(--accent-color);
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s;
+    z-index: 20;
+    /* Above sliding tiles */
+    position: relative;
+    border-radius: 4px;
+    /* Optional: match cell radius */
+}
+
+.control-btn:hover,
+.control-btn.drag-over {
+    background-color: rgba(56, 189, 248, 0.2);
+    /* Semi-transparent accent */
+    color: #fff;
+    text-shadow: 0 0 5px var(--accent-color);
+    transform: scale(1.1);
+    /* Slight pop */
+}
+
+
+
+.control-btn:disabled {
+    color: #475569;
+    cursor: default;
+}
+
+.hand-area {
+    text-align: center;
+}
+
+.hand-container {
+    display: flex;
+    /* Changed from just width/height to flex container */
+    gap: 10px;
+    padding: 10px;
+    background-color: var(--board-bg);
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    margin: 10px auto;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+}
+
+.hand-tile {
+    width: var(--cell-size);
+    height: var(--cell-size);
+    background-color: var(--tile-bg);
+    border-radius: 4px;
+    position: relative;
+    cursor: grab;
+    transition: transform 0.2s;
+}
+
+.hand-tile:active {
+    cursor: grabbing;
+}
+
+.hand-tile.dragging {
+    opacity: 0.5;
+    transform: scale(0.9);
+}
+
+/* Pipe Styles */
+.pipe {
+    position: absolute;
+    background-color: var(--pipe-color);
+}
+
+.pipe.connected {
+    background-color: var(--pipe-active);
+    box-shadow: 0 0 5px var(--pipe-active);
+}
+
+/* Pipe Segments (Center is the reference) */
+.pipe-center {
+    width: 30%;
+    height: 30%;
+    border-radius: 50%;
+}
+
+.pipe-arm {
+    position: absolute;
+    background-color: var(--pipe-color);
+}
+
+.pipe.connected .pipe-arm {
+    background-color: var(--pipe-active);
+}
+
+/* Active Flow Style (Recursive/Traced) */
+.pipe.flow-active,
+.pipe.flow-active .pipe-arm {
+    background-color: var(--pipe-active);
+    box-shadow: 0 0 8px var(--pipe-active);
+    animation: pulse-glow 2s infinite;
+    z-index: 2;
+    /* Pop above normal pipes */
+}
+
+/* Directions */
+.pipe-arm.top {
+    width: 30%;
+    height: 50%;
+    /* Center to top */
+    top: 0;
+    left: 35%;
+}
+
+.pipe-arm.bottom {
+    width: 30%;
+    height: 50%;
+    bottom: 0;
+    left: 35%;
+}
+
+.pipe-arm.left {
+    height: 30%;
+    width: 50%;
+    left: 0;
+    top: 35%;
+}
+
+.pipe-arm.right {
+    height: 30%;
+    width: 50%;
+    right: 0;
+    top: 35%;
+}
+
+/* Start/End Markers */
+.marker {
+    position: relative;
+    /* Changed from absolute to overlap in grid */
+    width: 40%;
+    /* Make them slightly larger/visible */
+    height: 40%;
+    border-radius: 50%;
+    z-index: 30;
+    /* Above buttons and sliding tiles */
+    pointer-events: none;
+    /* Allow clicking through to tiles */
+    justify-self: center;
+    align-self: center;
+    box-shadow: 0 0 15px currentColor;
+}
+
+.marker.source {
+    background-color: var(--pipe-source);
+    box-shadow: 0 0 8px var(--pipe-source);
+}
+
+.marker.sink {
+    background-color: var(--pipe-sink);
+    box-shadow: 0 0 8px var(--pipe-sink);
+}
+
+.controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 15px;
+}
+
+.btn {
+    padding: 8px 16px;
+    background-color: var(--pipe-color);
+    color: #fff;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn:hover {
+    background-color: var(--pipe-active);
+    transform: scale(1.05);
+    box-shadow: 0 0 10px var(--accent-color);
+}
+
+.btn.icon-btn {
+    padding: 8px;
+    background-color: transparent;
+    /* Clean look */
+    color: var(--accent-color);
+    border: 2px solid var(--accent-color);
+    border-radius: 50%;
+    /* Circle */
+    width: 44px;
+    height: 44px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.btn.icon-btn svg {
+    /* Ensure icon is sized right */
+    width: 24px;
+    height: 24px;
+}
+
+.btn.icon-btn:hover {
+    background-color: rgba(56, 189, 248, 0.2);
+    color: #fff;
+}
+
+.message-area {
+    /* Hidden message area */
+    display: none;
+}
