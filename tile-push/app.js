@@ -230,12 +230,14 @@ class Game {
 
         this.isAnimating = false;
         this.isSolved = false;
+        this.history = []; // Undo stack
 
         this.initUI();
         this.scrambleGame();
     }
 
     initUI() {
+        document.getElementById('btn-undo').addEventListener('click', () => this.undoMove());
         document.getElementById('btn-reset').addEventListener('click', () => this.resetLevel());
         document.getElementById('btn-scramble').addEventListener('click', () => this.scrambleGame());
     }
@@ -247,6 +249,7 @@ class Game {
             this.hand.push(this.grid.randomTile());
         }
         this.isSolved = false;
+        this.history = []; // Clear history
         this.messageArea.textContent = "";
         this.render();
     }
@@ -256,20 +259,47 @@ class Game {
         this.resetGame();
 
         // 2. Perform random pushes to scramble
-        for (let i = 0; i < 30; i++) {
+        let lastMove = null;
+        let moves = 0;
+        const MIN_MOVES = 30;
+
+        // Loop until we have done enough moves AND the puzzle is not solved
+        while (moves < MIN_MOVES || this.checkFlowConnection()) {
             const rOrC = Math.random() > 0.5;
             const idx = Math.floor(Math.random() * GRID_SIZE);
-            const input = this.hand[0];
+
+            // Check against last move to prevent immediate undo
+            // If we just moved ROW 2 EAST, avoid ROW 2 WEST
+            if (lastMove) {
+                if (rOrC === lastMove.isRow && idx === lastMove.idx) {
+                    continue; // Skip and retry
+                }
+            }
+
+            const handIndex = 0; // Using first slot for scrambling
+            const input = this.hand[handIndex];
             let pop;
+            let dir;
+            let isRow = false;
 
             if (rOrC) {
-                const dir = (Math.random() > 0.5) ? DIRECTIONS.EAST : DIRECTIONS.WEST;
+                // Row
+                dir = (Math.random() > 0.5) ? DIRECTIONS.EAST : DIRECTIONS.WEST;
                 pop = this.grid.shiftRow(idx, dir, input);
+                isRow = true;
             } else {
-                const dir = (Math.random() > 0.5) ? DIRECTIONS.SOUTH : DIRECTIONS.NORTH;
+                // Col
+                dir = (Math.random() > 0.5) ? DIRECTIONS.SOUTH : DIRECTIONS.NORTH;
                 pop = this.grid.shiftCol(idx, dir, input);
+                isRow = false;
             }
-            this.hand[0] = pop;
+            this.hand[handIndex] = pop;
+
+            lastMove = { isRow, idx, dir };
+            moves++;
+
+            // Safety break to prevent infinite loops if something is weird
+            if (moves > 100) break;
         }
 
         // 3. Save this state as the "Initial State" for this level
@@ -326,12 +356,14 @@ class Game {
         });
 
         this.isSolved = false;
+        this.history = []; // Clear history
         this.messageArea.textContent = "Level Reset.";
         this.render();
     }
 
-    async pushMove(row, col, direction, handIndex = 0) {
+    async pushMove(row, col, direction, handIndex = 0, isUndo = false) {
         if (this.isAnimating) return;
+        if (this.isSolved && !isUndo) return; // Allow undo even if solved (to unsolve)
 
         // Validate handIndex
         if (handIndex < 0 || handIndex >= this.hand.length) return;
@@ -361,16 +393,41 @@ class Game {
             poppedTile = this.grid.shiftRow(row, direction, inputTile);
         }
 
+        // Record History (if not an undo operation)
+        if (!isUndo) {
+            this.history.push({
+                row, col, direction, handIndex,
+                poppedTile: poppedTile // We need to know what to push back in
+            });
+        }
+
         // RECYCLE: Popped tile goes to the emptied hand slot
         this.hand[handIndex] = poppedTile;
 
         // Check connection for Lock
         if (this.checkFlowConnection()) {
             this.isSolved = true;
+        } else {
+            this.isSolved = false; // Unsolve if we broke the link
         }
 
         this.render();
         this.isAnimating = false;
+    }
+
+    async undoMove() {
+        if (this.isAnimating || this.history.length === 0) return;
+
+        const lastMove = this.history.pop();
+        const { row, col, direction, handIndex } = lastMove;
+
+        // Calculate Reverse Direction
+        // N(0) <-> S(2), E(1) <-> W(3)
+        const reverseDir = (direction + 2) % 4;
+
+        // Perform the reverse move
+        // We set isUndo = true to prevent adding this reverse move to history
+        await this.pushMove(row, col, reverseDir, handIndex, true);
     }
 
     // New method to check if Source connects to Sink using traceFlow
