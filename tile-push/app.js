@@ -29,6 +29,7 @@ class Tile {
     constructor(typeObj, rotation = 0) {
         this.type = typeObj;
         this.rotation = rotation; // 0, 1, 2, 3 (x 90deg)
+        this.locked = false; // New: Locked property
     }
 
     // Get effective connections after rotation
@@ -43,7 +44,9 @@ class Tile {
     }
 
     clone() {
-        return new Tile(this.type, this.rotation);
+        const t = new Tile(this.type, this.rotation);
+        t.locked = this.locked;
+        return t;
     }
 }
 
@@ -87,6 +90,34 @@ class Grid {
 
         // Sink (4,4): North.
         this.forceTile(4, 4, [MASK_N]);
+
+        // 3. Lock some tiles!
+        // Strategy: Lock 2 random tiles that are NOT source or sink.
+        // Solvability: Since we scramble by avoiding locked rows/cols, 
+        // if we lock a tile in the solution path, it stays correct.
+        // If we lock a background tile, it stays background.
+        // So it's always solvable.
+
+        let locksAdded = 0;
+        const targetLocks = 2; // Number of locked tiles
+        let safety = 0;
+
+        while (locksAdded < targetLocks && safety < 100) {
+            safety++;
+            const r = Math.floor(Math.random() * this.height);
+            const c = Math.floor(Math.random() * this.width);
+
+            // Don't lock Source or Sink (visual clarity)
+            if (r === this.source.r && c === this.source.c) continue;
+            if (r === this.sink.r && c === this.sink.c) continue;
+
+            // Don't re-lock
+            if (this.cells[r][c].locked) continue;
+
+            // Lock it
+            this.cells[r][c].locked = true;
+            locksAdded++;
+        }
     }
 
     forceTile(r, c, requiredMasks) {
@@ -269,12 +300,26 @@ class Game {
             const idx = Math.floor(Math.random() * GRID_SIZE);
 
             // Check against last move to prevent immediate undo
-            // If we just moved ROW 2 EAST, avoid ROW 2 WEST
             if (lastMove) {
                 if (rOrC === lastMove.isRow && idx === lastMove.idx) {
                     continue; // Skip and retry
                 }
             }
+
+            // CHECK LOCKED TILES
+            // If any tile in the target row/col is locked, we CANNOT move it.
+            let isLocked = false;
+            if (rOrC) { // Row
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (this.grid.cells[idx][c].locked) isLocked = true;
+                }
+            } else { // Col
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    if (this.grid.cells[r][idx].locked) isLocked = true;
+                }
+            }
+
+            if (isLocked) continue; // Skip this move
 
             const handIndex = 0; // Using first slot for scrambling
             const input = this.hand[handIndex];
@@ -363,14 +408,35 @@ class Game {
 
     async pushMove(row, col, direction, handIndex = 0, isUndo = false) {
         if (this.isAnimating) return;
-        if (this.isSolved && !isUndo) return; // Allow undo even if solved (to unsolve)
+        if (this.isSolved && !isUndo) return;
 
         // Validate handIndex
         if (handIndex < 0 || handIndex >= this.hand.length) return;
 
-        // Clear message if it was just "Scrambled!"
+        // Clear message
         if (this.messageArea.textContent.includes("Scrambled")) {
             this.messageArea.textContent = "";
+        }
+
+        // CHECK LOCKED TILES
+        // If row/col has a locked tile, block move
+        let isLocked = false;
+        if (row !== null) {
+            // Check Row
+            for (let c = 0; c < GRID_SIZE; c++) {
+                if (this.grid.cells[row][c].locked) isLocked = true;
+            }
+        } else if (col !== null) {
+            // Check Col
+            for (let r = 0; r < GRID_SIZE; r++) {
+                if (this.grid.cells[r][col].locked) isLocked = true;
+            }
+        }
+
+        if (isLocked) {
+            // TODO: Visual feedback? Shake?
+            // console.log("Blocked by lock!");
+            return;
         }
 
         this.isAnimating = true;
@@ -680,6 +746,10 @@ class Game {
                     const gridC = c - 1;
                     const tile = this.grid.cells[gridR][gridC];
                     const el = this.createTileElement(tile);
+
+                    if (tile.locked) {
+                        el.classList.add('locked');
+                    }
 
                     el.style.gridRowStart = r + 1;
                     el.style.gridColumnStart = c + 1;
