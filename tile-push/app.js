@@ -591,7 +591,8 @@ class Game {
                     btn.style.gridColumnStart = c + 1;
 
                     const gridCol = c - 1;
-                    btn.onclick = () => this.pushMove(null, gridCol, dir);
+                    // Click removed to enforce Drag & Drop
+                    // btn.onclick = () => this.pushMove(null, gridCol, dir);
 
                     // Drag & Drop
                     this.addDragEvents(btn, null, gridCol, dir);
@@ -609,7 +610,8 @@ class Game {
                     btn.style.gridColumnStart = c + 1;
 
                     const gridRow = r - 1;
-                    btn.onclick = () => this.pushMove(gridRow, null, dir);
+                    // Click removed to enforce Drag & Drop
+                    // btn.onclick = () => this.pushMove(gridRow, null, dir);
 
                     // Drag & Drop
                     this.addDragEvents(btn, gridRow, null, dir);
