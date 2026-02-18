@@ -16,6 +16,23 @@
     --gap: 4px;
 }
 
+@keyframes pulse-glow {
+    0% {
+        box-shadow: 0 0 5px var(--pipe-active);
+        filter: brightness(1);
+    }
+
+    50% {
+        box-shadow: 0 0 15px var(--pipe-active);
+        filter: brightness(1.3);
+    }
+
+    100% {
+        box-shadow: 0 0 5px var(--pipe-active);
+        filter: brightness(1);
+    }
+}
+
 * {
     box-sizing: border-box;
     user-select: none;
@@ -42,15 +59,18 @@ body {
 }
 
 header {
-    text-align: center;
+    /* Hidden visual title, or minimal */
+    display: none;
 }
 
+/* 
 h1 {
     margin: 0;
     font-size: 2.5rem;
     color: var(--accent-color);
     text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
-}
+} 
+*/
 
 .game-area {
     display: flex;
@@ -196,6 +216,16 @@ h1 {
     background-color: var(--pipe-active);
 }
 
+/* Active Flow Style (Recursive/Traced) */
+.pipe.flow-active,
+.pipe.flow-active .pipe-arm {
+    background-color: var(--pipe-active);
+    box-shadow: 0 0 8px var(--pipe-active);
+    animation: pulse-glow 2s infinite;
+    z-index: 2;
+    /* Pop above normal pipes */
+}
+
 /* Directions */
 .pipe-arm.top {
     width: 30%;
@@ -254,8 +284,11 @@ h1 {
 }
 
 .controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
     display: flex;
-    gap: 15px;
+    gap: 10px;
 }
 
 .btn {

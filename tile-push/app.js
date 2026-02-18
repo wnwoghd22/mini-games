@@ -227,7 +227,13 @@ class Game {
             this.hand.push(this.grid.randomTile());
         }
 
+        this.hand = [];
+        for (let i = 0; i < 3; i++) {
+            this.hand.push(this.grid.randomTile());
+        }
+
         this.isAnimating = false;
+        this.isSolved = false;
 
         this.initUI();
         this.scrambleGame();
@@ -318,13 +324,23 @@ class Game {
         // RECYCLE: Popped tile goes to the emptied hand slot
         this.hand[handIndex] = poppedTile;
 
-        if (this.grid.checkWin()) {
-            this.messageArea.textContent = "CONNECTED! FLOW STABLE.";
-            // Can add visual flair here
+        // Check connection for Lock
+        if (this.checkFlowConnection()) {
+            this.isSolved = true;
         }
 
         this.render();
         this.isAnimating = false;
+    }
+
+    // New method to check if Source connects to Sink using traceFlow
+    checkFlowConnection() {
+        // We can reuse traceFlow to see if Sink is in the connected set
+        const connectedSet = this.traceFlow();
+        const sinkKey = `${this.sinkPos.r},${this.sinkPos.c}`;
+        // But we also need to ensure the Sink Tile *itself* connects back to the Flow?
+        // traceFlow handles connectivity. If sink is in set, it's connected.
+        return connectedSet.has(sinkKey);
     }
 
     async animateShift(row, col, direction, inputTile) {
@@ -410,6 +426,51 @@ class Game {
     render() {
         this.renderGrid();
         this.renderHand();
+    }
+
+    // Traverse from Source and return Set of "r,c" that are connected
+    traceFlow() {
+        const connected = new Set();
+        const queue = [this.sourcePos]; // {r,c}
+        const startKey = `${this.sourcePos.r},${this.sourcePos.c}`;
+        connected.add(startKey);
+
+        const visited = new Set();
+        visited.add(startKey);
+
+        while (queue.length > 0) {
+            const curr = queue.shift();
+            const currTile = this.grid.cells[curr.r][curr.c];
+            const currConns = currTile.getConnections();
+
+            // Check neighbors
+            const neighbors = [
+                { r: curr.r - 1, c: curr.c, dir: DIRECTIONS.NORTH, myBit: MASK_N, oppBit: MASK_S },
+                { r: curr.r + 1, c: curr.c, dir: DIRECTIONS.SOUTH, myBit: MASK_S, oppBit: MASK_N },
+                { r: curr.r, c: curr.c - 1, dir: DIRECTIONS.WEST, myBit: MASK_W, oppBit: MASK_E },
+                { r: curr.r, c: curr.c + 1, dir: DIRECTIONS.EAST, myBit: MASK_E, oppBit: MASK_W },
+            ];
+
+            for (let n of neighbors) {
+                // Bounds check
+                if (n.r >= 0 && n.r < GRID_SIZE && n.c >= 0 && n.c < GRID_SIZE) {
+                    // Check if current tile connects to neighbor
+                    if (currConns & n.myBit) {
+                        const neighborTile = this.grid.cells[n.r][n.c];
+                        // Check if neighbor connects back
+                        if (neighborTile.getConnections() & n.oppBit) {
+                            const key = `${n.r},${n.c}`;
+                            if (!visited.has(key)) {
+                                visited.add(key);
+                                connected.add(key);
+                                queue.push({ r: n.r, c: n.c });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return connected;
     }
 
     renderHand() {
@@ -523,6 +584,13 @@ class Game {
 
                     el.style.gridRowStart = r + 1;
                     el.style.gridColumnStart = c + 1;
+
+                    // Apply Glow if part of active flow
+                    const connectedSet = this.traceFlow();
+                    if (connectedSet.has(`${gridR},${gridC}`)) {
+                        const pipes = el.querySelectorAll('.pipe');
+                        pipes.forEach(p => p.classList.add('flow-active'));
+                    }
 
 
 
