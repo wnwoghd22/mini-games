@@ -3,12 +3,15 @@
     --board-bg: #1e293b;
     --tile-bg: #334155;
     --pipe-color: #64748b;
-    --pipe-active: #0ea5e9; /* Neon Blue */
-    --pipe-source: #22c55e; /* Green */
-    --pipe-sink: #ef4444;   /* Red */
+    --pipe-active: #0ea5e9;
+    /* Neon Blue */
+    --pipe-source: #22c55e;
+    /* Green */
+    --pipe-sink: #ef4444;
+    /* Red */
     --accent-color: #38bdf8;
     --text-color: #f1f5f9;
-    
+
     --cell-size: 60px;
     --gap: 4px;
 }
@@ -67,6 +70,9 @@ h1 {
     padding: var(--gap);
     border-radius: 12px;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    /* Mask tiles sliding out */
+    position: relative;
 }
 
 .cell {
@@ -79,12 +85,21 @@ h1 {
     align-items: center;
     position: relative;
     transition: transform 0.2s ease-in-out;
+    z-index: 1;
+    /* Ensure tiles are above background but below UI overlays if any */
+}
+
+/* Slide Animation Classes */
+.cell.sliding {
+    transition: transform 0.3s ease-out;
+    z-index: 10;
 }
 
 .control-btn {
     width: 100%;
     height: 100%;
-    background: transparent;
+    background-color: var(--board-bg);
+    /* Match board to mask sliding tiles */
     border: none;
     color: var(--accent-color);
     font-size: 1.5rem;
@@ -93,10 +108,16 @@ h1 {
     justify-content: center;
     align-items: center;
     transition: all 0.2s;
+    z-index: 20;
+    /* Above sliding tiles */
+    position: relative;
+    border-radius: 4px;
+    /* Optional: match cell radius */
 }
 
 .control-btn:hover {
-    background-color: rgba(56, 189, 248, 0.1);
+    background-color: rgba(56, 189, 248, 0.2);
+    /* Semi-transparent accent */
     color: #fff;
     text-shadow: 0 0 5px var(--accent-color);
 }
@@ -145,6 +166,7 @@ h1 {
     position: absolute;
     background-color: var(--pipe-color);
 }
+
 .pipe.connected .pipe-arm {
     background-color: var(--pipe-active);
 }
@@ -152,22 +174,26 @@ h1 {
 /* Directions */
 .pipe-arm.top {
     width: 30%;
-    height: 50%; /* Center to top */
+    height: 50%;
+    /* Center to top */
     top: 0;
     left: 35%;
 }
+
 .pipe-arm.bottom {
     width: 30%;
     height: 50%;
     bottom: 0;
     left: 35%;
 }
+
 .pipe-arm.left {
     height: 30%;
     width: 50%;
     left: 0;
     top: 35%;
 }
+
 .pipe-arm.right {
     height: 30%;
     width: 50%;
@@ -177,14 +203,30 @@ h1 {
 
 /* Start/End Markers */
 .marker {
-    position: absolute;
-    width: 20%;
-    height: 20%;
+    position: relative;
+    /* Changed from absolute to overlap in grid */
+    width: 40%;
+    /* Make them slightly larger/visible */
+    height: 40%;
     border-radius: 50%;
-    z-index: 10;
+    z-index: 30;
+    /* Above buttons and sliding tiles */
+    pointer-events: none;
+    /* Allow clicking through to tiles */
+    justify-self: center;
+    align-self: center;
+    box-shadow: 0 0 15px currentColor;
 }
-.marker.source { background-color: var(--pipe-source); box-shadow: 0 0 8px var(--pipe-source); }
-.marker.sink { background-color: var(--pipe-sink); box-shadow: 0 0 8px var(--pipe-sink); }
+
+.marker.source {
+    background-color: var(--pipe-source);
+    box-shadow: 0 0 8px var(--pipe-source);
+}
+
+.marker.sink {
+    background-color: var(--pipe-sink);
+    box-shadow: 0 0 8px var(--pipe-sink);
+}
 
 .controls {
     display: flex;

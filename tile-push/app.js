@@ -23,6 +23,8 @@ const MASK_E = 2;
 const MASK_S = 4;
 const MASK_W = 8;
 
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 class Tile {
     constructor(typeObj, rotation = 0) {
         this.type = typeObj;
@@ -220,6 +222,8 @@ class Game {
         this.grid = new Grid(this.sourcePos, this.sinkPos);
         this.hand = [this.grid.randomTile()];
 
+        this.isAnimating = false;
+
         this.initUI();
         this.scrambleGame();
     }
@@ -271,13 +275,24 @@ class Game {
         this.render();
     }
 
-    pushMove(row, col, direction) {
+    async pushMove(row, col, direction) {
+        if (this.isAnimating) return;
+
         // Clear message if it was just "Scrambled!"
         if (this.messageArea.textContent.includes("Scrambled")) {
             this.messageArea.textContent = "";
         }
 
-        const inputTile = this.hand.shift();
+        this.isAnimating = true;
+
+        // 1. Animate
+        // We peek at the incoming tile (hand[0]) for the visual
+        const inputTile = this.hand[0];
+        await this.animateShift(row, col, direction, inputTile);
+
+        // 2. Logic Update
+        // Actually perform the shift
+        this.hand.shift(); // Remove the one we used
         let poppedTile;
 
         if (direction === DIRECTIONS.SOUTH || direction === DIRECTIONS.NORTH) {
@@ -294,6 +309,87 @@ class Game {
         }
 
         this.render();
+        this.isAnimating = false;
+    }
+
+    async animateShift(row, col, direction, inputTile) {
+        // Gather the 5 DOM elements for this row/col
+        // Grid is 7x7. Inner 5x5 starts at index 1.
+        // Board children: 0..48.
+        // inner (r, c) maps to visual (r+1, c+1)
+
+        const children = Array.from(this.boardContainer.children);
+        const movingElements = [];
+        const gap = 4; // match CSS
+        const cellSize = 60; // match CSS
+        const moveDist = cellSize + gap;
+
+        // Calculate visual indices
+        if (row !== null) {
+            // Row shift. Row index 'row' (0..4) -> Visual Row constant = row + 1
+            // Columns 1..5 are the tiles.
+            const visualRow = row + 1;
+            for (let c = 1; c <= 5; c++) {
+                const idx = visualRow * 7 + c;
+                movingElements.push(children[idx]);
+            }
+        } else {
+            // Col shift. Col index 'col' (0..4) -> Visual Col constant = col + 1
+            const visualCol = col + 1;
+            for (let r = 1; r <= 5; r++) {
+                const idx = r * 7 + visualCol;
+                movingElements.push(children[idx]);
+            }
+        }
+
+        // Create the "Entering" tile visually
+        const newEl = this.createTileElement(inputTile);
+        newEl.classList.add('sliding'); // ensure z-index
+
+        // Determine start position for newEl
+        // It should be placed in the button slot from where it enters
+        let startR, startC;
+        let transX = 0, transY = 0;
+
+        if (direction === DIRECTIONS.EAST) {
+            // Enters from Left (Col 0), moves Right
+            startR = row + 1; startC = 0;
+            transX = moveDist;
+        } else if (direction === DIRECTIONS.WEST) {
+            // Enters from Right (Col 6), moves Left
+            startR = row + 1; startC = 6;
+            transX = -moveDist;
+        } else if (direction === DIRECTIONS.SOUTH) {
+            // Enters from Top (Row 0), moves Down
+            startR = 0; startC = col + 1;
+            transY = moveDist;
+        } else if (direction === DIRECTIONS.NORTH) {
+            // Enters from Bottom (Row 6), moves Up
+            startR = 6; startC = col + 1;
+            transY = -moveDist;
+        }
+
+        // Position newEl on grid
+        // CSS Grid lines are 1-based. Slot (r,c) 0-based -> Grid Line r+1 / c+1
+        newEl.style.gridRowStart = startR + 1;
+        newEl.style.gridColumnStart = startC + 1;
+
+        this.boardContainer.appendChild(newEl);
+        movingElements.push(newEl);
+
+        // Force Reflow
+        newEl.offsetHeight;
+
+        // Apply Transition
+        movingElements.forEach(el => {
+            el.classList.add('sliding');
+            el.style.transform = `translate(${transX}px, ${transY}px)`;
+        });
+
+        // Wait for animation
+        await delay(300);
+
+        // No cleanup needed: render() will clear boardContainer immediately after
     }
 
     render() {
@@ -345,6 +441,8 @@ class Game {
                     // Corner - empty
                     const div = document.createElement('div');
                     this.boardContainer.appendChild(div);
+                    div.style.gridRowStart = r + 1;
+                    div.style.gridColumnStart = c + 1;
                 } else if (isEdgeRow) {
                     // Top/Bottom Buttons
                     const btn = document.createElement('button');
@@ -352,6 +450,9 @@ class Game {
                     const dir = (r === 0) ? DIRECTIONS.SOUTH : DIRECTIONS.NORTH;
                     const arrow = (r === 0) ? '⬇' : '⬆';
                     btn.textContent = arrow;
+
+                    btn.style.gridRowStart = r + 1;
+                    btn.style.gridColumnStart = c + 1;
 
                     const gridCol = c - 1;
                     btn.onclick = () => this.pushMove(null, gridCol, dir);
@@ -365,6 +466,9 @@ class Game {
                     const arrow = (c === 0) ? '➡' : '⬅';
                     btn.textContent = arrow;
 
+                    btn.style.gridRowStart = r + 1;
+                    btn.style.gridColumnStart = c + 1;
+
                     const gridRow = r - 1;
                     btn.onclick = () => this.pushMove(gridRow, null, dir);
 
@@ -376,22 +480,30 @@ class Game {
                     const tile = this.grid.cells[gridR][gridC];
                     const el = this.createTileElement(tile);
 
-                    // Add Source/Sink markers
-                    if (gridR === this.sourcePos.r && gridC === this.sourcePos.c) {
-                        const marker = document.createElement('div');
-                        marker.className = 'marker source';
-                        el.appendChild(marker);
-                    }
-                    if (gridR === this.sinkPos.r && gridC === this.sinkPos.c) {
-                        const marker = document.createElement('div');
-                        marker.className = 'marker sink';
-                        el.appendChild(marker);
-                    }
+                    el.style.gridRowStart = r + 1;
+                    el.style.gridColumnStart = c + 1;
+
+
 
                     this.boardContainer.appendChild(el);
                 }
             }
         }
+
+        // Add Source/Sink markers (Fixed positions, overlay)
+        // Source: (0,0) -> Grid (2,2)
+        const sourceMarker = document.createElement('div');
+        sourceMarker.className = 'marker source';
+        sourceMarker.style.gridRowStart = 2;
+        sourceMarker.style.gridColumnStart = 2;
+        this.boardContainer.appendChild(sourceMarker);
+
+        // Sink: (4,4) -> Grid (6,6)
+        const sinkMarker = document.createElement('div');
+        sinkMarker.className = 'marker sink';
+        sinkMarker.style.gridRowStart = 6;
+        sinkMarker.style.gridColumnStart = 6;
+        this.boardContainer.appendChild(sinkMarker);
     }
 }
 
