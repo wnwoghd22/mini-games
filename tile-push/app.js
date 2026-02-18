@@ -227,10 +227,6 @@ class Game {
             this.hand.push(this.grid.randomTile());
         }
 
-        this.hand = [];
-        for (let i = 0; i < 3; i++) {
-            this.hand.push(this.grid.randomTile());
-        }
 
         this.isAnimating = false;
         this.isSolved = false;
@@ -240,13 +236,7 @@ class Game {
     }
 
     initUI() {
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            // Reset just reloads the scramble? Or sets to solved?
-            // "Reset Level" usually means go to initial state of THIS level.
-            // But we generate random levels.
-            // Let's make reset = New Game / Scramble.
-            this.scrambleGame();
-        });
+        document.getElementById('btn-reset').addEventListener('click', () => this.resetLevel());
         document.getElementById('btn-scramble').addEventListener('click', () => this.scrambleGame());
     }
 
@@ -256,37 +246,87 @@ class Game {
         for (let i = 0; i < 3; i++) {
             this.hand.push(this.grid.randomTile());
         }
+        this.isSolved = false;
         this.messageArea.textContent = "";
         this.render();
     }
 
     scrambleGame() {
-        // Start from solved state
+        // 1. Create a new random solvable state
         this.resetGame();
 
-        // Perform random pushes to scramble
-        // NOTE: We must update the grid AND the hand.
-        // For scrambling, we just use the first tile in hand and recycle it back to slot 0 (simplification)
+        // 2. Perform random pushes to scramble
         for (let i = 0; i < 30; i++) {
             const rOrC = Math.random() > 0.5;
             const idx = Math.floor(Math.random() * GRID_SIZE);
-            const input = this.hand[0]; // Use first slot
+            const input = this.hand[0];
             let pop;
 
             if (rOrC) {
-                // Shift ROW
-                // Directions for Row Shift: EAST (Right) or WEST (Left)
                 const dir = (Math.random() > 0.5) ? DIRECTIONS.EAST : DIRECTIONS.WEST;
                 pop = this.grid.shiftRow(idx, dir, input);
             } else {
-                // Shift COL
-                // Directions for Col Shift: SOUTH (Down) or NORTH (Up)
                 const dir = (Math.random() > 0.5) ? DIRECTIONS.SOUTH : DIRECTIONS.NORTH;
                 pop = this.grid.shiftCol(idx, dir, input);
             }
-            this.hand[0] = pop; // Recycle to slot 0
+            this.hand[0] = pop;
         }
+
+        // 3. Save this state as the "Initial State" for this level
+        this.saveState();
+
         this.messageArea.textContent = "Scrambled! Good Luck.";
+        this.render();
+    }
+
+    saveState() {
+        // Serialize Grid: Save type name and rotation
+        const gridState = this.grid.cells.map(row =>
+            row.map(cell => ({
+                type: cell.type.name.toUpperCase(), // Store key for TILE_TYPES
+                rotation: cell.rotation
+            }))
+        );
+
+        // Serialize Hand
+        const handState = this.hand.map(tile => ({
+            type: tile.type.name.toUpperCase(),
+            rotation: tile.rotation
+        }));
+
+        this.initialState = {
+            grid: gridState,
+            hand: handState
+        };
+    }
+
+    resetLevel() {
+        if (!this.initialState) return;
+
+        // Restore Grid
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                const saved = this.initialState.grid[r][c];
+                // TILE_TYPES keys: STRAIGHT, CORNER, T_SHAPE, CROSS
+                // We stored name: 'straight', etc. Need to map back or store keys.
+                // Let's rely on name matching or just store the TILE_TYPES key.
+                // Correction: In saveState I will store the TILE_TYPES key (e.g. 'STRAIGHT').
+                // But cell.type.name is lowercase 'straight'. 
+                // Let's fix saveState to find the key.
+                const typeObj = TILE_TYPES[saved.type] || TILE_TYPES.STRAIGHT;
+                this.grid.cells[r][c] = new Tile(typeObj, saved.rotation);
+            }
+        }
+
+        // Restore Hand
+        this.hand = [];
+        this.initialState.hand.forEach(saved => {
+            const typeObj = TILE_TYPES[saved.type] || TILE_TYPES.STRAIGHT;
+            this.hand.push(new Tile(typeObj, saved.rotation));
+        });
+
+        this.isSolved = false;
+        this.messageArea.textContent = "Level Reset.";
         this.render();
     }
 
