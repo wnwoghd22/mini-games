@@ -115,12 +115,17 @@ h1 {
     /* Optional: match cell radius */
 }
 
-.control-btn:hover {
+.control-btn:hover,
+.control-btn.drag-over {
     background-color: rgba(56, 189, 248, 0.2);
     /* Semi-transparent accent */
     color: #fff;
     text-shadow: 0 0 5px var(--accent-color);
+    transform: scale(1.1);
+    /* Slight pop */
 }
+
+
 
 .control-btn:disabled {
     color: #475569;
@@ -132,16 +137,36 @@ h1 {
 }
 
 .hand-container {
-    width: var(--cell-size);
-    height: var(--cell-size);
+    display: flex;
+    /* Changed from just width/height to flex container */
+    gap: 10px;
+    padding: 10px;
     background-color: var(--board-bg);
     border: 2px solid var(--accent-color);
     border-radius: 8px;
     margin: 10px auto;
-    display: flex;
     justify-content: center;
     align-items: center;
     box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+}
+
+.hand-tile {
+    width: var(--cell-size);
+    height: var(--cell-size);
+    background-color: var(--tile-bg);
+    border-radius: 4px;
+    position: relative;
+    cursor: grab;
+    transition: transform 0.2s;
+}
+
+.hand-tile:active {
+    cursor: grabbing;
+}
+
+.hand-tile.dragging {
+    opacity: 0.5;
+    transform: scale(0.9);
 }
 
 /* Pipe Styles */

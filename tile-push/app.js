@@ -220,7 +220,12 @@ class Game {
         this.sinkPos = { r: 4, c: 4 };
 
         this.grid = new Grid(this.sourcePos, this.sinkPos);
-        this.hand = [this.grid.randomTile()];
+
+        // Hand now holds 3 tiles
+        this.hand = [];
+        for (let i = 0; i < 3; i++) {
+            this.hand.push(this.grid.randomTile());
+        }
 
         this.isAnimating = false;
 
@@ -241,7 +246,10 @@ class Game {
 
     resetGame() {
         this.grid.initSolvable();
-        this.hand = [this.grid.randomTile()];
+        this.hand = [];
+        for (let i = 0; i < 3; i++) {
+            this.hand.push(this.grid.randomTile());
+        }
         this.messageArea.textContent = "";
         this.render();
     }
@@ -252,10 +260,11 @@ class Game {
 
         // Perform random pushes to scramble
         // NOTE: We must update the grid AND the hand.
+        // For scrambling, we just use the first tile in hand and recycle it back to slot 0 (simplification)
         for (let i = 0; i < 30; i++) {
             const rOrC = Math.random() > 0.5;
             const idx = Math.floor(Math.random() * GRID_SIZE);
-            const input = this.hand.shift();
+            const input = this.hand[0]; // Use first slot
             let pop;
 
             if (rOrC) {
@@ -269,14 +278,17 @@ class Game {
                 const dir = (Math.random() > 0.5) ? DIRECTIONS.SOUTH : DIRECTIONS.NORTH;
                 pop = this.grid.shiftCol(idx, dir, input);
             }
-            this.hand.push(pop);
+            this.hand[0] = pop; // Recycle to slot 0
         }
         this.messageArea.textContent = "Scrambled! Good Luck.";
         this.render();
     }
 
-    async pushMove(row, col, direction) {
+    async pushMove(row, col, direction, handIndex = 0) {
         if (this.isAnimating) return;
+
+        // Validate handIndex
+        if (handIndex < 0 || handIndex >= this.hand.length) return;
 
         // Clear message if it was just "Scrambled!"
         if (this.messageArea.textContent.includes("Scrambled")) {
@@ -286,13 +298,15 @@ class Game {
         this.isAnimating = true;
 
         // 1. Animate
-        // We peek at the incoming tile (hand[0]) for the visual
-        const inputTile = this.hand[0];
+        // We peek at the incoming tile (hand[handIndex]) for the visual
+        const inputTile = this.hand[handIndex];
+
+        // TODO: Animate the specific tile from hand to the edge?
+        // For now, simple slide from edge is fine.
         await this.animateShift(row, col, direction, inputTile);
 
         // 2. Logic Update
         // Actually perform the shift
-        this.hand.shift(); // Remove the one we used
         let poppedTile;
 
         if (direction === DIRECTIONS.SOUTH || direction === DIRECTIONS.NORTH) {
@@ -301,7 +315,8 @@ class Game {
             poppedTile = this.grid.shiftRow(row, direction, inputTile);
         }
 
-        this.hand.push(poppedTile);
+        // RECYCLE: Popped tile goes to the emptied hand slot
+        this.hand[handIndex] = poppedTile;
 
         if (this.grid.checkWin()) {
             this.messageArea.textContent = "CONNECTED! FLOW STABLE.";
@@ -399,8 +414,28 @@ class Game {
 
     renderHand() {
         this.handContainer.innerHTML = '';
-        const tileView = this.createTileElement(this.hand[0]);
-        this.handContainer.appendChild(tileView);
+
+        this.hand.forEach((tile, index) => {
+            const tileView = this.createTileElement(tile);
+            tileView.classList.add('hand-tile');
+            // Make draggable
+            tileView.draggable = true;
+            tileView.dataset.handIndex = index;
+
+            // Drag Events
+            tileView.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', index);
+                e.dataTransfer.effectAllowed = 'move';
+                // Add class for visual feedback if needed
+                setTimeout(() => tileView.classList.add('dragging'), 0);
+            });
+
+            tileView.addEventListener('dragend', () => {
+                tileView.classList.remove('dragging');
+            });
+
+            this.handContainer.appendChild(tileView);
+        });
     }
 
     createTileElement(tile) {
@@ -457,6 +492,9 @@ class Game {
                     const gridCol = c - 1;
                     btn.onclick = () => this.pushMove(null, gridCol, dir);
 
+                    // Drag & Drop
+                    this.addDragEvents(btn, null, gridCol, dir);
+
                     this.boardContainer.appendChild(btn);
                 } else if (isEdgeCol) {
                     // Left/Right Buttons
@@ -471,6 +509,9 @@ class Game {
 
                     const gridRow = r - 1;
                     btn.onclick = () => this.pushMove(gridRow, null, dir);
+
+                    // Drag & Drop
+                    this.addDragEvents(btn, gridRow, null, dir);
 
                     this.boardContainer.appendChild(btn);
                 } else {
@@ -504,6 +545,26 @@ class Game {
         sinkMarker.style.gridRowStart = 6;
         sinkMarker.style.gridColumnStart = 6;
         this.boardContainer.appendChild(sinkMarker);
+    }
+
+    addDragEvents(target, row, col, dir) {
+        target.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Allow drop
+            target.classList.add('drag-over');
+        });
+
+        target.addEventListener('dragleave', () => {
+            target.classList.remove('drag-over');
+        });
+
+        target.addEventListener('drop', (e) => {
+            e.preventDefault();
+            target.classList.remove('drag-over');
+            const handIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            if (!isNaN(handIndex)) {
+                this.pushMove(row, col, dir, handIndex);
+            }
+        });
     }
 }
 
