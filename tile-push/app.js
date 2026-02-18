@@ -355,11 +355,12 @@ class Game {
     }
 
     saveState() {
-        // Serialize Grid: Save type name and rotation
+        // Serialize Grid: Save type name, rotation, AND LOCKED status
         const gridState = this.grid.cells.map(row =>
             row.map(cell => ({
                 type: cell.type.name.toUpperCase(), // Store key for TILE_TYPES
-                rotation: cell.rotation
+                rotation: cell.rotation,
+                locked: cell.locked
             }))
         );
 
@@ -383,13 +384,10 @@ class Game {
             for (let c = 0; c < GRID_SIZE; c++) {
                 const saved = this.initialState.grid[r][c];
                 // TILE_TYPES keys: STRAIGHT, CORNER, T_SHAPE, CROSS
-                // We stored name: 'straight', etc. Need to map back or store keys.
-                // Let's rely on name matching or just store the TILE_TYPES key.
-                // Correction: In saveState I will store the TILE_TYPES key (e.g. 'STRAIGHT').
-                // But cell.type.name is lowercase 'straight'. 
-                // Let's fix saveState to find the key.
                 const typeObj = TILE_TYPES[saved.type] || TILE_TYPES.STRAIGHT;
-                this.grid.cells[r][c] = new Tile(typeObj, saved.rotation);
+                const tile = new Tile(typeObj, saved.rotation);
+                tile.locked = saved.locked; // Restore lock
+                this.grid.cells[r][c] = tile;
             }
         }
 
