@@ -3,12 +3,7 @@
     --board-bg: #1e293b;
     --tile-bg: #334155;
     --pipe-color: #64748b;
-    --pipe-active: #0ea5e9;
-    /* Neon Blue */
-    --pipe-source: #22c55e;
-    /* Green */
-    --pipe-sink: #ef4444;
-    /* Red */
+    --pipe-active: #0ea5e9; /* fallback; overridden per-element inline */
     --accent-color: #38bdf8;
     --text-color: #f1f5f9;
 
@@ -275,31 +270,31 @@ h1 {
     top: 35%;
 }
 
-/* Start/End Markers */
+/* Start/End Markers — color driven by inline `color` style (set per pair in JS) */
 .marker {
     position: relative;
-    /* Changed from absolute to overlap in grid */
     width: 40%;
-    /* Make them slightly larger/visible */
     height: 40%;
-    border-radius: 50%;
     z-index: 30;
-    /* Above buttons and sliding tiles */
     pointer-events: none;
-    /* Allow clicking through to tiles */
     justify-self: center;
     align-self: center;
-    box-shadow: 0 0 15px currentColor;
 }
 
+/* Source: filled circle */
 .marker.source {
-    background-color: var(--pipe-source);
-    box-shadow: 0 0 8px var(--pipe-source);
+    border-radius: 50%;
+    background-color: currentColor;
+    box-shadow: 0 0 10px currentColor;
 }
 
+/* Sink: hollow rotated square (diamond outline) */
 .marker.sink {
-    background-color: var(--pipe-sink);
-    box-shadow: 0 0 8px var(--pipe-sink);
+    border-radius: 4px;
+    background-color: transparent;
+    border: 3px solid currentColor;
+    box-shadow: 0 0 10px currentColor;
+    transform: rotate(45deg) scale(0.75);
 }
 
 .controls {
