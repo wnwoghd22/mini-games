@@ -26,6 +26,16 @@ const MASK_W = 8;
 // Color palette for flow pairs
 const PAIR_COLORS = ['#0ea5e9', '#f97316', '#a855f7', '#22c55e', '#ec4899'];
 
+const DIFFICULTIES = {
+    single: [
+        { id: 0, color: PAIR_COLORS[0], source: { r: 0, c: 0 }, sink: { r: 4, c: 4 } }
+    ],
+    double: [
+        { id: 0, color: PAIR_COLORS[0], source: { r: 0, c: 0 }, sink: { r: 2, c: 4 } },
+        { id: 1, color: PAIR_COLORS[1], source: { r: 4, c: 4 }, sink: { r: 2, c: 0 } },
+    ]
+};
+
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class Tile {
@@ -95,27 +105,39 @@ class Grid {
         }
     }
 
-    // Carve hardcoded non-overlapping paths for the two default pairs.
-    // Pair 0: (0,0) → row 0 east → col 4 south → (2,4)
-    // Pair 1: (4,4) → row 4 west → col 0 north → (2,0)
+    // Carve guaranteed paths depending on pair count.
     _carvePaths() {
-        // Pair 0
-        this.forceTile(0, 0, [MASK_E]);
-        this.forceTile(0, 1, [MASK_W, MASK_E]);
-        this.forceTile(0, 2, [MASK_W, MASK_E]);
-        this.forceTile(0, 3, [MASK_W, MASK_E]);
-        this.forceTile(0, 4, [MASK_W, MASK_S]);
-        this.forceTile(1, 4, [MASK_N, MASK_S]);
-        this.forceTile(2, 4, [MASK_N]);
+        if (this.pairs.length === 1) {
+            // Single pair: (0,0) → row 0 east → col 4 south → (4,4)
+            this.forceTile(0, 0, [MASK_E]);
+            this.forceTile(0, 1, [MASK_W, MASK_E]);
+            this.forceTile(0, 2, [MASK_W, MASK_E]);
+            this.forceTile(0, 3, [MASK_W, MASK_E]);
+            this.forceTile(0, 4, [MASK_W, MASK_S]);
+            this.forceTile(1, 4, [MASK_N, MASK_S]);
+            this.forceTile(2, 4, [MASK_N, MASK_S]);
+            this.forceTile(3, 4, [MASK_N, MASK_S]);
+            this.forceTile(4, 4, [MASK_N]);
+        } else {
+            // Double pair (non-overlapping):
+            // Pair 0: (0,0) → row 0 east → col 4 south → (2,4)
+            this.forceTile(0, 0, [MASK_E]);
+            this.forceTile(0, 1, [MASK_W, MASK_E]);
+            this.forceTile(0, 2, [MASK_W, MASK_E]);
+            this.forceTile(0, 3, [MASK_W, MASK_E]);
+            this.forceTile(0, 4, [MASK_W, MASK_S]);
+            this.forceTile(1, 4, [MASK_N, MASK_S]);
+            this.forceTile(2, 4, [MASK_N]);
 
-        // Pair 1
-        this.forceTile(4, 4, [MASK_W]);
-        this.forceTile(4, 3, [MASK_W, MASK_E]);
-        this.forceTile(4, 2, [MASK_W, MASK_E]);
-        this.forceTile(4, 1, [MASK_W, MASK_E]);
-        this.forceTile(4, 0, [MASK_E, MASK_N]);
-        this.forceTile(3, 0, [MASK_N, MASK_S]);
-        this.forceTile(2, 0, [MASK_S]);
+            // Pair 1: (4,4) → row 4 west → col 0 north → (2,0)
+            this.forceTile(4, 4, [MASK_W]);
+            this.forceTile(4, 3, [MASK_W, MASK_E]);
+            this.forceTile(4, 2, [MASK_W, MASK_E]);
+            this.forceTile(4, 1, [MASK_W, MASK_E]);
+            this.forceTile(4, 0, [MASK_E, MASK_N]);
+            this.forceTile(3, 0, [MASK_N, MASK_S]);
+            this.forceTile(2, 0, [MASK_S]);
+        }
     }
 
     forceTile(r, c, requiredMasks) {
@@ -183,11 +205,8 @@ class Game {
         this.handContainer  = document.getElementById('hand-container');
         this.messageArea    = document.getElementById('message-area');
 
-        // Flow pairs: each has a unique color, source, and sink position
-        this.pairs = [
-            { id: 0, color: PAIR_COLORS[0], source: { r: 0, c: 0 }, sink: { r: 2, c: 4 } },
-            { id: 1, color: PAIR_COLORS[1], source: { r: 4, c: 4 }, sink: { r: 2, c: 0 } },
-        ];
+        this.difficulty = 'single';
+        this.pairs = DIFFICULTIES[this.difficulty];
 
         this.grid = new Grid(this.pairs);
         this.hand = [];
@@ -205,6 +224,22 @@ class Game {
         document.getElementById('btn-undo').addEventListener('click',    () => this.undoMove());
         document.getElementById('btn-reset').addEventListener('click',   () => this.resetLevel());
         document.getElementById('btn-scramble').addEventListener('click', () => this.scrambleGame());
+        document.getElementById('btn-single').addEventListener('click', () => this.setDifficulty('single'));
+        document.getElementById('btn-double').addEventListener('click', () => this.setDifficulty('double'));
+        this._updateDifficultyUI();
+    }
+
+    _updateDifficultyUI() {
+        document.getElementById('btn-single').classList.toggle('active', this.difficulty === 'single');
+        document.getElementById('btn-double').classList.toggle('active', this.difficulty === 'double');
+    }
+
+    setDifficulty(key) {
+        if (!DIFFICULTIES[key] || this.difficulty === key) return;
+        this.difficulty = key;
+        this.pairs = DIFFICULTIES[key];
+        this._updateDifficultyUI();
+        this.scrambleGame();
     }
 
     resetGame() {
@@ -224,7 +259,7 @@ class Game {
         let moves    = 0;
         const MIN_MOVES = 30;
 
-        while (moves < MIN_MOVES || this.checkFlowConnection()) {
+        while (moves < MIN_MOVES || this._anyPairConnected()) {
             const rOrC = Math.random() > 0.5;
             const idx  = Math.floor(Math.random() * GRID_SIZE);
 
@@ -359,8 +394,9 @@ class Game {
         await this.pushMove(row, col, reverseDir, handIndex, true);
     }
 
-    // BFS from a single start position; returns Set of "r,c" keys reachable
-    traceFlowFrom(startPos) {
+    // BFS from a single start position; returns Set of "r,c" keys reachable.
+    // blockedPositions: Set of "r,c" keys treated as walls (other pairs' markers).
+    traceFlowFrom(startPos, blockedPositions = new Set()) {
         const connected = new Set();
         const visited   = new Set();
         const queue     = [startPos];
@@ -386,6 +422,7 @@ class Game {
                 const neighborTile = this.grid.cells[n.r][n.c];
                 if (!(neighborTile.getConnections() & n.oppBit)) continue;
                 const key = `${n.r},${n.c}`;
+                if (blockedPositions.has(key)) continue;
                 if (!visited.has(key)) {
                     visited.add(key);
                     connected.add(key);
@@ -396,22 +433,41 @@ class Game {
         return connected;
     }
 
-    // Returns Map<pairId, Set<string>> — one connected set per pair
+    // Returns Map<pairId, Set<string>> — one connected set per pair.
+    // Each pair's BFS is blocked by the other pairs' source/sink positions.
     traceFlows() {
+        const allMarkers = new Set(
+            this.pairs.flatMap(p => [
+                `${p.source.r},${p.source.c}`,
+                `${p.sink.r},${p.sink.c}`
+            ])
+        );
         const results = new Map();
         for (const pair of this.pairs) {
-            results.set(pair.id, this.traceFlowFrom(pair.source));
+            const blocked = new Set(allMarkers);
+            blocked.delete(`${pair.source.r},${pair.source.c}`);
+            blocked.delete(`${pair.sink.r},${pair.sink.c}`);
+            results.set(pair.id, this.traceFlowFrom(pair.source, blocked));
         }
         return results;
     }
 
     // True only when every pair's sink is reachable from its source
     checkFlowConnection() {
+        const flowSets = this.traceFlows();
         for (const pair of this.pairs) {
-            const connected = this.traceFlowFrom(pair.source);
-            if (!connected.has(`${pair.sink.r},${pair.sink.c}`)) return false;
+            if (!flowSets.get(pair.id).has(`${pair.sink.r},${pair.sink.c}`)) return false;
         }
         return true;
+    }
+
+    // True when at least one pair's source-sink is connected
+    _anyPairConnected() {
+        const flowSets = this.traceFlows();
+        for (const pair of this.pairs) {
+            if (flowSets.get(pair.id).has(`${pair.sink.r},${pair.sink.c}`)) return true;
+        }
+        return false;
     }
 
     async animateShift(row, col, direction, inputTile) {

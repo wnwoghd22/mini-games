@@ -348,7 +348,16 @@ h1 {
     color: #fff;
 }
 
+.btn.icon-btn.active {
+    background-color: var(--accent-color);
+    color: var(--bg-color);
+}
+
 .message-area {
     /* Hidden message area */
+    display: none;
+}
+
+#btn-double {
     display: none;
 }
