@@ -139,7 +139,6 @@ class Game {
 
         this.history = [];
         this.isSimulating = false;
-        this.isGameOver = false;
 
         this.hoverHex = null;
         this.hoverChain = [];
@@ -267,7 +266,7 @@ class Game {
     }
 
     handleClick(e, counterClockwise = false) {
-        if (this.isSimulating || this.isGameOver) return;
+        if (this.isSimulating) return;
 
         const cell = this.getHexAt(e.clientX, e.clientY);
         if (!cell || cell.isHole) return;
@@ -474,7 +473,7 @@ class Game {
     }
 
     simulate() {
-        if (this.isSimulating || this.isGameOver) return;
+        if (this.isSimulating) return;
         this.isSimulating = true;
         this.playBtn.disabled = true;
 
@@ -636,9 +635,6 @@ class Game {
                         endScale: 1,
                     };
                 });
-            } else {
-                this.isGameOver = true;
-                this.draw();
             }
         }
     }
@@ -659,7 +655,6 @@ class Game {
         this.history = [];
         this.score = 0;
         this.combo = 1;
-        this.isGameOver = false;
         this.scoreElement.innerText = '0';
         this.comboElement.innerText = 'x1';
         this.holeCounts = {};
@@ -691,10 +686,6 @@ class Game {
         }
 
         this.drawHoles();
-
-        if (this.isGameOver) {
-            this.drawGameOver();
-        }
     }
 
     drawHexBg(cell, isHighlighted) {
@@ -855,24 +846,6 @@ class Game {
         if (isReject) {
             this.ctx.restore();
         }
-    }
-
-    drawGameOver() {
-        this.ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        this.ctx.fillStyle = '#fff';
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.font = 'bold 48px Inter, sans-serif';
-        this.ctx.fillText('Game Over', this.canvas.width / 2, this.canvas.height / 2 - 20);
-
-        this.ctx.font = '24px Inter, sans-serif';
-        this.ctx.fillStyle = '#94a3b8';
-        this.ctx.fillText(`Final Score: ${this.score}`, this.canvas.width / 2, this.canvas.height / 2 + 30);
-
-        this.ctx.font = '18px Inter, sans-serif';
-        this.ctx.fillText('Click Reset to play again', this.canvas.width / 2, this.canvas.height / 2 + 70);
     }
 }
 
