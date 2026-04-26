@@ -31,8 +31,6 @@ const CONFIG = {
     arrowColorActive: '#94a3b8',
 };
 
-// --- Math & Geometry (reused from hex-connect / hex-defense) ---
-
 class Hex {
     constructor(q, r, s) {
         this.q = q;
@@ -120,8 +118,6 @@ class Layout {
     }
 }
 
-// --- Game ---
-
 class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
@@ -129,6 +125,7 @@ class Game {
         this.fitCanvas();
 
         this.grid = new Map();
+        this.holes = [];
         this.layout = new Layout(CONFIG.hexSize, { x: this.canvas.width / 2, y: this.canvas.height / 2 });
 
         this.score = 0;
@@ -149,12 +146,11 @@ class Game {
         this.loopCells = new Set();
 
         this.holeCounts = {};
-        CONFIG.holeColors.forEach(c => { this.holeCounts[c] = 0; });
-
         this.animatingTiles = [];
 
         this.updateColorPool();
         this.initGrid();
+        this.initHoles();
         this.bindEvents();
         this.detectLoops();
         this.draw();
@@ -192,7 +188,6 @@ class Game {
                     direction: Math.floor(Math.random() * 6),
                     tileColor: this.randomColor(),
                     scale: 1,
-                    prevTileColor: null,
                     animFrom: null,
                     animTo: null,
                     animProgress: 1,
@@ -201,30 +196,26 @@ class Game {
         }
     }
 
-    getHoleColor(hex) {
+    initHoles() {
         const N = CONFIG.gridRadius;
-        if (hex.r === -N && hex.q >= 0) return CONFIG.holeColors[0];
-        if (hex.q + hex.r === N && hex.r < 0) return CONFIG.holeColors[1];
-        if (hex.q === N && hex.r >= 0) return CONFIG.holeColors[2];
-        if (hex.r === N && hex.q <= 0) return CONFIG.holeColors[3];
-        if (hex.q + hex.r === -N && hex.r > 0) return CONFIG.holeColors[4];
-        if (hex.q === -N && hex.r <= 0) return CONFIG.holeColors[5];
-        return null;
+        const M = N + 1;
+
+        this.holes = [
+            { hex: Hex.fromQR(M, 0), dir: 0, color: CONFIG.holeColors[0] },
+            { hex: Hex.fromQR(M, -M), dir: 1, color: CONFIG.holeColors[1] },
+            { hex: Hex.fromQR(0, -M), dir: 2, color: CONFIG.holeColors[2] },
+            { hex: Hex.fromQR(-M, 0), dir: 3, color: CONFIG.holeColors[3] },
+            { hex: Hex.fromQR(-M, M), dir: 4, color: CONFIG.holeColors[4] },
+            { hex: Hex.fromQR(0, M), dir: 5, color: CONFIG.holeColors[5] },
+        ];
+
+        this.holes.forEach(h => {
+            this.holeCounts[h.color] = 0;
+        });
     }
 
-    getExitDirection(hex) {
-        const N = CONFIG.gridRadius;
-        if (hex.r === -N && hex.q >= 0) return 0;
-        if (hex.q + hex.r === N && hex.r < 0) return 1;
-        if (hex.q === N && hex.r >= 0) return 2;
-        if (hex.r === N && hex.q <= 0) return 3;
-        if (hex.q + hex.r === -N && hex.r > 0) return 4;
-        if (hex.q === -N && hex.r <= 0) return 5;
-        return null;
-    }
-
-    isEdgeHex(hex) {
-        return this.getExitDirection(hex) !== null;
+    getHoleForDir(dir) {
+        return this.holes[dir];
     }
 
     bindEvents() {
@@ -259,6 +250,11 @@ class Game {
         if (this.grid.has(key)) {
             return this.grid.get(key);
         }
+        for (const hole of this.holes) {
+            if (hole.hex.toString() === key) {
+                return { hex: hole.hex, isHole: true, color: hole.color, dir: hole.dir };
+            }
+        }
         return null;
     }
 
@@ -266,7 +262,7 @@ class Game {
         if (this.isSimulating || this.isGameOver) return;
 
         const cell = this.getHexAt(e.clientX, e.clientY);
-        if (!cell) return;
+        if (!cell || cell.isHole) return;
 
         const oldDir = cell.direction;
         if (counterClockwise) {
@@ -284,7 +280,7 @@ class Game {
         if (this.isSimulating) return;
 
         const cell = this.getHexAt(e.clientX, e.clientY);
-        if (!cell) {
+        if (!cell || cell.isHole) {
             this.hoverHex = null;
             this.hoverChain = [];
             this.hoverChainHole = null;
@@ -323,8 +319,11 @@ class Game {
     getChainHole(chain) {
         if (chain.length === 0) return null;
         const last = chain[chain.length - 1];
-        if (this.isEdgeHex(last)) {
-            return this.getHoleColor(last);
+        const cell = this.grid.get(last.toString());
+        if (!cell) return null;
+        const next = last.neighbor(cell.direction);
+        if (!this.grid.has(next.toString())) {
+            return this.getHoleForDir(cell.direction);
         }
         return null;
     }
@@ -365,13 +364,11 @@ class Game {
 
             const next = cell.hex.neighbor(cell.direction);
             if (!this.grid.has(next.toString())) {
-                const holeColor = this.getHoleColor(cell.hex);
-                if (holeColor) {
-                    if (holeColor === cell.tileColor) {
-                        exiting.push({ key, color: cell.tileColor, holeColor });
-                    } else {
-                        rejected.push({ key, color: cell.tileColor, holeColor });
-                    }
+                const hole = this.getHoleForDir(cell.direction);
+                if (hole.color === cell.tileColor) {
+                    exiting.push({ key, color: cell.tileColor, hole });
+                } else {
+                    rejected.push({ key, color: cell.tileColor, hole });
                 }
             } else {
                 moves.push({ from: key, to: next.toString(), color: cell.tileColor });
@@ -388,7 +385,7 @@ class Game {
             const count = colorCounts[e.color];
             const multiplier = count > 1 ? count : 1;
             totalScore += 10 * multiplier;
-            this.holeCounts[e.holeColor] = (this.holeCounts[e.holeColor] || 0) + 1;
+            this.holeCounts[e.hole.color] = (this.holeCounts[e.hole.color] || 0) + 1;
         });
 
         rejected.forEach(r => {
@@ -427,15 +424,11 @@ class Game {
         for (const key of exitKeys) {
             const cell = newGrid.get(key);
             if (cell) {
+                const hole = this.getHoleForDir(cell.direction);
                 cell.tileColor = null;
                 cell.scale = 1;
                 cell.animFrom = this.layout.hexToPixel(cell.hex);
-                const exitDir = this.getExitDirection(cell.hex);
-                const exitPixel = {
-                    x: cell.animFrom.x + Hex.directions[exitDir].q * 60,
-                    y: cell.animFrom.y + Hex.directions[exitDir].r * 60,
-                };
-                cell.animTo = exitPixel;
+                cell.animTo = this.layout.hexToPixel(hole.hex);
                 cell.animProgress = 0;
             }
         }
@@ -501,7 +494,7 @@ class Game {
             if (!cell.tileColor) continue;
             const chain = this.traceChain(cell.hex);
             const hole = this.getChainHole(chain);
-            if (hole && hole === cell.tileColor) {
+            if (hole && hole.color === cell.tileColor) {
                 canExit = true;
                 break;
             }
@@ -556,7 +549,7 @@ class Game {
         this.scoreElement.innerText = '0';
         this.comboElement.innerText = 'x1';
         this.holeCounts = {};
-        CONFIG.holeColors.forEach(c => { this.holeCounts[c] = 0; });
+        this.holes.forEach(h => { this.holeCounts[h.color] = 0; });
         this.updateColorPool();
         this.initGrid();
         this.detectLoops();
@@ -567,12 +560,10 @@ class Game {
         this.ctx.fillStyle = CONFIG.bg;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        this.drawHoles();
-
         const hoverChainSet = new Set(this.hoverChain.map(h => h.toString()));
 
         for (const [key, cell] of this.grid) {
-            this.drawHex(cell, hoverChainSet.has(key));
+            this.drawHexBg(cell, hoverChainSet.has(key));
         }
 
         for (const [key, cell] of this.grid) {
@@ -581,68 +572,18 @@ class Game {
             }
         }
 
+        for (const [key, cell] of this.grid) {
+            this.drawArrow(cell, hoverChainSet.has(key));
+        }
+
+        this.drawHoles();
+
         if (this.isGameOver) {
             this.drawGameOver();
         }
     }
 
-    drawHoles() {
-        const N = CONFIG.gridRadius;
-        const holePositions = [];
-
-        const edgeHexes = [];
-        for (const [key, cell] of this.grid) {
-            if (this.isEdgeHex(cell.hex)) {
-                edgeHexes.push(cell.hex);
-            }
-        }
-
-        const dirGroups = {};
-        edgeHexes.forEach(h => {
-            const dir = this.getExitDirection(h);
-            if (!dirGroups[dir]) dirGroups[dir] = [];
-            dirGroups[dir].push(h);
-        });
-
-        for (let dir = 0; dir < 6; dir++) {
-            if (!dirGroups[dir]) continue;
-            const group = dirGroups[dir];
-
-            let sumQ = 0, sumR = 0;
-            group.forEach(h => { sumQ += h.q; sumR += h.r; });
-            const centerHex = Hex.fromQR(Math.round(sumQ / group.length), Math.round(sumR / group.length));
-
-            const centerPixel = this.layout.hexToPixel(centerHex);
-            const offset = Hex.directions[dir];
-            const holePixel = {
-                x: centerPixel.x + offset.q * (CONFIG.hexSize * 1.3),
-                y: centerPixel.y + offset.r * (CONFIG.hexSize * 1.3),
-            };
-
-            const color = CONFIG.holeColors[dir];
-            const count = this.holeCounts[color] || 0;
-
-            this.ctx.beginPath();
-            this.ctx.arc(holePixel.x, holePixel.y, CONFIG.hexSize * 0.6, 0, Math.PI * 2);
-            this.ctx.fillStyle = color;
-            this.ctx.globalAlpha = 0.3;
-            this.ctx.fill();
-            this.ctx.globalAlpha = 1;
-            this.ctx.strokeStyle = color;
-            this.ctx.lineWidth = 3;
-            this.ctx.stroke();
-
-            if (count > 0) {
-                this.ctx.fillStyle = '#fff';
-                this.ctx.font = 'bold 14px Inter, sans-serif';
-                this.ctx.textAlign = 'center';
-                this.ctx.textBaseline = 'middle';
-                this.ctx.fillText(count.toString(), holePixel.x, holePixel.y);
-            }
-        }
-    }
-
-    drawHex(cell, isHighlighted) {
+    drawHexBg(cell, isHighlighted) {
         const center = this.layout.hexToPixel(cell.hex);
         const size = CONFIG.hexSize - 2;
 
@@ -682,24 +623,23 @@ class Game {
             this.ctx.lineWidth = 2;
             this.ctx.stroke();
         }
-
-        this.drawArrow(cell, center, isHighlighted);
     }
 
-    drawArrow(cell, center, isHighlighted) {
+    drawArrow(cell, isHighlighted) {
+        const center = this.layout.hexToPixel(cell.hex);
         const dir = cell.direction;
-        const angle = (60 * dir + 90) * Math.PI / 180;
-        const len = CONFIG.hexSize * 0.5;
+        const angle = -dir * Math.PI / 3;
+        const len = CONFIG.hexSize * 0.45;
 
         const tipX = center.x + Math.cos(angle) * len;
         const tipY = center.y + Math.sin(angle) * len;
 
         const baseAngle = angle + Math.PI;
-        const baseX = center.x + Math.cos(baseAngle) * len * 0.3;
-        const baseY = center.y + Math.sin(baseAngle) * len * 0.3;
+        const baseX = center.x + Math.cos(baseAngle) * len * 0.35;
+        const baseY = center.y + Math.sin(baseAngle) * len * 0.35;
 
         const perpAngle = angle + Math.PI / 2;
-        const wingLen = len * 0.35;
+        const wingLen = len * 0.4;
 
         const wing1X = baseX + Math.cos(perpAngle) * wingLen;
         const wing1Y = baseY + Math.sin(perpAngle) * wingLen;
@@ -714,6 +654,42 @@ class Game {
 
         this.ctx.fillStyle = isHighlighted ? CONFIG.arrowColorActive : CONFIG.arrowColor;
         this.ctx.fill();
+    }
+
+    drawHoles() {
+        for (const hole of this.holes) {
+            const center = this.layout.hexToPixel(hole.hex);
+            const size = CONFIG.hexSize - 2;
+            const color = hole.color;
+            const count = this.holeCounts[color] || 0;
+
+            this.ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle_deg = 60 * i + 30;
+                const angle_rad = Math.PI / 180 * angle_deg;
+                const px = center.x + size * Math.cos(angle_rad);
+                const py = center.y + size * Math.sin(angle_rad);
+                if (i === 0) this.ctx.moveTo(px, py);
+                else this.ctx.lineTo(px, py);
+            }
+            this.ctx.closePath();
+
+            this.ctx.fillStyle = color;
+            this.ctx.globalAlpha = 0.25;
+            this.ctx.fill();
+            this.ctx.globalAlpha = 1;
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+
+            if (count > 0) {
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = 'bold 16px Inter, sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(count.toString(), center.x, center.y);
+            }
+        }
     }
 
     drawTile(cell) {
