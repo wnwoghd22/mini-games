@@ -1,0 +1,128 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #0f172a;
+    font-family: 'Inter', sans-serif;
+    user-select: none;
+}
+
+canvas {
+    display: block;
+    touch-action: none;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.top-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    pointer-events: auto;
+}
+
+.score-box, .combo-box {
+    background: rgba(30, 41, 59, 0.85);
+    backdrop-filter: blur(8px);
+    padding: 0.6rem 1.2rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.score-label, .combo-label {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.15rem;
+}
+
+#score-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff;
+}
+
+#combo-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fbbf24;
+}
+
+.btn-play {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: #fff;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    letter-spacing: 0.05em;
+}
+
+.btn-play:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(34, 197, 94, 0.4);
+}
+
+.btn-play:active {
+    transform: translateY(0);
+}
+
+.btn-play:disabled {
+    background: #475569;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+.btn-secondary {
+    background: rgba(30, 41, 59, 0.85);
+    color: #e2e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    backdrop-filter: blur(8px);
+}
+
+.btn-secondary:hover {
+    background: rgba(51, 65, 85, 0.9);
+    transform: translateY(-1px);
+}
+
+#back-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    pointer-events: auto;
+    background: rgba(30, 41, 59, 0.8);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.75rem 1.25rem;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+    backdrop-filter: blur(8px);
+    z-index: 10;
+}
+
+#back-btn:hover {
+    background: rgba(51, 65, 85, 0.9);
+    transform: translateY(-2px);
+}
