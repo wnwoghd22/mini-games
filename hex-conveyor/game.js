@@ -330,9 +330,8 @@ class Game {
         const cell = this.grid.get(last.toString());
         if (!cell) return null;
         const next = last.neighbor(cell.direction);
-        const hole = this.getHoleAt(next);
-        if (hole) {
-            return hole;
+        if (!this.grid.has(next.toString())) {
+            return this.getHoleForDir(cell.direction);
         }
         return null;
     }
@@ -368,6 +367,46 @@ class Game {
         }
     }
 
+    findLoopMoves() {
+        const loopMoveSet = new Set();
+
+        for (const [key, cell] of this.grid) {
+            const visited = new Map();
+            let current = cell.hex;
+            let step = 0;
+
+            while (current && !visited.has(current.toString())) {
+                visited.set(current.toString(), step);
+                step++;
+                const c = this.grid.get(current.toString());
+                if (!c) break;
+                const next = current.neighbor(c.direction);
+                if (!this.grid.has(next.toString())) break;
+
+                const nextCell = this.grid.get(next.toString());
+                if (nextCell) {
+                    const back = next.neighbor(nextCell.direction);
+                    if (back.equals(current)) break;
+                }
+
+                current = next;
+            }
+
+            if (current && visited.has(current.toString())) {
+                const loopStartStep = visited.get(current.toString());
+                if (step - loopStartStep >= 3) {
+                    for (const [hKey, s] of visited) {
+                        if (s >= loopStartStep) {
+                            loopMoveSet.add(hKey);
+                        }
+                    }
+                }
+            }
+        }
+
+        return loopMoveSet;
+    }
+
     resolveMoves() {
         const intentions = [];
         const exiting = [];
@@ -380,32 +419,58 @@ class Game {
             if (this.grid.has(next.toString())) {
                 intentions.push({ from: key, to: next.toString(), color: cell.tileColor });
             } else {
-                const hole = this.getHoleAt(next);
-                if (hole && hole.color === cell.tileColor) {
+                const hole = this.getHoleForDir(cell.direction);
+                if (hole.color === cell.tileColor) {
                     exiting.push({ key, color: cell.tileColor, hole });
                 }
-                // hole이 없거나 색이 불일치하면 제자리 유지 (아무 것도 하지 않음)
             }
         }
 
-        // 충돌 감지 (A->B, B->A)
-        const blocked = new Set();
+        const loopMoveSet = this.findLoopMoves();
+
+        const loopMoves = [];
+        const externalMoves = [];
+
         for (const intent of intentions) {
-            for (const other of intentions) {
-                if (other.from === intent.to && other.to === intent.from) {
-                    blocked.add(intent.from);
-                    blocked.add(intent.to);
-                }
+            if (loopMoveSet.has(intent.from)) {
+                loopMoves.push(intent);
+            } else {
+                externalMoves.push(intent);
             }
         }
 
-        // 중복 목적지 처리
+        const blocked = new Set();
         const validMoves = [];
         const usedTargets = new Set();
 
-        const nonBlocked = intentions.filter(i => !blocked.has(i.from));
+        for (const move of loopMoves) {
+            validMoves.push(move);
+            usedTargets.add(move.to);
+        }
+
+        for (const move of externalMoves) {
+            if (loopMoveSet.has(move.to)) {
+                blocked.add(move.from);
+                continue;
+            }
+        }
+
+        const nonBlockedExternal = externalMoves.filter(i => !blocked.has(i.from));
+
+        const collisionSet = new Set();
+        for (const intent of nonBlockedExternal) {
+            for (const other of nonBlockedExternal) {
+                if (other.from === intent.to && other.to === intent.from) {
+                    collisionSet.add(intent.from);
+                    collisionSet.add(intent.to);
+                }
+            }
+        }
+
+        const nonCollision = nonBlockedExternal.filter(i => !collisionSet.has(i.from));
+
         const groups = new Map();
-        for (const intent of nonBlocked) {
+        for (const intent of nonCollision) {
             if (!groups.has(intent.to)) {
                 groups.set(intent.to, []);
             }
@@ -413,6 +478,13 @@ class Game {
         }
 
         for (const [target, group] of groups) {
+            if (usedTargets.has(target)) {
+                for (const intent of group) {
+                    blocked.add(intent.from);
+                }
+                continue;
+            }
+
             if (group.length === 1) {
                 validMoves.push(group[0]);
                 usedTargets.add(target);
@@ -436,7 +508,6 @@ class Game {
             }
         }
 
-        // 막힌 경로 감지 - 의존성 전파
         let changed = true;
         while (changed) {
             changed = false;
@@ -444,16 +515,17 @@ class Game {
 
             for (let i = validMoves.length - 1; i >= 0; i--) {
                 const move = validMoves[i];
+                if (loopMoveSet.has(move.from)) continue;
+
                 const targetCell = this.grid.get(move.to);
 
                 if (targetCell && targetCell.tileColor) {
                     const targetNext = targetCell.hex.neighbor(targetCell.direction);
                     if (!this.grid.has(targetNext.toString())) {
-                        const hole = this.getHoleAt(targetNext);
-                        if (hole && hole.color === targetCell.tileColor) {
+                        const hole = this.getHoleForDir(targetCell.direction);
+                        if (hole.color === targetCell.tileColor) {
                             continue;
                         }
-                        // 타겟이 제자리 유지면 이 이동도 막힘
                         validMoves.splice(i, 1);
                         blocked.add(move.from);
                         changed = true;
@@ -598,15 +670,15 @@ class Game {
                 }
                 const nextNext = next.neighbor(nextCell.direction);
                 if (!this.grid.has(nextNext.toString())) {
-                    const hole = this.getHoleAt(nextNext);
-                    if (hole && hole.color === nextCell.tileColor) {
+                    const hole = this.getHoleForDir(nextCell.direction);
+                    if (hole.color === nextCell.tileColor) {
                         canMove = true;
                         break;
                     }
                 }
             } else {
-                const hole = this.getHoleAt(next);
-                if (hole && hole.color === cell.tileColor) {
+                const hole = this.getHoleForDir(cell.direction);
+                if (hole.color === cell.tileColor) {
                     canMove = true;
                     break;
                 }
