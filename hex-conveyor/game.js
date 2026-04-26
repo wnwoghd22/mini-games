@@ -341,21 +341,29 @@ class Game {
                 if (!c) break;
                 const next = current.neighbor(c.direction);
                 if (!this.grid.has(next.toString())) break;
+
+                // 서로 마주보는 경우 (2-사이클)는 루프로 간주하지 않음
+                const nextCell = this.grid.get(next.toString());
+                if (nextCell) {
+                    const back = next.neighbor(nextCell.direction);
+                    if (back.equals(current)) {
+                        break;
+                    }
+                }
+
                 current = next;
             }
 
-            if (current && visited.has(current.toString())) {
+            // 실제 루프: 3개 이상의 셀이 순환
+            if (current && visited.has(current.toString()) && visited.size >= 3) {
                 visited.forEach(k => this.loopCells.add(k));
             }
         }
     }
 
-    simulate() {
-        if (this.isSimulating || this.isGameOver) return;
-        this.isSimulating = true;
-        this.playBtn.disabled = true;
-
-        const moves = [];
+    resolveMoves() {
+        // Step 1: 모든 타일의 의도된 이동 수집
+        const intentions = []; // { from, to, color }
         const exiting = [];
         const rejected = [];
 
@@ -371,10 +379,125 @@ class Game {
                     rejected.push({ key, color: cell.tileColor, hole });
                 }
             } else {
-                moves.push({ from: key, to: next.toString(), color: cell.tileColor });
+                intentions.push({ from: key, to: next.toString(), color: cell.tileColor });
             }
         }
 
+        // Step 2: 충돌 감지 (A→B, B→A)
+        const blocked = new Set();
+        const toIntentions = new Map(); // to -> [intentions]
+
+        for (const intent of intentions) {
+            if (!toIntentions.has(intent.to)) {
+                toIntentions.set(intent.to, []);
+            }
+            toIntentions.get(intent.to).push(intent);
+        }
+
+        // 서로 마주보는 쌍 찾기
+        for (const intent of intentions) {
+            const reverseKey = intent.to + '->' + intent.from;
+            const forwardKey = intent.from + '->' + intent.to;
+            if (toIntentions.has(intent.from)) {
+                const fromIntents = toIntentions.get(intent.from);
+                for (const rev of fromIntents) {
+                    if (rev.to === intent.from && rev.from === intent.to) {
+                        blocked.add(intent.from);
+                        blocked.add(intent.to);
+                    }
+                }
+            }
+        }
+
+        // Step 3: 중복 목적지 처리 - 같은 to를 향하는 이동들 중 하나만 선택
+        const validMoves = [];
+        const usedTargets = new Set();
+
+        // 먼저 충돌로 막힌 것들은 제외
+        const nonBlockedIntentions = intentions.filter(i => !blocked.has(i.from));
+
+        // to 기준으로 그룹화
+        const groups = new Map();
+        for (const intent of nonBlockedIntentions) {
+            if (!groups.has(intent.to)) {
+                groups.set(intent.to, []);
+            }
+            groups.get(intent.to).push(intent);
+        }
+
+        // 각 그룹에서 하나만 선택 (체인이 더 긴 쪽 우선)
+        for (const [target, group] of groups) {
+            if (group.length === 1) {
+                validMoves.push(group[0]);
+                usedTargets.add(target);
+            } else {
+                // 체인 길이로 우선순위 결정
+                let best = group[0];
+                let bestLen = 0;
+                for (const intent of group) {
+                    const chain = this.traceChain(Hex.fromQR(...intent.from.split(',').map(Number)));
+                    if (chain.length > bestLen) {
+                        bestLen = chain.length;
+                        best = intent;
+                    }
+                }
+                validMoves.push(best);
+                usedTargets.add(target);
+                // 나머지는 이동 안 함 (블록됨)
+                for (const intent of group) {
+                    if (intent !== best) {
+                        blocked.add(intent.from);
+                    }
+                }
+            }
+        }
+
+        // Step 4: 막힌 경로 감지 - 의존성 그래프
+        // 타일이 이동하려는 to 칸의 타일도 이동해야 함 (그렇지 않으면 막힘)
+        // 단, to 칸이 빈 칸이거나 to 칸의 타일이 구멍으로 나가는 경우는 예외
+        let changed = true;
+        while (changed) {
+            changed = false;
+            const validFromSet = new Set(validMoves.map(m => m.from));
+
+            for (let i = validMoves.length - 1; i >= 0; i--) {
+                const move = validMoves[i];
+                const targetCell = this.grid.get(move.to);
+
+                // to 칸에 타일이 있고, 그 타일도 이동해야 하는 경우
+                if (targetCell && targetCell.tileColor) {
+                    // to 칸의 타일이 구멍으로 나가는 경우 → 이동 가능
+                    const targetNext = targetCell.hex.neighbor(targetCell.direction);
+                    if (!this.grid.has(targetNext.toString())) {
+                        continue; // 구멍으로 나가므로 막히지 않음
+                    }
+
+                    // to 칸의 타일이 이동하지 않으면 막힘
+                    if (!validFromSet.has(move.to)) {
+                        validMoves.splice(i, 1);
+                        blocked.add(move.from);
+                        changed = true;
+                    }
+                }
+                // to 칸이 비어 있으면 이동 가능
+            }
+        }
+
+        // Step 5: 사이클 내 막힘 재검토
+        // 사이클을 이루는 이동들은 모두 유효해야 함
+        // (이미 validMoves에 남은 것들은 사이클이거나 빈 칸으로 이동)
+
+        return { validMoves, exiting, rejected, blocked };
+    }
+
+    simulate() {
+        if (this.isSimulating || this.isGameOver) return;
+        this.isSimulating = true;
+        this.playBtn.disabled = true;
+
+        const { validMoves, exiting, rejected } = this.resolveMoves();
+
+        // 점수 계산
         let totalScore = 0;
         const colorCounts = {};
         exiting.forEach(e => {
@@ -403,15 +526,26 @@ class Game {
 
         const exitKeys = new Set(exiting.map(e => e.key));
         const rejectKeys = new Set(rejected.map(r => r.key));
+        const moveFromKeys = new Set(validMoves.map(m => m.from));
+        const moveToKeys = new Set(validMoves.map(m => m.to));
 
+        // 새 그리드 생성
         const newGrid = new Map();
         for (const [key, cell] of this.grid) {
             const newCell = { ...cell, animFrom: null, animTo: null, animProgress: 1 };
             newGrid.set(key, newCell);
         }
 
-        for (const move of moves) {
-            if (exitKeys.has(move.to) || rejectKeys.has(move.to)) continue;
+        // 이동하는 타일들의 원래 위치는 비움
+        for (const key of moveFromKeys) {
+            const cell = newGrid.get(key);
+            if (cell) {
+                cell.tileColor = null;
+            }
+        }
+
+        // 이동 처리
+        for (const move of validMoves) {
             const target = newGrid.get(move.to);
             if (target) {
                 target.tileColor = move.color;
@@ -421,6 +555,7 @@ class Game {
             }
         }
 
+        // 구멍으로 나가는 타일
         for (const key of exitKeys) {
             const cell = newGrid.get(key);
             if (cell) {
@@ -433,6 +568,7 @@ class Game {
             }
         }
 
+        // 거부된 타일
         for (const key of rejectKeys) {
             const cell = newGrid.get(key);
             if (cell) {
@@ -446,7 +582,7 @@ class Game {
         }
 
         this.grid = newGrid;
-        this.animatingTiles = [...exitKeys, ...rejectKeys, ...moves.map(m => m.to)];
+        this.animatingTiles = [...exitKeys, ...rejectKeys, ...moveToKeys];
 
         const animStart = performance.now();
         const animDuration = 300;
@@ -488,29 +624,87 @@ class Game {
         requestAnimationFrame(animate);
     }
 
+    canTileReachHole(cellKey) {
+        const cell = this.grid.get(cellKey);
+        if (!cell || !cell.tileColor) return false;
+
+        const visited = new Set();
+        let current = cell.hex;
+
+        while (current && !visited.has(current.toString())) {
+            visited.add(current.toString());
+            const c = this.grid.get(current.toString());
+            if (!c) break;
+
+            const next = current.neighbor(c.direction);
+            if (!this.grid.has(next.toString())) {
+                // 구멍으로 나감
+                const hole = this.getHoleForDir(c.direction);
+                return true; // 색 일치 여부와 상관없이 "이동 가능"
+            }
+
+            const nextCell = this.grid.get(next.toString());
+            if (nextCell && nextCell.tileColor) {
+                // 다음 칸에 타일이 있고, 그 타일도 이동해야 함
+                const nextDir = nextCell.direction;
+                const nextNext = next.neighbor(nextDir);
+                if (!this.grid.has(nextNext.toString())) {
+                    // 다음 칸의 타일이 구멍으로 나감
+                    current = next;
+                    continue;
+                }
+                // 다음 칸의 타일도 막혀있으면 이 타일도 막힘
+                // 단순화: 다음 칸에 타일이 있으면 일단 이동 불가로 간주
+                // (실제 시뮬레이션에서 해결되므로 여기서는 낙관적으로 판단)
+            }
+
+            current = next;
+        }
+
+        // 루프에 갇힘
+        return false;
+    }
+
     checkRefill() {
-        let canExit = false;
+        // 이동 가능한 타일이 있는지 확인
+        let canMove = false;
         for (const [key, cell] of this.grid) {
             if (!cell.tileColor) continue;
-            const chain = this.traceChain(cell.hex);
-            const hole = this.getChainHole(chain);
-            if (hole && hole.color === cell.tileColor) {
-                canExit = true;
+
+            const next = cell.hex.neighbor(cell.direction);
+            if (!this.grid.has(next.toString())) {
+                // 구멍으로 바로 나감
+                canMove = true;
+                break;
+            }
+
+            const nextCell = this.grid.get(next.toString());
+            if (!nextCell || !nextCell.tileColor) {
+                // 빈 칸으로 이동 가능
+                canMove = true;
+                break;
+            }
+
+            // 다음 칸에 타일이 있지만, 그 타일도 이동하면 연쇄 이동 가능
+            const nextNext = next.neighbor(nextCell.direction);
+            if (!this.grid.has(nextNext.toString())) {
+                canMove = true;
                 break;
             }
         }
 
-        if (!canExit) {
-            const emptyCells = [];
+        if (!canMove) {
+            // 빈 칸에 새 타일 생성
+            const emptyKeys = [];
             for (const [key, cell] of this.grid) {
                 if (!cell.tileColor) {
-                    emptyCells.push(key);
+                    emptyKeys.push(key);
                 }
             }
 
-            if (emptyCells.length > 0) {
+            if (emptyKeys.length > 0) {
                 const now = Date.now();
-                emptyCells.forEach(key => {
+                emptyKeys.forEach(key => {
                     const cell = this.grid.get(key);
                     cell.tileColor = this.randomColor();
                     cell.scale = 0;
