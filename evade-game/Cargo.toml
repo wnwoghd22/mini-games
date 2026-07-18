@@ -4,8 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.19.0"
+# 2d 우산 피처만: 3d(pbr/gltf)·ui·audio 제외 → wasm 크기 대폭 절감
+bevy = { version = "0.19.0", default-features = false, features = ["2d"] }
 rand = "0.10"
+
+# wasm에서 rand(getrandom)가 브라우저 크립토를 쓰도록 함
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
 
 # 디버그 빌드에서도 게임이 부드럽게 돌도록 의존성만 최적화
 [profile.dev]
@@ -13,3 +18,10 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+
+# wasm 크기 절감 (네이티브 개발은 dev 프로필이라 영향 없음)
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

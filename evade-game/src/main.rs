@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use bevy::asset::AssetMetaCheck;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowResolution};
@@ -26,6 +27,7 @@ const CATCH_COOLDOWN: f32 = 0.4;
 enum GameState {
     #[default]
     Playing,
+    Paused,
     GameOver,
 }
 
@@ -107,13 +109,24 @@ struct GameEntity;
 #[derive(Component)]
 struct ScoreText;
 
+#[derive(Component)]
+struct PauseText;
+
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
+        .add_plugins(DefaultPlugins
+            // 웹에서 스프라이트마다 .meta 404 요청이 생기지 않도록 조회 자체를 끔
+            .set(AssetPlugin {
+                meta_check: AssetMetaCheck::Never,
+                ..default()
+            })
+            .set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Evade!".into(),
+                title: "Duck & Chuck".into(),
                 resolution: WindowResolution::new(900, 700),
                 resizable: false,
+                // 웹: 페이지의 고정 크기 캔버스에 바인딩 (네이티브에선 무시됨)
+                canvas: Some("#bevy-canvas".into()),
                 ..default()
             }),
             ..default()
@@ -124,9 +137,17 @@ fn main() {
         .init_resource::<Score>()
         .init_resource::<Aim>()
         .init_resource::<EnemySpawner>()
-        .add_systems(Startup, setup)
-        .add_systems(OnEnter(GameState::Playing), setup_round)
+        .add_systems(Startup, (setup, setup_round).chain())
+        .add_systems(
+            OnTransition {
+                exited: GameState::GameOver,
+                entered: GameState::Playing,
+            },
+            setup_round,
+        )
         .add_systems(OnEnter(GameState::GameOver), on_game_over)
+        .add_systems(OnEnter(GameState::Paused), on_pause)
+        .add_systems(OnExit(GameState::Paused), on_unpause)
         .add_systems(
             Update,
             (
@@ -141,9 +162,15 @@ fn main() {
                 check_player_hit,
                 update_hud,
                 draw_aim,
+                pause_input,
+                relock_cursor_on_click,
             )
                 .chain()
                 .run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(
+            Update,
+            resume_input.run_if(in_state(GameState::Paused)),
         )
         .add_systems(
             Update,
@@ -190,7 +217,10 @@ fn setup_round(
     mut score: ResMut<Score>,
     mut aim: ResMut<Aim>,
     mut spawner: ResMut<EnemySpawner>,
-    mut cursor: Query<&mut CursorOptions, With<PrimaryWindow>>,
+    #[cfg(not(target_arch = "wasm32"))] mut cursor: Query<
+        &mut CursorOptions,
+        With<PrimaryWindow>,
+    >,
 ) {
     for e in &old {
         commands.entity(e).despawn();
@@ -256,6 +286,8 @@ fn setup_round(
             ));
         });
 
+    // 웹은 사용자 제스처 없이 잠금이 거부되므로(NotAllowedError) 첫 클릭 때 relock_cursor_on_click이 잠금
+    #[cfg(not(target_arch = "wasm32"))]
     if let Ok(mut c) = cursor.single_mut() {
         c.grab_mode = CursorGrabMode::Locked;
         c.visible = false;
@@ -580,6 +612,75 @@ fn draw_aim(mut gizmos: Gizmos, aim: Res<Aim>, ball: Query<(&Transform, &PlayerB
         let t = i as f32 * 0.045;
         let p = p0 + v0 * t + 0.5 * Vec2::new(0.0, GRAVITY) * t * t;
         gizmos.circle_2d(p, 3.0, Color::srgba(1.0, 0.9, 0.4, 0.8));
+    }
+}
+
+// ---------- 일시정지 ----------
+// 웹에서는 포인터 잠금 중 ESC가 브라우저의 잠금 해제에 소비되므로 P키도 지원
+fn pause_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
+    if keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyP) {
+        next.set(GameState::Paused);
+    }
+}
+
+fn resume_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
+    if keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyP) {
+        next.set(GameState::Playing);
+    }
+}
+
+fn on_pause(
+    mut commands: Commands,
+    mut aim: ResMut<Aim>,
+    mut cursor: Query<&mut CursorOptions, With<PrimaryWindow>>,
+) {
+    // 조준 중이었다면 취소 (일시정지 중 마우스 릴리즈를 놓치는 문제 방지)
+    aim.active = false;
+    if let Ok(mut c) = cursor.single_mut() {
+        c.grab_mode = CursorGrabMode::None;
+        c.visible = true;
+    }
+    commands.spawn((
+        Text2d::new("PAUSED\n\nESC or P to resume"),
+        TextFont {
+            font_size: FontSize::Px(40.0),
+            ..default()
+        },
+        TextColor(Color::srgb(0.9, 0.95, 1.0)),
+        Transform::from_xyz(0.0, 40.0, 6.0),
+        PauseText,
+        GameEntity,
+    ));
+}
+
+fn on_unpause(
+    mut commands: Commands,
+    text: Query<Entity, With<PauseText>>,
+    mut cursor: Query<&mut CursorOptions, With<PrimaryWindow>>,
+) {
+    for e in &text {
+        commands.entity(e).despawn();
+    }
+    if let Ok(mut c) = cursor.single_mut() {
+        c.grab_mode = CursorGrabMode::Locked;
+        c.visible = false;
+    }
+}
+
+/// 커서 잠금이 풀린 상태에서 클릭하면 다시 잠금.
+/// 웹에서 첫 잠금(사용자 제스처 필요)과 ESC로 인한 잠금 이탈 복구를 겸함
+fn relock_cursor_on_click(
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut cursor: Query<&mut CursorOptions, With<PrimaryWindow>>,
+) {
+    if !buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
+    if let Ok(mut c) = cursor.single_mut() {
+        if c.grab_mode != CursorGrabMode::Locked {
+            c.grab_mode = CursorGrabMode::Locked;
+            c.visible = false;
+        }
     }
 }
 
