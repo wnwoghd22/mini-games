@@ -45,12 +45,12 @@ const el = {
     brief: $('brief'), flavor: $('flavor'), knobs: $('knobs'),
     sandboxPanel: $('sandbox-panel'), sbBatch: $('sb-batch'), sbChimps: $('sb-chimps'), sbMatch: $('sb-match'), btnSbApply: $('btn-sb-apply'),
     conveyor: $('conveyor'),
-    btnRun: $('btn-run'), runCost: $('run-cost'), btnRerun: $('btn-rerun'), btnClear: $('btn-clear'),
+    btnRun: $('btn-run'), runCost: $('run-cost'), btnClear: $('btn-clear'),
     message: $('message-area'),
     resultPanel: $('result-panel'), resultEmoji: $('result-emoji'), resultLabel: $('result-label'),
     resultStars: $('result-stars'), resultScore: $('result-score'), meter: $('meter'), sceneCanvas: $('scene'),
     resultDetail: $('result-detail'), ledger: $('ledger'), batchTable: $('batch-table'), transcript: $('transcript'),
-    btnCopy: $('btn-copy'), btnNextLevel: $('btn-next-level'),
+    btnCopy: $('btn-copy'), resultEmpty: $('result-empty'),
     overlay: $('overlay'), overlayEmoji: $('overlay-emoji'), overlayTitle: $('overlay-title'),
     overlayText: $('overlay-text'), overlayActions: $('overlay-actions'),
 };
@@ -144,9 +144,8 @@ function setPhase(phase) {
     const idle = phase === 'IDLE' || phase === 'RESULT';
     const running = phase === 'RUNNING';
     el.btnRun.disabled = !(idle || running);
-    el.btnRun.textContent = running ? '■ 정지' : '▶ 가동';
+    el.btnRun.textContent = running ? '■ 정지' : (phase === 'RESULT' ? '▶ 다시 가동' : '▶ 가동');
     el.btnRun.classList.toggle('stop', running);
-    el.btnRerun.hidden = !(phase === 'RESULT');
     updateNavButtons();
     el.btnSandbox.disabled = running;
     el.btnClear.disabled = running;
@@ -268,7 +267,7 @@ function applyPuzzle(puzzle) {
     el.flavor.textContent = locked ? '이전 작업을 통과하면 해금됩니다.' : (puzzle.flavor ?? '');
     el.btnHint.hidden = !puzzle.hint && !puzzle.sampleSolution;
     updateNavButtons();
-    el.resultPanel.hidden = true;
+    setResultEmpty(true);
     showMessage('');
     buildConveyor(puzzle, locked);
     if (state.phase === 'RESULT') setPhase('IDLE');
@@ -651,9 +650,7 @@ function renderResult({ live, leveledUp = false }) {
         el.resultScore.textContent = `정답 ${correct}건`;
         el.resultDetail.textContent = state.sandbox ? '' : `합격선 ${PASS_COUNT}건`;
         el.ledger.hidden = true;
-        el.transcript.textContent = '';
-        el.btnNextLevel.hidden = true;
-        el.resultPanel.hidden = false;
+        setResultEmpty(false);
         return;
     }
 
@@ -680,10 +677,11 @@ function renderResult({ live, leveledUp = false }) {
             <span class="k">현금</span><span class="v">${eco.formatWon(state.company.cash)}</span>`;
     }
 
-    el.transcript.textContent = buildTranscript();
-    const passed = r.tier.key === 'pass' || r.tier.key === 'perfect';
-    el.btnNextLevel.hidden = state.sandbox || !passed || state.levelIndex >= WORK_ORDERS.length - 1;
-    el.resultPanel.hidden = false;
+    setResultEmpty(false);
+}
+
+function setResultEmpty(empty) {
+    el.resultPanel.classList.toggle('empty', empty);
 }
 
 function renderMeter() {
@@ -820,6 +818,8 @@ async function copyTranscript() {
         await navigator.clipboard.writeText(text);
         showMessage('릴레이 기록을 복사했습니다.');
     } catch {
+        el.transcript.hidden = false;
+        el.transcript.textContent = text;
         const range = document.createRange();
         range.selectNodeContents(el.transcript);
         const sel = window.getSelection();
@@ -839,12 +839,11 @@ function wireEvents() {
             runChain();
         }
     });
-    el.btnRerun.addEventListener('click', () => { if (state.phase === 'RESULT') runChain(); });
     el.btnClear.addEventListener('click', () => {
         state.prompts = state.prompts.map(() => '');
         for (const c of cards) { c.textarea.value = ''; updateCounter(c); }
         resetCards();
-        el.resultPanel.hidden = true;
+        setResultEmpty(true);
         state.result = null;
         state.items = [];
         schedulePromptSave();
@@ -852,7 +851,6 @@ function wireEvents() {
     });
     el.btnPrev.addEventListener('click', () => selectPuzzle(state.sandbox ? state.levelIndex : state.levelIndex - 1));
     el.btnNext.addEventListener('click', () => selectPuzzle(state.sandbox ? state.levelIndex : state.levelIndex + 1));
-    el.btnNextLevel.addEventListener('click', () => selectPuzzle(state.levelIndex + 1));
     el.btnSandbox.addEventListener('click', () => { if (state.sandbox) selectPuzzle(state.levelIndex); else selectSandbox(); });
     el.btnSbApply.addEventListener('click', applySandboxForm);
     el.btnHint.addEventListener('click', showHint);

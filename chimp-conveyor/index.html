@@ -20,76 +20,77 @@
             <div class="hud-stat" title="현금"><span class="hud-label">CASH</span><span id="hud-cash" class="hud-value">₩0</span></div>
             <div class="hud-stat" id="hud-debt-wrap" hidden title="은행 대출"><span class="hud-label">DEBT</span><span id="hud-debt" class="hud-value bad">₩0</span></div>
             <div class="hud-stat" title="통과한 작업 수에 따라 자동으로 오릅니다"><span class="hud-label">LV</span><span id="hud-skill" class="hud-value">—</span></div>
+            <div class="knobs" id="knobs"></div>
             <div class="load-status" id="load-status">
                 <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
                 <span class="load-text" id="load-text">준비 중…</span>
             </div>
             <label class="toggle"><input type="checkbox" id="toggle-skip-anim"> 애니 생략</label>
             <label class="toggle" title="침팬지 잡담을 정리하지 않고 그대로 다음 침팬지에게 넘깁니다"><input type="checkbox" id="toggle-raw"> 날것 모드</label>
+            <div class="hud-actions">
+                <button id="btn-sandbox" class="btn tiny">샌드박스</button>
+                <button id="btn-hint" class="btn tiny">힌트</button>
+                <button id="btn-reset-progress" class="btn tiny danger" title="진행 초기화">초기화</button>
+            </div>
         </header>
 
-        <nav class="level-bar">
-            <button id="btn-prev" class="btn icon-btn" title="이전 작업">&#9664;</button>
-            <div class="level-info">
+        <section class="order-head">
+            <div class="order-title">
                 <span class="level-index" id="level-index">작업 1/12</span>
                 <span class="level-title" id="level-title">—</span>
                 <span class="level-stars" id="level-stars"></span>
                 <span class="level-revenue" id="level-revenue"></span>
             </div>
-            <button id="btn-next" class="btn icon-btn" title="다음 작업">&#9654;</button>
-            <div class="level-actions">
-                <button id="btn-sandbox" class="btn small">샌드박스</button>
-                <button id="btn-hint" class="btn small">힌트</button>
-                <button id="btn-reset-progress" class="btn small danger" title="진행 초기화">초기화</button>
-            </div>
-        </nav>
-
-        <p class="brief" id="brief"></p>
-        <p class="flavor" id="flavor"></p>
-        <div class="knobs" id="knobs"></div>
-
-        <section id="sandbox-panel" class="sandbox-panel" hidden>
-            <label>배치 (한 줄에 한 건, "입력 => 목표", 최대 10건. 입력 안의 줄바꿈은 \n으로)<textarea id="sb-batch" rows="5"></textarea></label>
-            <div class="sandbox-row">
-                <label>침팬지 수 <input type="number" id="sb-chimps" min="1" max="5" value="1"></label>
-                <label>채점 <select id="sb-match"></select></label>
-                <button id="btn-sb-apply" class="btn small accent">적용</button>
-            </div>
+            <p class="brief" id="brief"></p>
+            <p class="flavor" id="flavor"></p>
         </section>
 
-        <main class="line">
-            <div class="scene-wrap"><canvas id="scene" class="scene" width="160" height="72"></canvas></div>
-            <div class="conveyor-wrap">
-                <div class="conveyor" id="conveyor"></div>
+        <main class="main">
+            <div class="line">
+                <section id="sandbox-panel" class="sandbox-panel" hidden>
+                    <label>배치 (한 줄에 한 건, "입력 => 목표", 최대 10건. 입력 안의 줄바꿈은 \n으로)<textarea id="sb-batch" rows="3"></textarea></label>
+                    <div class="sandbox-row">
+                        <label>침팬지 수 <input type="number" id="sb-chimps" min="1" max="5" value="1"></label>
+                        <label>채점 <select id="sb-match"></select></label>
+                        <button id="btn-sb-apply" class="btn small accent">적용</button>
+                    </div>
+                </section>
+                <div class="scene-wrap"><canvas id="scene" class="scene" width="160" height="72"></canvas></div>
+                <div class="conveyor-wrap">
+                    <div class="conveyor" id="conveyor"></div>
+                </div>
             </div>
-        </main>
 
-        <div class="action-row">
-            <button id="btn-run" class="btn run" disabled>▶ 가동</button>
-            <span class="run-cost" id="run-cost"></span>
-            <button id="btn-rerun" class="btn" hidden title="같은 지시로 다시 굴립니다 (원재료 다시 소모)">다시 굴리기</button>
-            <button id="btn-clear" class="btn">지시 초기화</button>
-        </div>
+            <aside id="result-panel" class="result-panel empty">
+                <div class="result-empty" id="result-empty">가동하면 전표 10장의 결과가 여기에 쌓입니다.</div>
+                <div class="result-body">
+                    <div class="result-head">
+                        <span class="result-emoji" id="result-emoji"></span>
+                        <span class="result-label" id="result-label"></span>
+                        <span class="result-stars" id="result-stars"></span>
+                        <span class="result-score" id="result-score"></span>
+                    </div>
+                    <div class="meter" id="meter"></div>
+                    <p class="result-detail" id="result-detail"></p>
+                    <div class="ledger" id="ledger"></div>
+                    <div class="batch-table" id="batch-table"></div>
+                    <pre class="transcript" id="transcript" hidden></pre>
+                    <div class="result-actions">
+                        <button id="btn-copy" class="btn tiny">릴레이 기록 복사</button>
+                    </div>
+                </div>
+            </aside>
+        </main>
 
         <div id="message-area" class="message-area"></div>
 
-        <section id="result-panel" class="result-panel" hidden>
-            <div class="result-head">
-                <span class="result-emoji" id="result-emoji"></span>
-                <span class="result-label" id="result-label"></span>
-                <span class="result-stars" id="result-stars"></span>
-                <span class="result-score" id="result-score"></span>
-            </div>
-            <div class="meter" id="meter"></div>
-            <p class="result-detail" id="result-detail"></p>
-            <div class="ledger" id="ledger"></div>
-            <div class="batch-table" id="batch-table"></div>
-            <pre class="transcript" id="transcript"></pre>
-            <div class="result-actions">
-                <button id="btn-copy" class="btn small">릴레이 기록 복사</button>
-                <button id="btn-next-level" class="btn small accent" hidden>다음 작업 ▶</button>
-            </div>
-        </section>
+        <footer class="bottom-bar">
+            <button id="btn-prev" class="btn" title="이전 작업">&#9664; 이전</button>
+            <button id="btn-run" class="btn run" disabled>▶ 가동</button>
+            <span class="run-cost" id="run-cost"></span>
+            <button id="btn-clear" class="btn">지시 초기화</button>
+            <button id="btn-next" class="btn" title="다음 작업">다음 &#9654;</button>
+        </footer>
     </div>
 
     <div id="overlay" class="overlay" hidden>
