@@ -41,22 +41,21 @@ const el = {
     loadStatus: $('load-status'), loadFill: $('load-fill'), loadText: $('load-text'),
     toggleSkip: $('toggle-skip-anim'), toggleRaw: $('toggle-raw'),
     btnPrev: $('btn-prev'), btnNext: $('btn-next'), btnSandbox: $('btn-sandbox'), btnHint: $('btn-hint'), btnResetProgress: $('btn-reset-progress'),
-    levelIndex: $('level-index'), levelTitle: $('level-title'), levelStars: $('level-stars'), levelRevenue: $('level-revenue'),
+    levelIndex: $('level-index'), levelTitle: $('level-title'), levelStars: $('level-stars'),
     brief: $('brief'), flavor: $('flavor'), knobs: $('knobs'),
     sandboxPanel: $('sandbox-panel'), sbBatch: $('sb-batch'), sbChimps: $('sb-chimps'), sbMatch: $('sb-match'), btnSbApply: $('btn-sb-apply'),
     conveyor: $('conveyor'),
-    btnRun: $('btn-run'), runCost: $('run-cost'), btnClear: $('btn-clear'),
+    btnRun: $('btn-run'), btnClear: $('btn-clear'),
     message: $('message-area'),
-    resultPanel: $('result-panel'), resultEmoji: $('result-emoji'), resultLabel: $('result-label'),
-    resultStars: $('result-stars'), resultScore: $('result-score'), meter: $('meter'), sceneCanvas: $('scene'),
-    resultDetail: $('result-detail'), ledger: $('ledger'), batchTable: $('batch-table'), transcript: $('transcript'),
-    btnCopy: $('btn-copy'), resultEmpty: $('result-empty'),
+    sceneCanvas: $('scene'), bubbles: $('bubbles'),
     overlay: $('overlay'), overlayEmoji: $('overlay-emoji'), overlayTitle: $('overlay-title'),
     overlayText: $('overlay-text'), overlayActions: $('overlay-actions'),
 };
 
 let cards = [];
 let inputCard = null;     // { card, badge, body }
+let inspectCard = null;   // { card, badge, rows, foot }
+let speeches = [];        // speech bubble elements over the scene, one per chimp
 let messageTimer = null;
 
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -64,6 +63,8 @@ const wait = ms => (state.skipAnim ? Promise.resolve() : delay(ms));
 
 // ---------- boot ----------
 boot();
+new ResizeObserver(() => syncScene()).observe(el.conveyor);
+document.fonts?.ready?.then(() => syncScene());
 
 function boot() {
     scene.mount(el.sceneCanvas);
@@ -153,7 +154,6 @@ function setPhase(phase) {
     el.btnResetProgress.disabled = running;
     el.conveyor.classList.toggle('running', running);
     for (const c of cards) c.textarea.disabled = running;
-    renderRunCost();
 }
 
 function updateNavButtons() {
@@ -180,7 +180,6 @@ function renderHud(flash = null) {
         el.hudCash.classList.add(flash > 0 ? 'flash-up' : 'flash-down');
     }
     renderKnobs();
-    renderRunCost();
 }
 
 function renderKnobs(highlight = false) {
@@ -199,16 +198,6 @@ function renderKnobs(highlight = false) {
     }
 }
 
-function renderRunCost() {
-    if (!state.puzzle) return;
-    const n = state.puzzle.batch.length;
-    if (state.sandbox) {
-        el.runCost.innerHTML = `<span class="cost">원재료 무료 (시험 라인)</span> · ${n}건`;
-        return;
-    }
-    const per = eco.payout(1, n, state.puzzle.revenue);
-    el.runCost.innerHTML = `원재료 <span class="cost">-${eco.formatWon(state.puzzle.materialCost)}</span> · 납품가 <span class="rev">${eco.formatWon(per)}/건</span> · ${n}건 중 ${PASS_COUNT}건 합격`;
-}
 
 // ---------- puzzle selection ----------
 function selectPuzzle(index) {
@@ -262,16 +251,13 @@ function applyPuzzle(puzzle) {
     el.levelTitle.textContent = (locked ? '🔒 ' : '') + puzzle.title;
     el.levelTitle.classList.toggle('locked', locked);
     el.levelStars.textContent = state.sandbox ? '' : starString(state.company.passed[puzzle.id]?.stars ?? 0);
-    el.levelRevenue.textContent = state.sandbox ? '' : `납품가 ${eco.formatWon(puzzle.revenue)} / ${puzzle.batch.length}건`;
     el.brief.textContent = puzzle.brief ?? '';
     el.flavor.textContent = locked ? '이전 작업을 통과하면 해금됩니다.' : (puzzle.flavor ?? '');
     el.btnHint.hidden = !puzzle.hint && !puzzle.sampleSolution;
     updateNavButtons();
-    setResultEmpty(true);
     showMessage('');
     buildConveyor(puzzle, locked);
     if (state.phase === 'RESULT') setPhase('IDLE');
-    renderRunCost();
 }
 
 // ---------- conveyor DOM ----------
@@ -282,8 +268,6 @@ function buildConveyor(puzzle, locked = false) {
 
     inputCard = samplesCard(puzzle);
     el.conveyor.appendChild(inputCard.card);
-    scene.setStations(puzzle.chimps);
-    scene.reset();
 
     for (let k = 0; k < puzzle.chimps; k++) {
         const label = puzzle.perChimp?.[k]?.label ?? '';
@@ -302,27 +286,87 @@ function buildConveyor(puzzle, locked = false) {
         const counter = document.createElement('div');
         counter.className = 'counter';
 
-        const bubble = document.createElement('div');
-        bubble.className = 'bubble';
-
         const status = document.createElement('div');
         status.className = 'status';
 
-        card.append(title, textarea, counter, bubble, status);
+        card.append(title, textarea, counter, status);
         el.conveyor.appendChild(card);
 
-        const bundle = { card, textarea, counter, bubble, status, limit: knobs.promptLimit };
+        const bundle = { card, textarea, counter, status, limit: knobs.promptLimit };
         cards.push(bundle);
         applyKnobsToCard(bundle, knobs, k);
 
         textarea.addEventListener('input', () => {
             state.prompts[k] = textarea.value;
             updateCounter(bundle);
+            scene.setInstruction(k, textarea.value.trim().length > 0);
             schedulePromptSave();
         });
     }
 
     el.conveyor.appendChild(goalCard(puzzle));
+    syncScene();
+    cards.forEach((c, k) => scene.setInstruction(k, (state.prompts[k] ?? '').trim().length > 0));
+    scene.reset();
+    renderQueue();
+}
+
+/** Measure card centers and lay the pixel scene out to match them. */
+function syncScene() {
+    if (!inputCard || !inspectCard || !cards.length) return;
+    const center = elm => elm.offsetLeft + elm.offsetWidth / 2;
+    const stations = cards.map(c => center(c.card));
+    scene.layout({
+        cssWidth: el.conveyor.scrollWidth,
+        stations,
+        inX: center(inputCard.card),
+        outX: center(inspectCard.card),
+    });
+    layoutSpeech(stations);
+}
+
+// ---------- speech bubbles (HTML, positioned over the canvas) ----------
+
+function layoutSpeech(stations) {
+    el.bubbles.style.width = `${el.conveyor.scrollWidth}px`;
+    el.bubbles.style.height = el.sceneCanvas.style.height;
+    while (speeches.length < stations.length) {
+        const d = document.createElement('div');
+        d.className = 'speech hidden';
+        el.bubbles.appendChild(d);
+        speeches.push(d);
+    }
+    while (speeches.length > stations.length) speeches.pop().remove();
+    const bottom = parseInt(el.sceneCanvas.style.height, 10) - scene.CHIMP_HEAD_CSS() + 8;
+    stations.forEach((x, k) => {
+        speeches[k].style.left = `${x}px`;
+        speeches[k].style.bottom = `${bottom}px`;
+    });
+}
+
+function speechThinking(k) {
+    const d = speeches[k];
+    if (!d) return;
+    d.className = 'speech thinking';
+    d.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+    d.title = '';
+}
+
+function speechText(k, text, { streaming = false } = {}) {
+    const d = speeches[k];
+    if (!d) return;
+    d.className = `speech ${streaming ? 'talking' : 'done'}`;
+    d.textContent = text || '(빈 출력)';
+    d.title = text || '';
+}
+
+function speechMark(k, cls) {
+    const d = speeches[k];
+    if (d) d.classList.add(cls);
+}
+
+function speechHideAll() {
+    for (const d of speeches) { d.className = 'speech hidden'; d.textContent = ''; }
 }
 
 function samplesCard(puzzle) {
@@ -349,26 +393,140 @@ function samplesCard(puzzle) {
     const foot = document.createElement('div');
     foot.className = 'sample-foot';
     foot.textContent = `실제로는 ${puzzle.batch.length}건이 흘러옵니다.`;
-    const current = document.createElement('div');
-    current.className = 'io-text current-item';
-    current.hidden = true;
-    card.append(t, body, foot, current);
-    return { card, badge, body, foot, current };
+    const queue = document.createElement('div');
+    queue.className = 'queue';
+    queue.hidden = true;
+    card.append(t, body, foot, queue);
+    return { card, badge, body, foot, queue };
+}
+
+/** Sample card body: samples when idle, the live queue (now / next / after) while running. */
+function renderQueue() {
+    if (!inputCard) return;
+    const running = state.phase === 'RUNNING' && state.activeItem >= 0;
+    inputCard.body.hidden = running;
+    inputCard.foot.hidden = running;
+    inputCard.queue.hidden = !running;
+    inputCard.badge.hidden = !running;
+    if (!running) return;
+    const items = state.items;
+    const i = state.activeItem;
+    inputCard.badge.textContent = `${i + 1}/${items.length}`;
+    inputCard.queue.innerHTML = '';
+    const labels = ['지금', '다음', '그다음'];
+    for (let d = 0; d < 3 && i + d < items.length; d++) {
+        const row = document.createElement('div');
+        row.className = 'queue-item' + (d === 0 ? ' now' : '');
+        const tag = document.createElement('span');
+        tag.className = 'queue-tag';
+        tag.textContent = labels[d];
+        const txt = document.createElement('span');
+        txt.className = 'queue-text';
+        txt.textContent = items[i + d].input;
+        row.append(tag, txt);
+        inputCard.queue.appendChild(row);
+    }
+    const left = items.length - i - 3;
+    if (left > 0) {
+        const more = document.createElement('div');
+        more.className = 'queue-more';
+        more.textContent = `… ${left}장 더`;
+        inputCard.queue.appendChild(more);
+    }
 }
 
 function goalCard(puzzle) {
     const card = document.createElement('div');
-    card.className = 'card io';
+    card.className = 'card io inspect';
     const t = document.createElement('div');
     t.className = 'card-title';
-    t.textContent = '합격선';
-    const body = document.createElement('div');
-    body.className = 'io-text goal';
-    body.textContent = state.sandbox
-        ? `${puzzle.batch.length}건 시험. 채점: ${MATCH_MODES.find(m => m.value === puzzle.match)?.label ?? puzzle.match}`
-        : `${puzzle.batch.length}건 중 ${PASS_COUNT}건 이상 정답`;
-    card.append(t, body);
+    t.innerHTML = `<span>검수함</span><span class="badge"></span>`;
+    const badge = t.querySelector('.badge');
+    const copy = document.createElement('button');
+    copy.className = 'btn tiny copy';
+    copy.textContent = '복사';
+    copy.title = '릴레이 기록 복사';
+    copy.addEventListener('click', copyTranscript);
+    t.appendChild(copy);
+    const rows = document.createElement('div');
+    rows.className = 'inspect-rows';
+    const foot = document.createElement('div');
+    foot.className = 'inspect-foot';
+    card.append(t, rows, foot);
+    inspectCard = { card, badge, rows, foot, copy };
+    renderInspection();
     return card;
+}
+
+/** Redraw the inspection card from state.items / state.result. */
+function renderInspection() {
+    if (!inspectCard) return;
+    const puzzle = state.puzzle;
+    const total = puzzle.batch.length;
+    const items = state.items.length ? state.items : puzzle.batch.map(b => ({ input: b.input, target: b.target, done: false, ok: false }));
+    const correct = items.filter(it => it.ok).length;
+    const running = state.phase === 'RUNNING';
+    const started = state.items.length > 0;
+
+    inspectCard.badge.textContent = state.sandbox
+        ? (started ? `정답 ${correct}/${total}` : `${total}건 시험`)
+        : (started ? `정답 ${correct} / 합격선 ${PASS_COUNT}` : `합격선 ${PASS_COUNT}/${total}`);
+    inspectCard.copy.hidden = !state.result;
+
+    inspectCard.rows.innerHTML = '';
+    items.forEach((it, i) => {
+        const row = document.createElement('div');
+        const cls = it.done ? (it.ok ? 'ok' : 'bad') : (running && i === state.activeItem ? 'active' : 'pending');
+        row.className = `inspect-row ${cls}`;
+        const n = document.createElement('span');
+        n.className = 'n';
+        n.textContent = String(i + 1);
+        const out = document.createElement('span');
+        out.className = 'out';
+        out.textContent = it.done ? (it.final || '(빈 출력)') : (running && i === state.activeItem ? '…' : '');
+        const mark = document.createElement('span');
+        mark.className = 'mark';
+        mark.textContent = it.done ? (it.ok ? '✓' : '✗') : '';
+        row.append(n, out, mark);
+        row.title = `입력: ${it.input}\n기대: ${it.target}` + (it.done ? `\n출력: ${it.final || '(빈 출력)'}${it.detail ? `\n${it.detail}` : ''}` : '');
+        inspectCard.rows.appendChild(row);
+    });
+
+    renderLedger();
+}
+
+/** 손익계산서 at the bottom of the inspection card: quote before the run, statement after. */
+function renderLedger() {
+    const puzzle = state.puzzle;
+    const total = puzzle.batch.length;
+    const foot = inspectCard.foot;
+    foot.innerHTML = '';
+    const line = (k, v, cls = '') => {
+        const kk = document.createElement('span');
+        kk.className = 'k';
+        kk.textContent = k;
+        const vv = document.createElement('span');
+        vv.className = `v ${cls}`;
+        vv.textContent = v;
+        foot.append(kk, vv);
+    };
+    if (state.sandbox) {
+        line('시험 라인', `${total}건 · ${MATCH_MODES.find(m => m.value === puzzle.match)?.label ?? puzzle.match}`);
+        if (state.result) line('결과', `${state.result.tier.label} ${state.result.correct}/${total}`, state.result.tier.key);
+        return;
+    }
+    const per = eco.payout(1, total, puzzle.revenue);
+    const r = state.result;
+    line('합격선', `${PASS_COUNT} / ${total}`);
+    line('납품가', `${eco.formatWon(per)} × ${total}`);
+    line('원재료', `-${eco.formatWon(puzzle.materialCost)}`, 'bad');
+    if (r) {
+        const profit = r.revenue - r.materialCost;
+        line('매출', `${eco.formatWon(per)} × ${r.correct} = ${eco.formatWon(r.revenue)}`, r.revenue > 0 ? 'good' : '');
+        line('손익', `${profit >= 0 ? '+' : ''}${eco.formatWon(profit)}`, `total ${profit >= 0 ? 'good' : 'bad'}`);
+        line('판정', `${r.tier.label} ${starString(r.stars)}`, `total ${r.tier.key}`);
+        line('현금', eco.formatWon(state.company.cash));
+    }
 }
 
 function applyKnobsToCard(b, knobs, k) {
@@ -396,28 +554,17 @@ function updateCounter(b) {
 
 function resetCards() {
     scene.reset();
+    speechHideAll();
     for (const c of cards) {
         c.card.classList.remove('active', 'done', 'failed');
-        c.bubble.textContent = '';
-        c.bubble.classList.remove('streaming');
         c.status.textContent = '';
         c.status.className = 'status';
     }
-    if (inputCard) {
-        inputCard.badge.hidden = true;
-        inputCard.current.hidden = true;
-        inputCard.body.hidden = false;
-        inputCard.foot.hidden = false;
-    }
+    renderQueue();
 }
 
-function showCurrentItem(i, item) {
-    inputCard.badge.hidden = false;
-    inputCard.badge.textContent = `${i + 1}/${state.puzzle.batch.length}`;
-    inputCard.body.hidden = true;
-    inputCard.foot.hidden = true;
-    inputCard.current.hidden = false;
-    inputCard.current.textContent = item.input;
+function showCurrentItem() {
+    renderQueue();
 }
 
 // ---------- run loop ----------
@@ -452,7 +599,7 @@ async function runChain() {
     scene.start();
     scene.itemProgress(0, state.items.length, 0);
     showMessage('');
-    renderResult({ live: true });
+    renderInspection();
 
     if (materialCost > 0) {
         state.company = eco.chargeMaterial(state.company, materialCost);
@@ -467,10 +614,15 @@ async function runChain() {
     for (let i = 0; i < state.items.length; i++) {
         const item = state.items[i];
         state.activeItem = i;
-        showCurrentItem(i, item);
-        for (const c of cards) { c.card.classList.remove('done'); c.bubble.textContent = ''; c.status.textContent = ''; c.status.className = 'status'; }
+        showCurrentItem();
+        renderInspection();
+        for (const c of cards) { c.card.classList.remove('done'); c.status.textContent = ''; c.status.className = 'status'; }
         scene.allChimps('idle');
+        speechHideAll();
         scene.hideParcel();
+        if (i === 0) scrollCardIntoView(inputCard.card);
+        await scene.spawnParcel();
+        if (ctrl.signal.aborted) { aborted = true; markAborted(cards[0]); break outer; }
         let carry = item.input;
 
         for (let k = 0; k < puzzle.chimps; k++) {
@@ -483,12 +635,12 @@ async function runChain() {
             if (ctrl.signal.aborted) { aborted = true; markAborted(b); break outer; }
 
             scene.chimpState(k, 'think');
+            speechThinking(k);
             const context = {};
             if (knobs.memoryLevel >= 1 && k > 0) context.originalInput = item.input;
 
             let raw = '';
             try {
-                b.bubble.classList.add('streaming');
                 raw = await llm.generate({
                     prompt: state.prompts[k],
                     input: carry,
@@ -498,26 +650,25 @@ async function runChain() {
                     temperature: knobs.temperature,
                     onToken: (text) => {
                         scene.chimpState(k, 'write');
-                        b.bubble.textContent = text;
+                        speechText(k, text, { streaming: true });
                     },
                 });
             } catch (err) {
-                b.bubble.classList.remove('streaming');
                 if (err?.name === 'AbortError') { aborted = true; markAborted(b); break outer; }
                 console.error(err);
                 failed = true;
                 scene.chimpState(k, 'dead');
+                speechText(k, '…');
+                speechMark(k, 'dead');
                 b.status.textContent = `오류: ${String(err?.message ?? err).slice(0, 80)}`;
                 b.status.classList.add('error');
                 b.card.classList.remove('active');
                 b.card.classList.add('failed');
                 break outer;
             }
-            b.bubble.classList.remove('streaming');
-
             const cleaned = state.rawMode ? raw.trim() : postClean(raw);
             item.outputs[k] = cleaned;
-            b.bubble.textContent = cleaned || '(빈 출력)';
+            speechText(k, cleaned);
             if (!state.rawMode && cleaned !== raw.trim()) b.status.textContent = '잡담을 정리했습니다';
             carry = cleaned;
 
@@ -533,10 +684,11 @@ async function runChain() {
         item.detail = detail;
         item.ok = score >= puzzle.itemThreshold;
         item.done = true;
+        speechMark(puzzle.chimps - 1, item.ok ? 'ok' : 'bad');
         await scene.parcelTo(puzzle.chimps);
         scene.chimpState(puzzle.chimps - 1, item.ok ? 'happy' : 'sad');
         scene.itemProgress(i + 1, state.items.length, state.items.filter(it => it.ok).length);
-        renderResult({ live: true });
+        renderInspection();
         await wait(250);
         scene.hideParcel();
     }
@@ -546,6 +698,7 @@ async function runChain() {
 
     if (failed) {
         setPhase('IDLE');
+        renderQueue();
         showMessage(`침팬지가 쓰러졌습니다. 원재료 ${eco.formatWon(materialCost)}은 이미 녹았습니다.`, 'hint');
         if (!state.sandbox) offerLoanIfNeeded();
         return;
@@ -606,10 +759,12 @@ function finish(materialCost, aborted) {
         if (leveledUp) renderKnobs(true);
     }
 
-    renderResult({ live: false, leveledUp });
     setPhase('RESULT');
+    renderInspection();
+    renderQueue();
 
     if (aborted) showMessage(`컨베이어를 멈췄습니다. ${state.items.filter(i => i.done).length}건까지의 결과만 남았습니다.`, 'hint');
+    else if (leveledUp) showMessage('현장 숙련도가 올랐습니다. 지시서가 길어지고 집중력과 출력 용지가 늘어납니다.');
 
     if (!state.sandbox) {
         if (campaignComplete(state.company.passed) && !state.company.reportSeen) {
@@ -620,78 +775,6 @@ function finish(materialCost, aborted) {
             offerLoanIfNeeded();
         }
     }
-}
-
-function renderResult({ live, leveledUp = false }) {
-    const puzzle = state.puzzle;
-    const total = state.items.length;
-    const doneCount = state.items.filter(i => i.done).length;
-    const correct = state.items.filter(i => i.ok).length;
-
-    // batch table (always)
-    el.batchTable.innerHTML = '';
-    state.items.forEach((it, i) => {
-        const row = document.createElement('div');
-        row.className = 'batch-row ' + (it.done ? (it.ok ? 'ok' : 'bad') : (i === state.activeItem ? 'active' : 'pending'));
-        row.innerHTML = `<span class="n">${i + 1}</span><span class="in"></span><span class="out"></span><span class="mark"></span>`;
-        row.querySelector('.in').textContent = it.input;
-        row.querySelector('.out').textContent = it.done ? (it.final || '(빈 출력)') : (i === state.activeItem ? '…' : '');
-        row.querySelector('.mark').textContent = it.done ? (it.ok ? '✓' : '✗') : '';
-        if (it.done && !it.ok && it.detail) row.title = it.detail;
-        el.batchTable.appendChild(row);
-    });
-
-    renderMeter();
-    if (live) {
-        el.resultEmoji.textContent = 'RUNNING';
-        el.resultLabel.textContent = `가동 중 ${doneCount}/${total}`;
-        el.resultLabel.className = 'result-label';
-        el.resultStars.textContent = '';
-        el.resultScore.textContent = `정답 ${correct}건`;
-        el.resultDetail.textContent = state.sandbox ? '' : `합격선 ${PASS_COUNT}건`;
-        el.ledger.hidden = true;
-        setResultEmpty(false);
-        return;
-    }
-
-    const r = state.result;
-    el.resultEmoji.textContent = r.tier.emoji;
-    el.resultLabel.textContent = r.tier.label;
-    el.resultLabel.className = `result-label ${r.tier.key}`;
-    el.resultStars.textContent = state.sandbox ? '' : starString(r.stars);
-    el.resultScore.textContent = `${r.correct}/${r.total} 정답 · 합격선 ${PASS_COUNT}`;
-    const wrong = state.items.filter(i => i.done && !i.ok).length;
-    el.resultDetail.textContent = (wrong ? `틀린 전표 ${wrong}건. 표에서 ✗를 눌러 보면 무엇이 나갔는지 보입니다.` : '열 장 전부 정확합니다. 사장은 이게 당연한 줄 압니다.')
-        + (leveledUp ? ' · 현장 숙련도가 올랐습니다. 지시서가 길어지고 집중력과 출력 용지가 조금 늘어납니다.' : '');
-
-    if (state.sandbox) {
-        el.ledger.hidden = true;
-    } else {
-        const profit = r.revenue - r.materialCost;
-        el.ledger.hidden = false;
-        el.ledger.innerHTML = `
-            <span class="k">매출 (${r.correct}건 × ${eco.formatWon(eco.payout(1, r.total, puzzle.revenue))})</span><span class="v ${r.revenue > 0 ? 'good' : ''}">${eco.formatWon(r.revenue)}</span>
-            <span class="k">원재료</span><span class="v bad">-${eco.formatWon(r.materialCost)}</span>
-            <span class="k">침팬지 임금</span><span class="v">₩0 (바나나는 사장 개인 비용)</span>
-            <span class="k total">이번 작업 손익</span><span class="v total ${profit >= 0 ? 'good' : 'bad'}">${eco.formatWon(profit)}</span>
-            <span class="k">현금</span><span class="v">${eco.formatWon(state.company.cash)}</span>`;
-    }
-
-    setResultEmpty(false);
-}
-
-function setResultEmpty(empty) {
-    el.resultPanel.classList.toggle('empty', empty);
-}
-
-function renderMeter() {
-    el.meter.innerHTML = '';
-    state.items.forEach((it, i) => {
-        const s = document.createElement('span');
-        if (it.done) s.className = it.ok ? 'ok' : 'bad';
-        else if (i === state.activeItem && state.phase === 'RUNNING') s.className = 'live';
-        el.meter.appendChild(s);
-    });
 }
 
 function buildTranscript() {
@@ -741,6 +824,7 @@ function showLoanOffer(text) {
         state.company = eco.takeLoan(state.company);
         saveCompany();
         renderHud(1);
+        renderInspection();
         showMessage('은행이 "AI 혁신 기업"이라며 기꺼이 빌려줬습니다. 부채가 늘었습니다.');
     });
     el.message.appendChild(btn);
@@ -818,14 +902,7 @@ async function copyTranscript() {
         await navigator.clipboard.writeText(text);
         showMessage('릴레이 기록을 복사했습니다.');
     } catch {
-        el.transcript.hidden = false;
-        el.transcript.textContent = text;
-        const range = document.createRange();
-        range.selectNodeContents(el.transcript);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-        showMessage('자동 복사에 실패했습니다. 기록을 선택했으니 Ctrl+C로 복사하세요.', 'hint');
+        window.prompt('클립보드 접근이 막혔습니다. 아래 기록을 직접 복사하세요.', text);
     }
 }
 
@@ -843,9 +920,9 @@ function wireEvents() {
         state.prompts = state.prompts.map(() => '');
         for (const c of cards) { c.textarea.value = ''; updateCounter(c); }
         resetCards();
-        setResultEmpty(true);
         state.result = null;
         state.items = [];
+        renderInspection();
         schedulePromptSave();
         if (state.phase === 'RESULT') setPhase('IDLE');
     });
@@ -854,7 +931,6 @@ function wireEvents() {
     el.btnSandbox.addEventListener('click', () => { if (state.sandbox) selectPuzzle(state.levelIndex); else selectSandbox(); });
     el.btnSbApply.addEventListener('click', applySandboxForm);
     el.btnHint.addEventListener('click', showHint);
-    el.btnCopy.addEventListener('click', copyTranscript);
     el.btnResetProgress.addEventListener('click', resetProgress);
 
     el.toggleSkip.addEventListener('change', () => { state.skipAnim = el.toggleSkip.checked; save('skipAnim', state.skipAnim); scene.setSkipAnim(state.skipAnim); });
