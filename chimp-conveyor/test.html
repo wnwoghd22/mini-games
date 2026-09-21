@@ -98,8 +98,8 @@
         const ecoCases = [
             ['starting cash', co.cash, 3000],
             ['level 0 knobs', JSON.stringify(eco.progressionFor(0)), '{"promptLimit":60,"temperature":0.35,"memoryLevel":0,"maxTokens":48}'],
-            ['level clamp', eco.progressionFor(99).promptLimit, 135],
-            ['progression monotonic', (() => { for (let i = 1; i <= 8; i++) { const a = eco.progressionFor(i - 1), b = eco.progressionFor(i); if (b.promptLimit < a.promptLimit || b.temperature > a.temperature || b.maxTokens < a.maxTokens) return false; } return true; })(), true],
+            ['level clamp', eco.progressionFor(99).promptLimit, 160],
+            ['progression monotonic', (() => { for (let i = 1; i <= 12; i++) { const a = eco.progressionFor(i - 1), b = eco.progressionFor(i); if (b.promptLimit < a.promptLimit || b.temperature > a.temperature || b.maxTokens < a.maxTokens) return false; } return true; })(), true],
             ['payout per item', eco.payout(7, 10, 2000), 1400],
             ['payout zero', eco.payout(0, 10, 2000), 0],
             ['isPass 6', eco.isPass(6), true],
@@ -113,7 +113,7 @@
             ['formatWon', eco.formatWon(-12345), '-₩12,345'],
         ];
         const pz = await import('./puzzles.js');
-        const batchOk = pz.WORK_ORDERS.every(w => w.batch.length === 10 && w.samples.length === 3 && w.sampleSolution.length === w.chimps);
+        const batchOk = pz.WORK_ORDERS.length === 12 && pz.WORK_ORDERS.every(w => w.batch.length === 10 && w.samples.length === 3 && w.sampleSolution.length === w.chimps && w.perChimp.length === w.chimps);
         ecoCases.push(['work orders shape (10 batch, 3 samples, N prompts)', batchOk, true]);
         ecoCases.push(['prompt limits fit sampleSolution', pz.WORK_ORDERS.every((w, i) => w.sampleSolution.every(p => p.length <= pz.PROGRESSION[i].promptLimit)), true]);
         const NL = String.fromCharCode(10);

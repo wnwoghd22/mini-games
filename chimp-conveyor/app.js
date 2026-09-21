@@ -4,13 +4,12 @@ import {
     WORK_ORDERS, SANDBOX_DEFAULT, MATCH_MODES, DEPARTMENTS, INTRO_TEXT, BATCH_SIZE, PASS_COUNT,
     isUnlocked, campaignComplete, parseBatchText, batchToText,
 } from './puzzles.js';
-import { score as scoreOutput, stars as starsOf, stripFences, normalize } from './similarity.js';
+import { score as scoreOutput, stars as starsOf, stripFences } from './similarity.js';
 import { load, save, remove } from './storage.js';
 import * as eco from './economy.js';
+import * as scene from './scene.js';
 
 // ---------- constants ----------
-const THINK_FRAMES = ['🐵', '🙈', '🙉', '🙊'];
-const SMUG_REACTIONS = ['😎', '🍌', '🤔', '😤', '🐒', '🫡', '🤓'];
 const CHATTER_LINE = /^(sure|certainly|of course|okay|ok|here('s| is| you go)|the (answer|output|result) is|output|result|answer|출력|결과|답|정답|네|물론)\b[^\n]{0,40}?[:：!.]?\s*$/i;
 const CHATTER_PREFIX = /^(sure[,!.]?\s*|certainly[,!.]?\s*|here('s| is)( the| your)? (output|result|answer)[:：]?\s*|(output|result|answer|출력|결과|답)[:：]\s*)/i;
 const MEMORY_LABEL = ['직전 출력만', '+원본 전표'];
@@ -49,7 +48,7 @@ const el = {
     btnRun: $('btn-run'), runCost: $('run-cost'), btnRerun: $('btn-rerun'), btnClear: $('btn-clear'),
     message: $('message-area'),
     resultPanel: $('result-panel'), resultEmoji: $('result-emoji'), resultLabel: $('result-label'),
-    resultStars: $('result-stars'), resultScore: $('result-score'), meterFill: $('meter-fill'),
+    resultStars: $('result-stars'), resultScore: $('result-score'), meter: $('meter'), sceneCanvas: $('scene'),
     resultDetail: $('result-detail'), ledger: $('ledger'), batchTable: $('batch-table'), transcript: $('transcript'),
     btnCopy: $('btn-copy'), btnNextLevel: $('btn-next-level'),
     overlay: $('overlay'), overlayEmoji: $('overlay-emoji'), overlayTitle: $('overlay-title'),
@@ -58,7 +57,6 @@ const el = {
 
 let cards = [];
 let inputCard = null;     // { card, badge, body }
-let parcel = null;
 let messageTimer = null;
 
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -68,6 +66,8 @@ const wait = ms => (state.skipAnim ? Promise.resolve() : delay(ms));
 boot();
 
 function boot() {
+    scene.mount(el.sceneCanvas);
+    scene.setSkipAnim(state.skipAnim);
     el.toggleSkip.checked = state.skipAnim;
     el.toggleRaw.checked = state.rawMode;
     populateMatchModes();
@@ -239,7 +239,7 @@ function applySandboxForm() {
     if (!batch.length) { showMessage('한 줄에 한 건, "입력 => 목표" 형식으로 적어 주세요.', 'hint'); return; }
     const cfg = {
         batch,
-        chimps: clamp(parseInt(el.sbChimps.value, 10) || 2, 2, 5),
+        chimps: clamp(parseInt(el.sbChimps.value, 10) || 1, 1, 5),
         match: el.sbMatch.value,
     };
     state.sandboxConfig = cfg;
@@ -283,6 +283,8 @@ function buildConveyor(puzzle, locked = false) {
 
     inputCard = samplesCard(puzzle);
     el.conveyor.appendChild(inputCard.card);
+    scene.setStations(puzzle.chimps);
+    scene.reset();
 
     for (let k = 0; k < puzzle.chimps; k++) {
         const label = puzzle.perChimp?.[k]?.label ?? '';
@@ -293,10 +295,6 @@ function buildConveyor(puzzle, locked = false) {
         title.className = 'card-title';
         title.innerHTML = `<span>침팬지 ${k + 1}</span><span class="label"></span>`;
         title.querySelector('.label').textContent = label;
-
-        const face = document.createElement('div');
-        face.className = 'chimp-face';
-        face.textContent = '🐵';
 
         const textarea = document.createElement('textarea');
         textarea.value = state.prompts[k] ?? '';
@@ -311,10 +309,10 @@ function buildConveyor(puzzle, locked = false) {
         const status = document.createElement('div');
         status.className = 'status';
 
-        card.append(title, face, textarea, counter, bubble, status);
+        card.append(title, textarea, counter, bubble, status);
         el.conveyor.appendChild(card);
 
-        const bundle = { card, face, textarea, counter, bubble, status, limit: knobs.promptLimit };
+        const bundle = { card, textarea, counter, bubble, status, limit: knobs.promptLimit };
         cards.push(bundle);
         applyKnobsToCard(bundle, knobs, k);
 
@@ -326,11 +324,6 @@ function buildConveyor(puzzle, locked = false) {
     }
 
     el.conveyor.appendChild(goalCard(puzzle));
-
-    parcel = document.createElement('div');
-    parcel.className = 'parcel';
-    parcel.hidden = true;
-    el.conveyor.appendChild(parcel);
 }
 
 function samplesCard(puzzle) {
@@ -403,15 +396,14 @@ function updateCounter(b) {
 }
 
 function resetCards() {
+    scene.reset();
     for (const c of cards) {
         c.card.classList.remove('active', 'done', 'failed');
-        c.face.textContent = '🐵';
         c.bubble.textContent = '';
         c.bubble.classList.remove('streaming');
         c.status.textContent = '';
         c.status.className = 'status';
     }
-    if (parcel) parcel.hidden = true;
     if (inputCard) {
         inputCard.badge.hidden = true;
         inputCard.current.hidden = true;
@@ -430,10 +422,7 @@ function showCurrentItem(i, item) {
 }
 
 // ---------- run loop ----------
-function promptsContainAnswer() {
-    const targets = state.puzzle.batch.map(b => normalize(b.target)).filter(t => t.length >= 3);
-    return state.prompts.some(p => { const np = normalize(p); return targets.some(t => np.includes(t)); });
-}
+// (No answer-hardcoding guard: with 10 varied items per batch, a hardcoded answer scores 1/10 on its own.)
 
 async function runChain() {
     const puzzle = state.puzzle;
@@ -445,10 +434,6 @@ async function runChain() {
         showMessage('모든 침팬지에게 지시를 내려야 합니다.', 'hint');
         const idx = state.prompts.findIndex(p => !p.trim());
         cards[idx]?.textarea.focus();
-        return;
-    }
-    if (!state.sandbox && promptsContainAnswer()) {
-        showMessage('사장: "정답을 지시서에 적어? 그럼 네가 일하는 거잖아. 침팬지 뭐 하러 뽑았어!" (가동 취소, 원재료는 무사)', 'hint');
         return;
     }
 
@@ -465,6 +450,8 @@ async function runChain() {
     state.result = null;
     resetCards();
     setPhase('RUNNING');
+    scene.start();
+    scene.itemProgress(0, state.items.length, 0);
     showMessage('');
     renderResult({ live: true });
 
@@ -483,17 +470,20 @@ async function runChain() {
         state.activeItem = i;
         showCurrentItem(i, item);
         for (const c of cards) { c.card.classList.remove('done'); c.bubble.textContent = ''; c.status.textContent = ''; c.status.className = 'status'; }
+        scene.allChimps('idle');
+        scene.hideParcel();
         let carry = item.input;
 
         for (let k = 0; k < puzzle.chimps; k++) {
             const b = cards[k];
             state.activeChimp = k;
             b.card.classList.add('active');
+            scene.setActive(k);
             if (i === 0) scrollCardIntoView(b.card);
-            if (i === 0) await moveParcel(k);
+            await scene.parcelTo(k);
             if (ctrl.signal.aborted) { aborted = true; markAborted(b); break outer; }
 
-            const thinking = startThinking(b);
+            scene.chimpState(k, 'think');
             const context = {};
             if (knobs.memoryLevel >= 1 && k > 0) context.originalInput = item.input;
 
@@ -508,25 +498,22 @@ async function runChain() {
                     maxTokens: knobs.maxTokens ?? DEFAULT_MAX_TOKENS,
                     temperature: knobs.temperature,
                     onToken: (text) => {
-                        thinking.stop();
-                        b.face.textContent = '🐵';
+                        scene.chimpState(k, 'write');
                         b.bubble.textContent = text;
                     },
                 });
             } catch (err) {
-                thinking.stop();
                 b.bubble.classList.remove('streaming');
                 if (err?.name === 'AbortError') { aborted = true; markAborted(b); break outer; }
                 console.error(err);
                 failed = true;
-                b.face.textContent = '💀';
+                scene.chimpState(k, 'dead');
                 b.status.textContent = `오류: ${String(err?.message ?? err).slice(0, 80)}`;
                 b.status.classList.add('error');
                 b.card.classList.remove('active');
                 b.card.classList.add('failed');
                 break outer;
             }
-            thinking.stop();
             b.bubble.classList.remove('streaming');
 
             const cleaned = state.rawMode ? raw.trim() : postClean(raw);
@@ -535,10 +522,8 @@ async function runChain() {
             if (!state.rawMode && cleaned !== raw.trim()) b.status.textContent = '잡담을 정리했습니다';
             carry = cleaned;
 
-            if (k < puzzle.chimps - 1) {
-                b.face.textContent = pick(SMUG_REACTIONS);
-                if (i === 0) await wait(700);
-            }
+            scene.chimpState(k, 'idle');
+            if (k < puzzle.chimps - 1 && i === 0) await wait(300);
             b.card.classList.remove('active');
             b.card.classList.add('done');
         }
@@ -549,13 +534,16 @@ async function runChain() {
         item.detail = detail;
         item.ok = score >= puzzle.itemThreshold;
         item.done = true;
-        cards[cards.length - 1].face.textContent = item.ok ? '🍌' : '💥';
+        await scene.parcelTo(puzzle.chimps);
+        scene.chimpState(puzzle.chimps - 1, item.ok ? 'happy' : 'sad');
+        scene.itemProgress(i + 1, state.items.length, state.items.filter(it => it.ok).length);
         renderResult({ live: true });
-        await wait(200);
+        await wait(250);
+        scene.hideParcel();
     }
 
     state.runCtrl = null;
-    if (parcel) parcel.hidden = true;
+    scene.stop();
 
     if (failed) {
         setPhase('IDLE');
@@ -582,10 +570,10 @@ function postClean(text) {
 }
 
 function tierFor(correct, total) {
-    if (correct === total) return { key: 'perfect', label: '전량 합격!', emoji: '🎉' };
-    if (eco.isPass(correct)) return { key: 'pass', label: '합격', emoji: '🍌' };
-    if (correct >= 3) return { key: 'close', label: '아깝다', emoji: '😅' };
-    return { key: 'disaster', label: '대참사', emoji: '💥' };
+    if (correct === total) return { key: 'perfect', label: '전량 합격!', emoji: 'PERFECT' };
+    if (eco.isPass(correct)) return { key: 'pass', label: '합격', emoji: 'PASS' };
+    if (correct >= 3) return { key: 'close', label: '아깝다', emoji: 'CLOSE' };
+    return { key: 'disaster', label: '대참사', emoji: 'FAIL' };
 }
 
 function finish(materialCost, aborted) {
@@ -598,6 +586,7 @@ function finish(materialCost, aborted) {
     const stars = starsOf(correct / total, PASS_COUNT / total, budget ? used / budget : 1);
     const revenue = state.sandbox ? 0 : eco.payout(correct, total, puzzle.revenue);
     state.result = { correct, total, tier, stars, materialCost, revenue, aborted };
+    scene.allChimps(eco.isPass(correct) ? 'happy' : 'sad');
 
     let leveledUp = false;
     if (!state.sandbox) {
@@ -653,14 +642,14 @@ function renderResult({ live, leveledUp = false }) {
         el.batchTable.appendChild(row);
     });
 
+    renderMeter();
     if (live) {
-        el.resultEmoji.textContent = '🏭';
+        el.resultEmoji.textContent = 'RUNNING';
         el.resultLabel.textContent = `가동 중 ${doneCount}/${total}`;
+        el.resultLabel.className = 'result-label';
         el.resultStars.textContent = '';
         el.resultScore.textContent = `정답 ${correct}건`;
         el.resultDetail.textContent = state.sandbox ? '' : `합격선 ${PASS_COUNT}건`;
-        el.meterFill.className = 'meter-fill live';
-        el.meterFill.style.width = `${Math.round(doneCount / total * 100)}%`;
         el.ledger.hidden = true;
         el.transcript.textContent = '';
         el.btnNextLevel.hidden = true;
@@ -671,13 +660,12 @@ function renderResult({ live, leveledUp = false }) {
     const r = state.result;
     el.resultEmoji.textContent = r.tier.emoji;
     el.resultLabel.textContent = r.tier.label;
+    el.resultLabel.className = `result-label ${r.tier.key}`;
     el.resultStars.textContent = state.sandbox ? '' : starString(r.stars);
     el.resultScore.textContent = `${r.correct}/${r.total} 정답 · 합격선 ${PASS_COUNT}`;
     const wrong = state.items.filter(i => i.done && !i.ok).length;
     el.resultDetail.textContent = (wrong ? `틀린 전표 ${wrong}건. 표에서 ✗를 눌러 보면 무엇이 나갔는지 보입니다.` : '열 장 전부 정확합니다. 사장은 이게 당연한 줄 압니다.')
         + (leveledUp ? ' · 현장 숙련도가 올랐습니다. 지시서가 길어지고 집중력과 출력 용지가 조금 늘어납니다.' : '');
-    el.meterFill.className = `meter-fill ${r.tier.key}`;
-    el.meterFill.style.width = '0%';
 
     if (state.sandbox) {
         el.ledger.hidden = true;
@@ -696,9 +684,16 @@ function renderResult({ live, leveledUp = false }) {
     const passed = r.tier.key === 'pass' || r.tier.key === 'perfect';
     el.btnNextLevel.hidden = state.sandbox || !passed || state.levelIndex >= WORK_ORDERS.length - 1;
     el.resultPanel.hidden = false;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-        el.meterFill.style.width = `${Math.round(r.correct / r.total * 100)}%`;
-    }));
+}
+
+function renderMeter() {
+    el.meter.innerHTML = '';
+    state.items.forEach((it, i) => {
+        const s = document.createElement('span');
+        if (it.done) s.className = it.ok ? 'ok' : 'bad';
+        else if (i === state.activeItem && state.phase === 'RUNNING') s.className = 'live';
+        el.meter.appendChild(s);
+    });
 }
 
 function buildTranscript() {
@@ -766,29 +761,6 @@ function resetProgress() {
 }
 
 // ---------- animation helpers ----------
-function startThinking(b) {
-    if (state.skipAnim) return { stop() { } };
-    let i = 0;
-    const id = setInterval(() => { b.face.textContent = THINK_FRAMES[i++ % THINK_FRAMES.length]; }, 300);
-    return { stop() { clearInterval(id); } };
-}
-
-async function moveParcel(k) {
-    if (!parcel) return;
-    const target = cards[k].card;
-    const from = k === 0 ? el.conveyor.firstElementChild : cards[k - 1].card;
-    if (state.skipAnim) { parcel.hidden = true; return; }
-    parcel.hidden = false;
-    if (k === 0) {
-        parcel.style.transition = 'none';
-        parcel.style.left = `${from.offsetLeft + from.offsetWidth / 2 - 13}px`;
-        void parcel.offsetWidth;
-        parcel.style.transition = '';
-    }
-    parcel.style.left = `${target.offsetLeft + target.offsetWidth / 2 - 13}px`;
-    await delay(600);
-}
-
 function scrollCardIntoView(card) {
     card.scrollIntoView({ behavior: state.skipAnim ? 'auto' : 'smooth', inline: 'center', block: 'nearest' });
 }
@@ -887,7 +859,7 @@ function wireEvents() {
     el.btnCopy.addEventListener('click', copyTranscript);
     el.btnResetProgress.addEventListener('click', resetProgress);
 
-    el.toggleSkip.addEventListener('change', () => { state.skipAnim = el.toggleSkip.checked; save('skipAnim', state.skipAnim); });
+    el.toggleSkip.addEventListener('change', () => { state.skipAnim = el.toggleSkip.checked; save('skipAnim', state.skipAnim); scene.setSkipAnim(state.skipAnim); });
     el.toggleRaw.addEventListener('change', () => { state.rawMode = el.toggleRaw.checked; save('rawMode', state.rawMode); });
 
     document.addEventListener('keydown', e => {

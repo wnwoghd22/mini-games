@@ -31,6 +31,7 @@ export function normalize(text) {
     t = stripWrappingQuotes(t);
     t = t.toLowerCase();
     t = t.replace(/\s+/g, ' ').trim();
+    t = t.replace(/"/g, '');
     t = t.replace(/\[\s+/g, '[').replace(/\s+\]/g, ']');
     t = t.replace(/[.。!！?？…]+$/g, '').trim();
     return t;
@@ -41,6 +42,7 @@ export function normalizeKeepCase(text) {
     let t = stripFences(text);
     t = stripWrappingQuotes(t);
     t = t.replace(/\s+/g, ' ').trim();
+    t = t.replace(/"/g, '');
     t = t.replace(/\[\s+/g, '[').replace(/\s+\]/g, ']');
     return t;
 }
