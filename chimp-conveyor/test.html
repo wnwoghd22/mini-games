@@ -15,6 +15,9 @@
     <div id="summary">running…</div>
     <table id="results"><thead><tr><th>#</th><th>mode</th><th>output</th><th>target</th><th>expected</th><th>got</th><th>detail</th></tr></thead><tbody></tbody></table>
     <script type="module">
+        // The assertions below are written against the Korean strings; pin the language before any module loads i18n.
+        let prevLang = null;
+        try { prevLang = localStorage.getItem('chimp-conveyor:v5:lang'); localStorage.setItem('chimp-conveyor:v5:lang', JSON.stringify('ko')); } catch { /* ignore */ }
         import { score, normalize, listItems, firstNumber, tryParseJson, tier, stars } from './similarity.js';
 
         // { mode, out, tgt, min, max } → score must be within [min, max]
@@ -192,6 +195,7 @@
             tbody.appendChild(tr);
         }
 
+        try { if (prevLang === null) localStorage.removeItem('chimp-conveyor:v5:lang'); else localStorage.setItem('chimp-conveyor:v5:lang', prevLang); } catch { /* ignore */ }
         const s = document.getElementById('summary');
         s.textContent = `${pass} / ${total} passed`;
         s.className = pass === total ? 'ok' : 'fail';

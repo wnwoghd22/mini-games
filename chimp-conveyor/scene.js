@@ -264,7 +264,7 @@ export async function showVerdict(ok, snapshot) {
     if (fastPath()) return;
     verdict = { ok, snap: snapshot, t0: performance.now() };
     draw();
-    await timer(650);
+    await timer(500);
     verdict = null;
     draw();
 }
@@ -380,23 +380,17 @@ function draw() {
         c.draw(ctx, t, { ev: clip.ev, bx, by, x: stationX[clip.k], beltY: BELT_Y, text: drawText });
     }
 
-    // verdict: the workpiece at 2x above the out crate with a stamp
-    if (verdict) {
-        const t = Math.min(1, (performance.now() - verdict.t0) / 650);
-        const vx = outX - WP, vy = Math.max(0, BELT_Y - 10 - WP * 2 - 4 + Math.round(t > 0.8 ? (t - 0.8) * 5 * 30 : 0));
-        ctx.save();
-        ctx.translate(vx, vy);
-        ctx.scale(2, 2);
-        drawWorkpiece(ctx, verdict.snap, 0, 0);
-        ctx.restore();
-        if (t > 0.3) {
-            const size = t < 0.4 ? 13 : 11;
+    // verdict: a check or cross stamped on the workpiece where it stands (no blow-up)
+    if (verdict && parcel.visible) {
+        const t = Math.min(1, (performance.now() - verdict.t0) / 500);
+        const px0 = Math.round(parcel.x - WP / 2), py0 = BELT_Y - WP;
+        if (t > 0.15) {
+            const pop = t < 0.3 ? 1 : 0;                      // one frame bigger on impact
             ctx.fillStyle = verdict.ok ? PALETTE.g : PALETTE.r;
-            ctx.fillRect(vx + WP - size / 2, vy + WP - size / 2, size, 2);
-            ctx.fillRect(vx + WP - size / 2, vy + WP + size / 2 - 2, size, 2);
-            ctx.fillRect(vx + WP - size / 2, vy + WP - size / 2, 2, size);
-            ctx.fillRect(vx + WP + size / 2 - 2, vy + WP - size / 2, 2, size);
-            drawSprite(ctx, verdict.ok ? 'check' : 'cross', 0, vx + WP - 3, vy + WP - 2);
+            ctx.fillRect(px0 + 5 - pop, py0 + 4 - pop, 10 + 2 * pop, 10 + 2 * pop);
+            ctx.fillStyle = PALETTE.k;
+            ctx.fillRect(px0 + 6, py0 + 5, 8, 8);
+            drawSprite(ctx, verdict.ok ? 'check' : 'cross', 0, px0 + 7 + (verdict.ok ? 0 : 1), py0 + 7);
         }
     }
 }

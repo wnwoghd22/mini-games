@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>컨베이어 위의 침팬지</title>
+    <title>Chimps on the Conveyor</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css">
@@ -14,62 +14,69 @@
 
 <body>
     <div class="app-container">
-        <header class="hud">
-            <a class="home-link" href="../index.html" title="Back to hub">&#8592;</a>
-            <span class="brand">컨베이어 위의 침팬지</span>
-            <div class="hud-stat" title="현금"><span class="hud-label">CASH</span><span id="hud-cash" class="hud-value">₩0</span></div>
-            <div class="hud-stat" id="hud-debt-wrap" hidden title="은행 대출"><span class="hud-label">DEBT</span><span id="hud-debt" class="hud-value bad">₩0</span></div>
-            <div class="hud-stat" title="통과한 작업 수에 따라 자동으로 오릅니다"><span class="hud-label">LV</span><span id="hud-skill" class="hud-value">—</span></div>
-            <div class="knobs" id="knobs"></div>
-            <div class="load-status" id="load-status">
-                <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
-                <span class="load-text" id="load-text">준비 중…</span>
-            </div>
-            <label class="toggle"><input type="checkbox" id="toggle-skip-anim"> 애니 생략</label>
-            <label class="toggle" title="침팬지 잡담을 정리하지 않고 그대로 다음 침팬지에게 넘깁니다"><input type="checkbox" id="toggle-raw"> 날것 모드</label>
-            <div class="hud-actions">
-                <button id="btn-sandbox" class="btn tiny">샌드박스</button>
-                <button id="btn-hint" class="btn tiny">힌트</button>
-                <button id="btn-reset-progress" class="btn tiny danger" title="진행 초기화">초기화</button>
-            </div>
-        </header>
-
-        <section class="order-head">
-            <div class="order-title">
-                <span class="level-index" id="level-index">작업 1/12</span>
-                <span class="level-title" id="level-title">—</span>
-                <span class="level-stars" id="level-stars"></span>
-            </div>
-            <p class="brief" id="brief"></p>
-            <p class="flavor" id="flavor"></p>
-        </section>
-
         <main class="line">
-                <section id="sandbox-panel" class="sandbox-panel" hidden>
-                    <label>배치 (한 줄에 한 건, "입력 => 목표", 최대 10건. 입력 안의 줄바꿈은 \n으로)<textarea id="sb-batch" rows="3"></textarea></label>
-                    <div class="sandbox-row">
-                        <label>침팬지 수 <input type="number" id="sb-chimps" min="1" max="5" value="1"></label>
-                        <label>채점 <select id="sb-match"></select></label>
-                        <button id="btn-sb-apply" class="btn small accent">적용</button>
-                    </div>
-                </section>
-                <div class="line-row">
-                    <div class="conveyor-wrap" id="conveyor-wrap">
-                        <div class="scene-layer"><canvas id="scene" class="scene" width="160" height="72"></canvas><div class="bubbles" id="bubbles"></div></div>
-                        <div class="conveyor" id="conveyor"></div>
-                    </div>
-                    <aside class="work-dock" id="work-dock" hidden></aside>
+            <section id="sandbox-panel" class="sandbox-panel" hidden>
+                <label><span data-i18n="sbBatchLabel">Batch (one item per line, "input => target", up to 10; use \n for line breaks inside an input)</span><textarea id="sb-batch" rows="3"></textarea></label>
+                <div class="sandbox-row">
+                    <label><span data-i18n="sbChimps">Chimps</span> <input type="number" id="sb-chimps" min="1" max="5" value="1"></label>
+                    <label><span data-i18n="sbMatch">Scoring</span> <select id="sb-match"></select></label>
+                    <button id="btn-sb-apply" class="btn small accent" data-i18n="sbApply">Apply</button>
                 </div>
+            </section>
+            <div class="line-row">
+                <div class="conveyor-wrap" id="conveyor-wrap">
+                    <div class="scene-layer"><canvas id="scene" class="scene" width="160" height="72"></canvas><div class="bubbles" id="bubbles"></div></div>
+                    <div class="conveyor" id="conveyor"></div>
+                </div>
+
+                <aside class="status-panel" id="status-panel">
+                    <section class="order-block">
+                        <div class="order-title">
+                            <span class="level-index" id="level-index">Order 1/12</span>
+                        </div>
+                        <div class="level-title" id="level-title">—</div>
+                        <p class="brief" id="brief"></p>
+                        <p class="flavor" id="flavor"></p>
+                    </section>
+
+                    <section class="stat-block">
+                        <div class="hud-stat" id="hud-debt-wrap" hidden data-i18n-title="hudDebt" title="Bank loan"><span class="hud-label">DEBT</span><span id="hud-debt" class="hud-value bad">₩0</span></div>
+                        <div class="hud-stat" data-i18n-title="hudLevel" title="Rises automatically with the number of work orders you pass"><span class="hud-label">LV</span><span id="hud-skill" class="hud-value">—</span></div>
+                        <div class="knobs" id="knobs"></div>
+                        <div class="load-status" id="load-status">
+                            <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
+                            <span class="load-text" id="load-text" data-i18n="loading">Getting ready…</span>
+                        </div>
+                    </section>
+
+                    <div class="work-dock" id="work-dock" hidden></div>
+
+                    <section class="ledger-block" id="ledger-block"></section>
+                </aside>
+            </div>
         </main>
 
         <div id="message-area" class="message-area"></div>
 
         <footer class="bottom-bar">
-            <button id="btn-prev" class="btn" title="이전 작업">&#9664; 이전</button>
-            <button id="btn-run" class="btn run" disabled>▶ 가동</button>
-            <button id="btn-clear" class="btn">지시 초기화</button>
-            <button id="btn-next" class="btn" title="다음 작업">다음 &#9654;</button>
+            <button id="btn-menu" class="btn icon" data-i18n-title="menu" title="Menu">&#9776;</button>
+            <button id="btn-prev" class="btn" data-i18n="btnPrev" data-i18n-title="btnPrevTip" title="Previous work order">&#9664; Prev</button>
+            <button id="btn-run" class="btn run" disabled>▶ Run</button>
+            <button id="btn-clear" class="btn" data-i18n="btnClear">Clear instructions</button>
+            <button id="btn-next" class="btn" data-i18n="btnNext" data-i18n-title="btnNextTip" title="Next work order">Next &#9654;</button>
+            <button id="btn-hint" class="btn icon" data-i18n-title="hint" title="Hint">&#128161;</button>
         </footer>
+
+        <div id="menu-panel" class="menu-panel" hidden>
+            <div class="menu-title" data-i18n="settings">Settings</div>
+            <label class="toggle"><input type="checkbox" id="toggle-skip-anim"> <span data-i18n="skipAnim">Skip animation</span></label>
+            <label class="toggle" data-i18n-title="rawModeTip" title="Pass chimp chatter along untrimmed"><input type="checkbox" id="toggle-raw"> <span data-i18n="rawMode">Raw mode</span></label>
+            <button id="btn-lang" class="btn small">한국어 / English</button>
+            <button id="btn-sandbox" class="btn small" data-i18n="sandbox">Sandbox</button>
+            <button id="btn-copy" class="btn small" data-i18n="copy" disabled>Copy run log</button>
+            <button id="btn-reset-progress" class="btn small danger" data-i18n="reset" data-i18n-title="resetTip" title="Reset progress">Reset progress</button>
+            <a class="btn small home-link" href="../index.html" data-i18n="home">← Hub</a>
+        </div>
     </div>
 
     <div id="overlay" class="overlay" hidden>

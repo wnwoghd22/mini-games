@@ -4,6 +4,8 @@
 
 import { PROGRESSION, WORK_ORDERS, BATCH_SIZE, PASS_COUNT } from './puzzles.js';
 
+import { tr, lang } from './i18n.js';
+
 export const MODEL_ID = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';   // the one and only chimp
 export const STARTING_CASH = 3000;       // "사장이 소액 현금통에서 꺼내 준 돈"
 export const LOAN_AMOUNT = 5000;
@@ -76,13 +78,13 @@ export function netProfit(company) {
 }
 
 export function verdict(net) {
-    if (net >= 30000) return '사장: "봤지? 침팬지가 답이었어. 다음 분기엔 나도 침팬지로 교체할 거야." (교체 안 함)';
-    if (net >= 0) return '흑자. 원재료 값 겨우 뽑았습니다. 사장은 이걸 사보에 \'혁신\'이라고 실었습니다.';
-    if (net >= -30000) return '적자. 사장: "침팬지 탓이야." 침팬지: "..." 침팬지는 여전히 무급입니다.';
-    return '은행이 공장을 가져갔습니다. 침팬지들은 은행에 재취업했습니다. 사장은 아직 이력서를 쓰고 있습니다.';
+    if (net >= 30000) return tr('사장: "봤지? 침팬지가 답이었어. 다음 분기엔 나도 침팬지로 교체할 거야." (교체 안 함)', 'Boss: "See? Chimps were the answer. Next quarter I\'ll replace myself with one too." (He won\'t.)');
+    if (net >= 0) return tr('흑자. 원재료 값 겨우 뽑았습니다. 사장은 이걸 사보에 \'혁신\'이라고 실었습니다.', 'In the black, barely covering materials. The company newsletter calls it "innovation".');
+    if (net >= -30000) return tr('적자. 사장: "침팬지 탓이야." 침팬지: "..." 침팬지는 여전히 무급입니다.', 'In the red. Boss: "The chimps\' fault." Chimps: "..." The chimps remain unpaid.');
+    return tr('은행이 공장을 가져갔습니다. 침팬지들은 은행에 재취업했습니다. 사장은 아직 이력서를 쓰고 있습니다.', 'The bank took the factory. The chimps now work at the bank. The boss is still writing his résumé.');
 }
 
 export function formatWon(n) {
     const sign = n < 0 ? '-' : '';
-    return `${sign}₩${Math.abs(Math.round(n)).toLocaleString('ko-KR')}`;
+    return `${sign}₩${Math.abs(Math.round(n)).toLocaleString(lang() === 'ko' ? 'ko-KR' : 'en-US')}`;
 }

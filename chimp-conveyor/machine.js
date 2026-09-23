@@ -12,6 +12,8 @@
 //
 // Pure ESM, no DOM: runs in the browser and in node (tests, offline probe scoring).
 
+import { tr, L } from './i18n.js';
+
 export const VERBS = ['HAMMER', 'DRILL', 'PRESS', 'TAKE', 'PUT', 'WRAP', 'SEAL', 'STACK', 'SHIP'];
 const VERB_RE = {
     HAMMER: /^HAMMER(S|ED|ING)?$/, DRILL: /^DRILL(S|ED|ING)?$/, PRESS: /^PRESS(ES|ED|ING)?$/,
@@ -140,15 +142,15 @@ const STATIONS = {
             const facts = [];
             for (const [c, s] of Object.entries(g.grid).sort()) {
                 const got = a.grid[c];
-                if (got === s) facts.push({ ok: true, t: `${c} ${s === 'nail' ? '못' : '구멍'}` });
-                else if (!got) facts.push({ ok: false, t: `${c} 빠짐` });
-                else facts.push({ ok: false, t: `${c} ${STATE_KO[got] ?? got}` });
+                if (got === s) facts.push({ ok: true, t: `${c} ${s === 'nail' ? tr('못', 'nail') : tr('구멍', 'hole')}` });
+                else if (!got) facts.push({ ok: false, t: `${c} ${tr('빠짐', 'missing')}` });
+                else facts.push({ ok: false, t: `${c} ${L(STATE_KO[got]) ?? got}` });
             }
-            for (const [c, s] of Object.entries(a.grid).sort()) if (!g.grid[c]) facts.push({ ok: false, t: `${c} 여분 ${STATE_KO[s] ?? s}` });
+            for (const [c, s] of Object.entries(a.grid).sort()) if (!g.grid[c]) facts.push({ ok: false, t: `${c} ${tr('여분', 'extra')} ${L(STATE_KO[s]) ?? s}` });
             const need = Object.keys(g.grid).length;
             const okc = facts.filter(f => f.ok).length;
             const extra = facts.length - Object.keys(g.grid).length;
-            return { head: (need ? `못 ${okc}/${need}` : '작업 없음') + (extra > 0 ? ` · 여분 ${extra}` : ''), facts };
+            return { head: (need ? `${tr('못', 'nails')} ${okc}/${need}` : tr('작업 없음', 'nothing to do')) + (extra > 0 ? ` · ${tr('여분', 'extra')} ${extra}` : ''), facts };
         },
     },
 
@@ -178,7 +180,7 @@ const STATIONS = {
         },
         equal: (a, b) => a.bearing === b.bearing,
         partial: (a, g) => (a.bearing === g.bearing ? 1 : a.bearing === 'half' ? 0.5 : 0),
-        summary: a => ({ head: `베어링 ${BEARING_KO[a.bearing]}`, facts: [{ ok: a.bearing === 'seated', t: `베어링 ${BEARING_KO[a.bearing]}` }] }),
+        summary: a => ({ head: `${tr('베어링', 'bearing')} ${L(BEARING_KO[a.bearing])}`, facts: [{ ok: a.bearing === 'seated', t: `${tr('베어링', 'bearing')} ${L(BEARING_KO[a.bearing])}` }] }),
     },
 
     stock: {
@@ -218,8 +220,8 @@ const STATIONS = {
         },
         summary(a, g) {
             const keys = [...new Set([...Object.keys(g.cart), ...Object.keys(a.cart)])].sort();
-            const facts = keys.map(k => ({ ok: (a.cart[k] ?? 0) === (g.cart[k] ?? 0), t: `${ITEM_KO[k] ?? k} ${a.cart[k] ?? 0}/${g.cart[k] ?? 0}` }));
-            return { head: facts.map(f => f.t).join(' · ') || '빈 카트', facts };
+            const facts = keys.map(k => ({ ok: (a.cart[k] ?? 0) === (g.cart[k] ?? 0), t: `${L(ITEM_KO[k]) ?? k} ${a.cart[k] ?? 0}/${g.cart[k] ?? 0}` }));
+            return { head: facts.map(f => f.t).join(' · ') || tr('빈 카트', 'empty cart'), facts };
         },
     },
 
@@ -239,7 +241,7 @@ const STATIONS = {
         },
         equal: (a, b) => a.box === b.box,
         partial: (a, g) => (a.box === g.box ? 1 : 0),
-        summary: (a, g) => ({ head: a.box === g.box ? `${DEST_KO[a.box]}` : `${DEST_KO[a.box] ?? '벨트'} (${DEST_KO[g.box]}이어야)`, facts: [{ ok: a.box === g.box, t: `상자 → ${DEST_KO[a.box] ?? '벨트 위'}` }] }),
+        summary: (a, g) => ({ head: a.box === g.box ? `${L(DEST_KO[a.box])}` : tr(`${L(DEST_KO[a.box]) ?? '벨트'} (${L(DEST_KO[g.box])}이어야)`, `${L(DEST_KO[a.box]) ?? 'belt'} (should be ${L(DEST_KO[g.box])})`), facts: [{ ok: a.box === g.box, t: `${tr('상자', 'box')} → ${L(DEST_KO[a.box]) ?? tr('벨트 위', 'on the belt')}` }] }),
     },
 
     pack: {
@@ -266,9 +268,9 @@ const STATIONS = {
         equal: (a, b) => a.layers === b.layers && a.outer === b.outer,
         partial: (a, g) => (a.layers === g.layers && a.outer === g.outer ? 1 : a.layers === g.layers ? 0.5 : 0),
         summary(a, g) {
-            const facts = [{ ok: a.layers === g.layers, t: `뽁뽁이 ${a.layers}겹/${g.layers}겹` }];
-            if (a.outer) facts.push({ ok: false, t: `봉한 위에 ${a.outer}겹 더` });
-            return { head: `${a.layers}겹` + (a.outer ? ` +겉 ${a.outer}` : ''), facts };
+            const facts = [{ ok: a.layers === g.layers, t: tr(`뽁뽁이 ${a.layers}겹/${g.layers}겹`, `bubble wrap ${a.layers}/${g.layers} layers`) }];
+            if (a.outer) facts.push({ ok: false, t: tr(`봉한 위에 ${a.outer}겹 더`, `${a.outer} more layers over the seal`) });
+            return { head: tr(`${a.layers}겹`, `${a.layers} layers`) + (a.outer ? tr(` +겉 ${a.outer}`, ` +${a.outer} outer`) : ''), facts };
         },
     },
 
@@ -290,9 +292,9 @@ const STATIONS = {
         partial: (a, g) => ((a.LOW === g.LOW) + (a.TOP === g.TOP) + (a.floor === g.floor)) / 3,
         summary(a, g) {
             const facts = [];
-            for (const s of ['LOW', 'TOP']) if (a[s] || g[s]) facts.push({ ok: a[s] === g[s], t: `${SHELF_KO[s]} ${a[s]}/${g[s]}` });
-            if (a.floor) facts.push({ ok: false, t: `바닥에 ${a.floor}개` });
-            return { head: facts.map(f => f.t).join(' · ') || '선반 비어 있음', facts };
+            for (const s of ['LOW', 'TOP']) if (a[s] || g[s]) facts.push({ ok: a[s] === g[s], t: `${L(SHELF_KO[s])} ${a[s]}/${g[s]}` });
+            if (a.floor) facts.push({ ok: false, t: tr(`바닥에 ${a.floor}개`, `${a.floor} on the floor`) });
+            return { head: facts.map(f => f.t).join(' · ') || tr('선반 비어 있음', 'shelf empty'), facts };
         },
     },
 
@@ -314,22 +316,22 @@ const STATIONS = {
         equal: (a, b) => a.truck === b.truck,
         partial: (a, g) => (a.truck === g.truck ? 1 : 0),
         summary: (a, g) => ({
-            head: a.truck ? (a.truck.startsWith('LOST') ? `행방불명(${a.truck.slice(5)})` : `${a.truck}행`) : '출하 안 됨',
-            facts: [{ ok: a.truck === g.truck, t: `트럭 → ${a.truck ?? '출발 안 함'} (기대 ${g.truck})` }],
+            head: a.truck ? (a.truck.startsWith('LOST') ? `${tr('행방불명', 'lost')}(${a.truck.slice(5)})` : tr(`${a.truck}행`, `to ${a.truck}`)) : tr('출하 안 됨', 'not shipped'),
+            facts: [{ ok: a.truck === g.truck, t: `${tr('트럭', 'truck')} → ${a.truck ?? tr('출발 안 함', 'did not leave')} (${tr('기대', 'expected')} ${g.truck})` }],
         }),
     },
 };
 
 STATIONS.drill = { ...STATIONS.jig, verbs: ['DRILL', 'HAMMER'], init: o => ({ ...STATIONS.jig.init(o), station: 'drill' }) };
 
-const STATE_KO = { nail: '못', bent: '휜 못', hole: '구멍', nail_in_hole: '구멍에 못' };
-const BEARING_KO = { loose: '헐거움', half: '반쯤 걸림', seated: '안착', gone: '튕겨 나감' };
-const ITEM_KO = { OIL: '오일', TAPE: '테이프', GLUE: '본드', GLOVES: '장갑' };
-const DEST_KO = { LEFT: '왼쪽 통', RIGHT: '오른쪽 통', BOX: '출하 상자', REWORK: '재작업', TRASH: '폐기', belt: '벨트 위', gone: '떨어뜨림' };
-const SHELF_KO = { LOW: '아래 칸', TOP: '윗 칸' };
+const STATE_KO = { nail: { ko: '못', en: 'nail' }, bent: { ko: '휜 못', en: 'bent nail' }, hole: { ko: '구멍', en: 'hole' }, nail_in_hole: { ko: '구멍에 못', en: 'nail in a hole' } };
+const BEARING_KO = { loose: { ko: '헐거움', en: 'loose' }, half: { ko: '반쯤 걸림', en: 'halfway' }, seated: { ko: '안착', en: 'seated' }, gone: { ko: '튕겨 나감', en: 'popped out' } };
+const ITEM_KO = { OIL: { ko: '오일', en: 'oil' }, TAPE: { ko: '테이프', en: 'tape' }, GLUE: { ko: '본드', en: 'glue' }, GLOVES: { ko: '장갑', en: 'gloves' } };
+const DEST_KO = { LEFT: { ko: '왼쪽 통', en: 'left bin' }, RIGHT: { ko: '오른쪽 통', en: 'right bin' }, BOX: { ko: '출하 상자', en: 'ship box' }, REWORK: { ko: '재작업', en: 'rework' }, TRASH: { ko: '폐기', en: 'trash' }, belt: { ko: '벨트 위', en: 'on the belt' }, gone: { ko: '떨어뜨림', en: 'dropped' } };
+const SHELF_KO = { LOW: { ko: '아래 칸', en: 'low shelf' }, TOP: { ko: '윗 칸', en: 'top shelf' } };
 export const FATAL_KO = {
-    pipe_burst: '배관 파열', shatter: '유리 박살', jig_crack: '지그 파손', bit_snap: '드릴 날 파손', table_hole: '테이블 관통',
-    housing_crack: '하우징 균열', stuck: '재고 없음 무한 대기', cart_tip: '카트 전도', dropped: '상자 추락', bulge: '뽁뽁이 풍선', collapse: '선반 붕괴',
+    pipe_burst: { ko: '배관 파열', en: 'pipe burst' }, shatter: { ko: '유리 박살', en: 'glass shattered' }, jig_crack: { ko: '지그 파손', en: 'jig cracked' }, bit_snap: { ko: '드릴 날 파손', en: 'drill bit snapped' }, table_hole: { ko: '테이블 관통', en: 'drilled through the table' },
+    housing_crack: { ko: '하우징 균열', en: 'housing cracked' }, stuck: { ko: '재고 없음 무한 대기', en: 'waiting at an empty shelf' }, cart_tip: { ko: '카트 전도', en: 'cart tipped over' }, dropped: { ko: '상자 추락', en: 'box dropped' }, bulge: { ko: '뽁뽁이 풍선', en: 'bubble-wrap balloon' }, collapse: { ko: '선반 붕괴', en: 'shelf collapsed' },
 };
 export const BIG = new Set(['pipe_burst', 'shatter', 'jig_crack', 'bit_snap', 'table_hole', 'housing_crack', 'cart_tip', 'dropped', 'bulge', 'collapse', 'stuck']);
 export const OK_EVENTS = new Set(['hit', 'take', 'place', 'wrap', 'seal', 'stack', 'ship']);
@@ -393,8 +395,8 @@ export function score(output, item, puzzle) {
     const correct = !fatal && st.equal(w, goal);
     const partial = fatal ? 0 : st.partial(w, goal);
     const sum = st.summary(w, goal);
-    const facts = fatal ? [{ ok: false, t: `${FATAL_KO[fatal]}★` }, ...sum.facts] : sum.facts;
-    const summary = fatal ? `${FATAL_KO[fatal]} · ${sum.head}` : sum.head;
+    const facts = fatal ? [{ ok: false, t: `${L(FATAL_KO[fatal])}★` }, ...sum.facts] : sum.facts;
+    const summary = fatal ? `${L(FATAL_KO[fatal])} · ${sum.head}` : sum.head;
     const detail = facts.map(f => `${f.ok ? '✓' : '✗'} ${f.t}`).join('\n');
     return { score: correct ? 1 : partial, correct, summary, detail, facts, events: r.events, world: w, goal, fatal };
 }
@@ -402,36 +404,24 @@ export function score(output, item, puzzle) {
 /** Human-readable label for an event (transcript / bubble marks). */
 export function eventLabel(ev) {
     const c = ev.cell ? `${ev.cell} ` : '';
+    const ko = {
+        hit: `${c}명중`, miss: `${c}빗나감`, bent: `${c}못 휨`, bounce: `${c}튕김`, occupied: `${c}이미 있음`, nail_in_hole: `${c}구멍에 못`, whiff: `${c}허공`,
+        thumb: '엄지 찧음', half: '반쯤 걸림', popout: '베어링 튕겨 나감', take: `${L(ITEM_KO[ev.item]) ?? ev.item} ${ev.n}`, overtake: `${L(ITEM_KO[ev.item]) ?? ev.item} ${ev.n} (과다)`,
+        emptyhand: '빈손', place: `${L(DEST_KO[ev.dest])}`, wrongBin: `${L(DEST_KO[ev.dest])} (오배송)`, hold: '상자 든 채 멍', wrap: `${ev.n}겹`, overwrap: `${ev.n}겹 (과다)`,
+        wrap_outside: `봉한 뒤 ${ev.n}겹`, seal: '봉함', stack: `${L(SHELF_KO[ev.shelf])} ${ev.n}`, overstack: `${L(SHELF_KO[ev.shelf])} ${ev.n} (과다)`, floor: `바닥에 ${ev.n}`,
+        ship: `${ev.code}행`, wrong_ship: `${ev.code}행 (오배송)`, lost: `${ev.code}? 행방불명`, noop: ev.reason === 'empty' ? '멍' : ev.reason === 'zero' ? '집을 것 없음' : '이미 끝난 일', tired: '지쳐서 드러눔',
+    };
+    const en = {
+        hit: `${c}hit`, miss: `${c}miss`, bent: `${c}nail bent`, bounce: `${c}bounced`, occupied: `${c}already there`, nail_in_hole: `${c}nail in a hole`, whiff: `${c}swung at air`,
+        thumb: 'hit thumb', half: 'halfway', popout: 'bearing popped out', take: `${L(ITEM_KO[ev.item]) ?? ev.item} ${ev.n}`, overtake: `${L(ITEM_KO[ev.item]) ?? ev.item} ${ev.n} (too many)`,
+        emptyhand: 'empty-handed', place: `${L(DEST_KO[ev.dest])}`, wrongBin: `${L(DEST_KO[ev.dest])} (wrong bin)`, hold: 'holding the box, staring', wrap: `${ev.n} layers`, overwrap: `${ev.n} layers (too many)`,
+        wrap_outside: `${ev.n} layers over the seal`, seal: 'sealed', stack: `${L(SHELF_KO[ev.shelf])} ${ev.n}`, overstack: `${L(SHELF_KO[ev.shelf])} ${ev.n} (too many)`, floor: `${ev.n} on the floor`,
+        ship: `to ${ev.code}`, wrong_ship: `to ${ev.code} (wrong)`, lost: `${ev.code}? lost`, noop: ev.reason === 'empty' ? 'blank stare' : ev.reason === 'zero' ? 'nothing to pick' : 'already done', tired: 'lay down exhausted',
+    };
+    const T = tr(ko, en);
+    if (T[ev.type] !== undefined) return T[ev.type];
     switch (ev.type) {
-        case 'hit': return `${c}명중`;
-        case 'miss': return `${c}빗나감`;
-        case 'bent': return `${c}못 휨`;
-        case 'bounce': return `${c}튕김`;
-        case 'occupied': return `${c}이미 있음`;
-        case 'nail_in_hole': return `${c}구멍에 못`;
-        case 'whiff': return `${c}허공`;
-        case 'thumb': return '엄지 찧음';
-        case 'half': return '반쯤 걸림';
-        case 'popout': return '베어링 튕겨 나감';
-        case 'take': return `${ITEM_KO[ev.item] ?? ev.item} ${ev.n}`;
-        case 'overtake': return `${ITEM_KO[ev.item] ?? ev.item} ${ev.n} (과다)`;
-        case 'emptyhand': return '빈손';
-        case 'place': return `${DEST_KO[ev.dest]}`;
-        case 'wrongBin': return `${DEST_KO[ev.dest]} (오배송)`;
-        case 'hold': return '상자 든 채 멍';
-        case 'wrap': return `${ev.n}겹`;
-        case 'overwrap': return `${ev.n}겹 (과다)`;
-        case 'wrap_outside': return `봉한 뒤 ${ev.n}겹`;
-        case 'seal': return '봉함';
-        case 'stack': return `${SHELF_KO[ev.shelf]} ${ev.n}`;
-        case 'overstack': return `${SHELF_KO[ev.shelf]} ${ev.n} (과다)`;
-        case 'floor': return `바닥에 ${ev.n}`;
-        case 'ship': return `${ev.code}행`;
-        case 'wrong_ship': return `${ev.code}행 (오배송)`;
-        case 'lost': return `${ev.code}? 행방불명`;
-        case 'noop': return ev.reason === 'empty' ? '멍' : ev.reason === 'zero' ? '집을 것 없음' : '이미 끝난 일';
-        case 'tired': return '지쳐서 드러눔';
-        default: return FATAL_KO[ev.type] ? `${c}${FATAL_KO[ev.type]}★` : ev.type;
+        default: return FATAL_KO[ev.type] ? `${c}${L(FATAL_KO[ev.type])}★` : ev.type;
     }
 }
 
@@ -461,12 +451,12 @@ export function parseSetup(station, input) {
 }
 
 export const STATION_INFO = {
-    jig: { label: '조립 지그(망치)', verbs: 'HAMMER / DRILL', args: 'A1–D4, SOFT/MEDIUM/HARD' },
-    drill: { label: '조립 지그(드릴)', verbs: 'DRILL / HAMMER', args: 'A1–D4' },
-    press: { label: '프레스', verbs: 'PRESS', args: 'SOFT/MEDIUM/HARD' },
-    stock: { label: '자재 선반', verbs: 'TAKE', args: '수량 + OIL/TAPE/GLUE/GLOVES' },
-    chute: { label: '분류 슈트', verbs: 'PUT', args: 'LEFT/RIGHT/BOX/REWORK/TRASH' },
-    pack: { label: '포장대', verbs: 'PUT / WRAP', args: 'HEAVY(3겹) / LIGHT(1겹) / 숫자' },
-    shelf: { label: '적재 선반', verbs: 'STACK', args: 'LOW/TOP + 수량' },
-    dock: { label: '출하 도크', verbs: 'SHIP', args: 'PUS/ICN/TAE/KWJ/HLD' },
+    jig: { label: { ko: '조립 지그(망치)', en: 'jig (hammer)' }, verbs: 'HAMMER / DRILL', args: 'A1–D4, SOFT/MEDIUM/HARD' },
+    drill: { label: { ko: '조립 지그(드릴)', en: 'jig (drill)' }, verbs: 'DRILL / HAMMER', args: 'A1–D4' },
+    press: { label: { ko: '프레스', en: 'press' }, verbs: 'PRESS', args: 'SOFT/MEDIUM/HARD' },
+    stock: { label: { ko: '자재 선반', en: 'stock shelf' }, verbs: 'TAKE', args: 'n + OIL/TAPE/GLUE/GLOVES' },
+    chute: { label: { ko: '분류 슈트', en: 'sorting chute' }, verbs: 'PUT', args: 'LEFT/RIGHT/BOX/REWORK/TRASH' },
+    pack: { label: { ko: '포장대', en: 'packing bench' }, verbs: 'PUT / WRAP', args: 'HEAVY(3) / LIGHT(1) / n' },
+    shelf: { label: { ko: '적재 선반', en: 'storage shelf' }, verbs: 'STACK', args: 'LOW/TOP + n' },
+    dock: { label: { ko: '출하 도크', en: 'shipping dock' }, verbs: 'SHIP', args: 'PUS/ICN/TAE/KWJ/HLD' },
 };

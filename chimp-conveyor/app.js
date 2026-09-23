@@ -11,6 +11,7 @@ import * as eco from './economy.js';
 import * as scene from './scene.js';
 import * as machine from './machine.js';
 import * as line from './line.js';
+import { t as T, L, lang, setLang } from './i18n.js';
 
 // ---------- constants ----------
 const CHATTER_LINE = /^(sure|certainly|of course|okay|ok|here('s| is| you go)|the (answer|output|result) is|output|result|answer|출력|결과|답|정답|네|물론)\b[^\n]{0,40}?[:：!.]?\s*$/i;
@@ -41,14 +42,14 @@ const state = {
 // ---------- DOM ----------
 const $ = id => document.getElementById(id);
 const el = {
-    hudCash: $('hud-cash'), hudDebtWrap: $('hud-debt-wrap'), hudDebt: $('hud-debt'), hudSkill: $('hud-skill'),
+    hudDebtWrap: $('hud-debt-wrap'), hudDebt: $('hud-debt'), hudSkill: $('hud-skill'),
     loadStatus: $('load-status'), loadFill: $('load-fill'), loadText: $('load-text'),
     toggleSkip: $('toggle-skip-anim'), toggleRaw: $('toggle-raw'),
-    btnPrev: $('btn-prev'), btnNext: $('btn-next'), btnSandbox: $('btn-sandbox'), btnHint: $('btn-hint'), btnResetProgress: $('btn-reset-progress'),
-    levelIndex: $('level-index'), levelTitle: $('level-title'), levelStars: $('level-stars'),
+    btnPrev: $('btn-prev'), btnNext: $('btn-next'), btnSandbox: $('btn-sandbox'), btnHint: $('btn-hint'), btnResetProgress: $('btn-reset-progress'), btnLang: $('btn-lang'),
+    levelIndex: $('level-index'), levelTitle: $('level-title'),
     brief: $('brief'), flavor: $('flavor'), knobs: $('knobs'),
     sandboxPanel: $('sandbox-panel'), sbBatch: $('sb-batch'), sbChimps: $('sb-chimps'), sbMatch: $('sb-match'), btnSbApply: $('btn-sb-apply'),
-    conveyor: $('conveyor'), workDock: $('work-dock'),
+    conveyor: $('conveyor'), conveyorWrap: $('conveyor-wrap'), statusPanel: $('status-panel'), workDock: $('work-dock'), ledger: $('ledger-block'), btnMenu: $('btn-menu'), menuPanel: $('menu-panel'), btnCopy: $('btn-copy'),
     btnRun: $('btn-run'), btnClear: $('btn-clear'),
     message: $('message-area'),
     sceneCanvas: $('scene'), bubbles: $('bubbles'),
@@ -78,7 +79,15 @@ boot();
 new ResizeObserver(() => syncScene()).observe(el.conveyor);
 document.fonts?.ready?.then(() => syncScene());
 
+function applyStaticText() {
+    document.documentElement.lang = lang();
+    document.title = T('title');
+    for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = T(n.dataset.i18n);
+    for (const n of document.querySelectorAll('[data-i18n-title]')) n.title = T(n.dataset.i18nTitle);
+}
+
 function boot() {
+    applyStaticText();
     scene.mount(el.sceneCanvas);
     scene.setSkipAnim(state.skipAnim);
     el.toggleSkip.checked = state.skipAnim;
@@ -90,22 +99,20 @@ function boot() {
 
     if (!llm.hasWebGPU()) {
         setPhase('NO_WEBGPU');
-        showOverlay('🙈', 'WebGPU가 없습니다',
-            '이 게임은 브라우저 안에서 소형 LLM을 직접 돌립니다.\n최신 Chrome 또는 Edge(데스크톱)에서 열어 주세요.\nFirefox/Safari는 아직 지원이 불안정합니다.',
-            []);
-        setLoadStatus('error', 0, 'WebGPU 미지원');
+        showOverlay('🙈', T('noWebgpuTitle'), T('noWebgpuText'), []);
+        setLoadStatus('error', 0, T('noWebgpuStatus'));
         return;
     }
     if (!llm.modelInfo(eco.MODEL_ID)) {
         setPhase('MODEL_ERROR');
-        showOverlay('💀', '침팬지 모델을 찾을 수 없습니다', `WebLLM 목록에 ${eco.MODEL_ID}가 없습니다. 라이브러리 버전을 확인해 주세요.`, []);
+        showOverlay('💀', T('noModelTitle'), T('noModelText', eco.MODEL_ID), []);
         return;
     }
     if (state.company.introSeen) {
         loadModel();
     } else {
-        showOverlay('🏭', '침팬지 컨베이어 주식회사', INTRO_TEXT,
-            [{ label: '출근하기', accent: true, onClick: () => { state.company.introSeen = true; saveCompany(); hideOverlay(); loadModel(); } }]);
+        showOverlay('🏭', T('companyName'), L(INTRO_TEXT),
+            [{ label: T('clockIn'), accent: true, onClick: () => { state.company.introSeen = true; saveCompany(); hideOverlay(); loadModel(); } }]);
     }
 }
 
@@ -113,7 +120,7 @@ function populateMatchModes() {
     for (const m of MATCH_MODES) {
         const opt = document.createElement('option');
         opt.value = m.value;
-        opt.textContent = m.label;
+        opt.textContent = L(m.label);
         el.sbMatch.appendChild(opt);
     }
 }
@@ -125,21 +132,20 @@ function saveCompany() {
 // ---------- model loading ----------
 async function loadModel() {
     setPhase('MODEL_LOADING');
-    setLoadStatus('loading', 0, '침팬지 출근 중…');
+    setLoadStatus('loading', 0, T('clockingIn'));
     try {
         await llm.init(eco.MODEL_ID, report => {
             const p = Math.max(0, Math.min(1, report.progress ?? 0));
             setLoadStatus('loading', p, report.text ?? '');
         });
-        setLoadStatus('ready', 1, '침팬지 대기 중');
+        setLoadStatus('ready', 1, T('chimpsReady'));
         setPhase('IDLE');
     } catch (err) {
         console.error(err);
-        setLoadStatus('error', 0, '출근 실패');
+        setLoadStatus('error', 0, T('clockInFailed'));
         setPhase('MODEL_ERROR');
-        showOverlay('💀', '침팬지가 출근하다 넘어졌습니다',
-            `모델을 불러오지 못했습니다.\n${String(err?.message ?? err).slice(0, 300)}\n\n네트워크 상태나 GPU 메모리를 확인해 주세요.`,
-            [{ label: '다시 시도', accent: true, onClick: () => { hideOverlay(); loadModel(); } }]);
+        showOverlay('💀', T('modelFailTitle'), T('modelFailText', String(err?.message ?? err).slice(0, 300)),
+            [{ label: T('retry'), accent: true, onClick: () => { hideOverlay(); loadModel(); } }]);
     }
 }
 
@@ -157,7 +163,7 @@ function setPhase(phase) {
     const idle = phase === 'IDLE' || phase === 'RESULT';
     const running = phase === 'RUNNING';
     el.btnRun.disabled = !(idle || running);
-    el.btnRun.textContent = running ? '■ 정지' : (phase === 'RESULT' ? '▶ 다시 가동' : '▶ 가동');
+    el.btnRun.textContent = running ? T('stop') : (phase === 'RESULT' ? T('runAgain') : T('run'));
     el.btnRun.classList.toggle('stop', running);
     updateNavButtons();
     el.btnSandbox.disabled = running;
@@ -182,15 +188,10 @@ function currentKnobs() {
 
 function renderHud(flash = null) {
     const c = state.company;
-    el.hudCash.textContent = eco.formatWon(c.cash);
     el.hudDebtWrap.hidden = c.debt === 0;
     el.hudDebt.textContent = eco.formatWon(c.debt);
     el.hudSkill.textContent = `Lv.${eco.levelOf(c)}`;
-    if (flash) {
-        el.hudCash.classList.remove('flash-up', 'flash-down');
-        void el.hudCash.offsetWidth;
-        el.hudCash.classList.add(flash > 0 ? 'flash-up' : 'flash-down');
-    }
+    if (state.puzzle && inspectCard) renderLedger();
     renderKnobs();
 }
 
@@ -198,9 +199,9 @@ function renderKnobs(highlight = false) {
     const k = currentKnobs();
     el.knobs.innerHTML = '';
     const chips = [
-        `📄 지시서 ${k.promptLimit}자`,
-        `🎯 집중력 ${Math.round((1 - k.temperature) * 100)}`,
-        `🧾 출력 용지 ${k.maxTokens ?? DEFAULT_MAX_TOKENS}토큰`,
+        T('knobPrompt', k.promptLimit),
+        T('knobFocus', Math.round((1 - k.temperature) * 100)),
+        T('knobTokens', k.maxTokens ?? DEFAULT_MAX_TOKENS),
     ];
     for (const t of chips) {
         const s = document.createElement('span');
@@ -240,7 +241,7 @@ function selectSandbox() {
 
 function applySandboxForm() {
     const batch = parseBatchText(el.sbBatch.value);
-    if (!batch.length) { showMessage('한 줄에 한 건, "입력 => 목표" 형식으로 적어 주세요.', 'hint'); return; }
+    if (!batch.length) { showMessage(T('sbFormat'), 'hint'); return; }
     const cfg = {
         batch,
         chimps: clamp(parseInt(el.sbChimps.value, 10) || 1, 1, 5),
@@ -254,7 +255,7 @@ function applySandboxForm() {
         for (const b of batch) b.world = machine.parseSetup(puzzle.station, b.input);
     }
     applyPuzzle(puzzle);
-    showMessage(`샌드박스 배치 ${batch.length}건을 적용했습니다.` + (puzzle.match === 'action' ? ` 역: ${machine.STATION_INFO[puzzle.station]?.label ?? puzzle.station}` : ''));
+    showMessage(T('sbApplied', batch.length, puzzle.match === 'action' ? (L(machine.STATION_INFO[puzzle.station]?.label) ?? puzzle.station) : ''));
 }
 
 function applyPuzzle(puzzle) {
@@ -269,13 +270,12 @@ function applyPuzzle(puzzle) {
         : Array.from({ length: puzzle.chimps }, (_, i) => saved?.[i] ?? '');
 
     const locked = !state.sandbox && !isUnlocked(state.levelIndex, state.company.passed);
-    const dept = DEPARTMENTS[puzzle.dept] ?? '';
-    el.levelIndex.textContent = state.sandbox ? '시험 라인' : `작업 ${state.levelIndex + 1}/${WORK_ORDERS.length} · ${dept}`;
-    el.levelTitle.textContent = (locked ? '🔒 ' : '') + puzzle.title;
+    const dept = L(DEPARTMENTS[puzzle.dept]) ?? '';
+    el.levelIndex.textContent = state.sandbox ? T('testLine') : T('levelIndex', state.levelIndex + 1, WORK_ORDERS.length);
+    el.levelTitle.textContent = (locked ? '🔒 ' : '') + L(puzzle.title);
     el.levelTitle.classList.toggle('locked', locked);
-    el.levelStars.textContent = state.sandbox ? '' : starString(state.company.passed[puzzle.id]?.stars ?? 0);
-    el.brief.textContent = puzzle.brief ?? '';
-    el.flavor.textContent = locked ? '이전 작업을 통과하면 해금됩니다.' : (puzzle.flavor ?? '');
+    el.brief.textContent = (L(puzzle.brief) ?? '').replace(/^(사장|Boss)\s*:\s*/, '');
+    el.flavor.textContent = locked ? T('lockedFlavor') : (L(puzzle.flavor) ?? '');
     el.btnHint.hidden = !puzzle.hint && !puzzle.sampleSolution;
     updateNavButtons();
     showMessage('');
@@ -293,15 +293,16 @@ function buildConveyor(puzzle, locked = false) {
     el.conveyor.appendChild(inputCard.card);
 
     for (let k = 0; k < puzzle.chimps; k++) {
-        const label = puzzle.perChimp?.[k]?.label ?? '';
+        const label = L(puzzle.perChimp?.[k]?.label) ?? '';
         const role = hasBench(puzzle) ? roleOf(puzzle, k) : 'clerk';
         const card = document.createElement('div');
         card.className = `card chimp ${role}`;
 
         const title = document.createElement('div');
         title.className = 'card-title';
-        title.innerHTML = `<span>침팬지 ${k + 1}</span><span class="label"></span>`;
-        title.querySelector('.label').textContent = isLine(puzzle) ? `${k + 1}. ${label}` : label + (isAction(puzzle) ? (role === 'worker' ? ' · 작업' : ' · 서기') : '');
+        title.innerHTML = `<span></span><span class="label"></span>`;
+        title.firstChild.textContent = T('chimp', k + 1);
+        title.querySelector('.label').textContent = isLine(puzzle) ? label : label + (isAction(puzzle) ? (role === 'worker' ? T('roleWorker') : T('roleClerk')) : '');
 
         const textarea = document.createElement('textarea');
         textarea.value = state.prompts[k] ?? '';
@@ -334,7 +335,7 @@ function buildConveyor(puzzle, locked = false) {
     if (hasBench(puzzle)) {
         workCard = buildWorkCard(puzzle);
         el.workDock.appendChild(workCard.card);
-        renderWork(isLine(puzzle) ? line.goalOf(puzzle.batch[0].job, puzzle.batch[0].targets, puzzle.chimps) : machine.initWorld(puzzle.station, puzzle.batch[0]?.world), -1, isLine(puzzle) ? '완성 예시 (전표 1)' : '');
+        renderWork(isLine(puzzle) ? line.goalOf(puzzle.batch[0].job, puzzle.batch[0].targets, puzzle.chimps) : machine.initWorld(puzzle.station, puzzle.batch[0]?.world), -1, isLine(puzzle) ? T('exampleDone') : '');
     }
     el.conveyor.appendChild(goalCard(puzzle));
     syncScene();
@@ -356,6 +357,8 @@ function syncScene() {
         outX: center(inspectCard.card),
     });
     layoutSpeech(stations);
+    el.conveyor.style.height = el.sceneCanvas.style.height;     // cards get exactly the scene's height
+    el.statusPanel.style.minHeight = `${el.conveyorWrap.offsetHeight}px`;   // at least the conveyor's height, never a scrollbar
 }
 
 // ---------- speech bubbles (HTML, positioned over the canvas) ----------
@@ -385,7 +388,7 @@ function speechScript(k, tokens, activeIdx = -2) {
     const side = d.classList.contains('side');
     d.className = `speech script done${side ? ' side' : ''}`;
     d.innerHTML = '';
-    if (!tokens.length) { d.textContent = '(빈 출력)'; return; }
+    if (!tokens.length) { d.textContent = T('emptyOutput'); return; }
     for (const t of tokens) {
         const sp = document.createElement('span');
         sp.className = `tok ${t.role}` + (activeIdx >= -1 && t.s === activeIdx ? ' active' : '');
@@ -407,7 +410,7 @@ function speechText(k, text, { streaming = false } = {}) {
     const d = speeches[k];
     if (!d) return;
     d.className = `speech ${streaming ? 'talking' : 'done'}${d.classList.contains('side') ? ' side' : ''}`;
-    d.textContent = text || '(빈 출력)';
+    d.textContent = text || T('emptyOutput');
     d.title = text || '';
 }
 
@@ -420,18 +423,34 @@ function speechHideAll() {
     for (const d of speeches) { const side = d.classList.contains('side'); d.className = `speech hidden${side ? ' side' : ''}`; d.textContent = ''; }
 }
 
+/** The ticket card: three samples while idle; during a run the live queue of remaining tickets. */
 function samplesCard(puzzle) {
     const card = document.createElement('div');
-    card.className = 'card io samples';
+    card.className = 'card io tickets';
     const t = document.createElement('div');
     t.className = 'card-title';
-    t.innerHTML = `<span>샘플 전표</span><span class="badge" hidden></span>`;
+    t.innerHTML = `<span></span><span class="badge" hidden></span>`;
+    t.firstChild.textContent = T('samplesTitle');
     const badge = t.querySelector('.badge');
-    const body = document.createElement('div');
-    body.className = 'sample-list';
+    const list = document.createElement('div');
+    list.className = 'ticket-list';
+    const foot = document.createElement('div');
+    foot.className = 'sample-foot';
+    const info = isAction(puzzle) ? machine.STATION_INFO[puzzle.station] : null;
+    foot.textContent = (info ? T('machineNote', L(info.label), info.verbs, info.args) : '') + T('batchNote', puzzle.batch.length);
+    card.append(t, list, foot);
+    const bundle = { card, badge, list, foot, nodes: new Map(), mode: null, puzzle };
+    fillSamples(bundle, puzzle);
+    return bundle;
+}
+
+function fillSamples(bundle, puzzle) {
+    bundle.list.innerHTML = '';
+    bundle.nodes = new Map();
+    bundle.mode = 'samples';
     for (const s of puzzle.samples ?? []) {
         const row = document.createElement('div');
-        row.className = 'sample';
+        row.className = 'ticket sample';
         const i = document.createElement('div');
         i.className = 'sample-in';
         i.textContent = s.input;
@@ -439,51 +458,52 @@ function samplesCard(puzzle) {
         o.className = 'sample-out';
         o.textContent = '→ ' + s.target;
         row.append(i, o);
-        body.appendChild(row);
+        bundle.list.appendChild(row);
     }
-    const foot = document.createElement('div');
-    foot.className = 'sample-foot';
-    const info = isAction(puzzle) ? machine.STATION_INFO[puzzle.station] : null;
-    foot.textContent = (isLine(puzzle) ? `전표는 램프에 달려 함께 흐릅니다. 공정마다 같은 전표를 읽고 자기 일만 합니다.\n` : '') + (info ? `기계: ${info.label} · 듣는 말: ${info.verbs} · ${info.args}\n` : '') + `실제로는 ${puzzle.batch.length}건이 흘러옵니다.`;
-    const queue = document.createElement('div');
-    queue.className = 'queue';
-    queue.hidden = true;
-    card.append(t, body, foot, queue);
-    return { card, badge, body, foot, queue };
 }
 
-/** Sample card body: samples when idle, the live queue (now / next / after) while running. */
+/** Ticket card during a run: the remaining tickets stand in line; the one just finished slides out. */
 function renderQueue() {
     if (!inputCard) return;
     const running = state.phase === 'RUNNING' && state.activeItem >= 0;
-    inputCard.body.hidden = running;
     inputCard.foot.hidden = running;
-    inputCard.queue.hidden = !running;
     inputCard.badge.hidden = !running;
-    if (!running) return;
+    if (!running) {
+        if (inputCard.mode !== 'samples') fillSamples(inputCard, state.puzzle);
+        return;
+    }
     const items = state.items;
     const i = state.activeItem;
     inputCard.badge.textContent = `${i + 1}/${items.length}`;
-    inputCard.queue.innerHTML = '';
-    const labels = ['지금', '다음', '그다음'];
-    for (let d = 0; d < 3 && i + d < items.length; d++) {
-        const row = document.createElement('div');
-        row.className = 'queue-item' + (d === 0 ? ' now' : '');
-        const tag = document.createElement('span');
-        tag.className = 'queue-tag';
-        tag.textContent = labels[d];
-        const txt = document.createElement('span');
-        txt.className = 'queue-text';
-        txt.textContent = items[i + d].input;
-        row.append(tag, txt);
-        inputCard.queue.appendChild(row);
+    if (inputCard.mode !== 'queue') {
+        inputCard.list.innerHTML = '';
+        inputCard.nodes = new Map();
+        inputCard.mode = 'queue';
     }
-    const left = items.length - i - 3;
-    if (left > 0) {
-        const more = document.createElement('div');
-        more.className = 'queue-more';
-        more.textContent = `… ${left}장 더`;
-        inputCard.queue.appendChild(more);
+    // tickets already processed slide out
+    for (const [idx, node] of inputCard.nodes) {
+        if (idx < i && !node.classList.contains('leaving')) {
+            node.classList.add('leaving');
+            setTimeout(() => { node.remove(); inputCard.nodes.delete(idx); }, state.skipAnim ? 0 : 320);
+        }
+    }
+    // the rest stand in line
+    for (let j = i; j < items.length; j++) {
+        let node = inputCard.nodes.get(j);
+        if (!node) {
+            node = document.createElement('div');
+            node.className = 'ticket queue-item';
+            const tag = document.createElement('span');
+            tag.className = 'queue-tag';
+            tag.textContent = String(j + 1);
+            const txt = document.createElement('span');
+            txt.className = 'queue-text';
+            txt.textContent = items[j].input;
+            node.append(tag, txt);
+            inputCard.list.appendChild(node);
+            inputCard.nodes.set(j, node);
+        }
+        node.classList.toggle('now', j === i);
     }
 }
 
@@ -493,8 +513,9 @@ function buildWorkCard(puzzle) {
     card.className = 'card io work';
     const t = document.createElement('div');
     t.className = 'card-title';
-    t.innerHTML = `<span>재공품</span><span class="label"></span>`;
-    t.querySelector('.label').textContent = isLine(puzzle) ? '벽걸이 램프' : (machine.STATION_INFO[puzzle.station]?.label ?? '');
+    t.innerHTML = `<span></span><span class="label"></span>`;
+    t.firstChild.textContent = T('workTitle');
+    t.querySelector('.label').textContent = isLine(puzzle) ? T('lampName') : (L(machine.STATION_INFO[puzzle.station]?.label) ?? '');
     const canvas = document.createElement('canvas');
     canvas.className = 'work-canvas';
     canvas.width = 24;
@@ -505,10 +526,10 @@ function buildWorkCard(puzzle) {
         const row = document.createElement('div');
         row.className = 'work-step';
         const name = document.createElement('span');
-        name.textContent = `${k + 1}. ${puzzle.perChimp?.[k]?.label ?? `침팬지 ${k + 1}`}`;
+        name.textContent = `${k + 1}. ${L(puzzle.perChimp?.[k]?.label) ?? T('chimp', k + 1)}`;
         const st = document.createElement('span');
         st.className = 'st';
-        st.textContent = isLine(puzzle) ? line.LINE[k].field : (roleOf(puzzle, k) === 'worker' ? '작업' : '서기');
+        st.textContent = isLine(puzzle) ? line.LINE[k].field : (roleOf(puzzle, k) === 'worker' ? T('worker') : T('clerk'));
         row.append(name, st);
         steps.appendChild(row);
     }
@@ -544,7 +565,7 @@ function renderWorkSteps(judge) {
         const warn = !bad && facts.some(f => !f.ok);
         row.classList.add(bad ? 'bad' : warn ? 'warn' : 'ok');
         const casc = facts.find(f => f.cascade !== undefined);
-        st.textContent = bad ? (casc ? `✗ ↳${casc.cascade + 1}번` : '✗') : warn ? '△' : '✓';
+        st.textContent = bad ? (casc ? `✗ ↳${casc.cascade + 1}` : '✗') : warn ? '△' : '✓';
     });
 }
 
@@ -553,20 +574,13 @@ function goalCard(puzzle) {
     card.className = 'card io inspect';
     const t = document.createElement('div');
     t.className = 'card-title';
-    t.innerHTML = `<span>검수함</span><span class="badge"></span>`;
+    t.innerHTML = `<span></span><span class="badge"></span>`;
+    t.firstChild.textContent = T('inspectTitle');
     const badge = t.querySelector('.badge');
-    const copy = document.createElement('button');
-    copy.className = 'btn tiny copy';
-    copy.textContent = '복사';
-    copy.title = '릴레이 기록 복사';
-    copy.addEventListener('click', copyTranscript);
-    t.appendChild(copy);
     const rows = document.createElement('div');
-    rows.className = 'inspect-rows';
-    const foot = document.createElement('div');
-    foot.className = 'inspect-foot';
-    card.append(t, rows, foot);
-    inspectCard = { card, badge, rows, foot, copy };
+    rows.className = 'inspect-col';
+    card.append(t, rows);
+    inspectCard = { card, badge, rows, shown: 0 };
     renderInspection();
     return card;
 }
@@ -581,29 +595,31 @@ function renderInspection() {
     const running = state.phase === 'RUNNING';
     const started = state.items.length > 0;
 
-    inspectCard.badge.textContent = state.sandbox
-        ? (started ? `정답 ${correct}/${total}` : `${total}건 시험`)
-        : (started ? `정답 ${correct} / 합격선 ${PASS_COUNT}` : `합격선 ${PASS_COUNT}/${total}`);
-    inspectCard.copy.hidden = !state.result;
+    inspectCard.badge.textContent = `${correct} / ${total}`;
+    el.btnCopy.disabled = !state.result;
 
+    const doneCount = items.filter(it => it.done).length;
+    const prev = inspectCard.shown ?? 0;
     inspectCard.rows.innerHTML = '';
     items.forEach((it, i) => {
+        if (!it.done && !(running && i === state.activeItem)) return;
         const row = document.createElement('div');
-        const cls = it.done ? (it.ok ? 'ok' : 'bad') : (running && i === state.activeItem ? 'active' : 'pending');
-        row.className = `inspect-row ${cls}`;
+        row.className = `inspect-row ${it.done ? (it.ok ? 'ok' : 'bad') : 'active'}${it.done && i >= prev ? ' enter' : ''}`;
         const n = document.createElement('span');
         n.className = 'n';
         n.textContent = String(i + 1);
-        const out = document.createElement('span');
-        out.className = 'out';
-        out.textContent = it.done ? (it.final || '(빈 출력)') : (running && i === state.activeItem ? '…' : '');
         const mark = document.createElement('span');
         mark.className = 'mark';
-        mark.textContent = it.done ? (it.ok ? '✓' : '✗') : '';
+        mark.textContent = it.done ? (it.ok ? '✓' : '✗') : '…';
+        const out = document.createElement('span');
+        out.className = 'out';
+        out.textContent = it.done ? (it.final || T('emptyOutput')) : '';
         row.append(n, out, mark);
-        row.title = `입력: ${it.input}\n기대: ${it.target}` + (it.done ? `\n출력: ${it.final || '(빈 출력)'}${it.detail ? `\n${it.detail}` : ''}` : '');
+        row.title = `${T('tipInput')}: ${it.input}\n${T('tipExpect')}: ${it.target}` + (it.done ? `\n${T('tipOutput')}: ${it.final || T('emptyOutput')}${it.detail ? `\n${it.detail}` : ''}` : '');
         inspectCard.rows.appendChild(row);
     });
+    inspectCard.shown = doneCount;
+    inspectCard.rows.scrollTop = inspectCard.rows.scrollHeight;
 
     renderLedger();
 }
@@ -612,7 +628,7 @@ function renderInspection() {
 function renderLedger() {
     const puzzle = state.puzzle;
     const total = puzzle.batch.length;
-    const foot = inspectCard.foot;
+    const foot = el.ledger;
     foot.innerHTML = '';
     const line = (k, v, cls = '') => {
         const kk = document.createElement('span');
@@ -624,8 +640,8 @@ function renderLedger() {
         foot.append(kk, vv);
     };
     if (state.sandbox) {
-        line('시험 라인', `${total}건 · ${MATCH_MODES.find(m => m.value === puzzle.match)?.label ?? puzzle.match}`);
-        if (state.result) line('결과', `${state.result.tier.label} ${state.result.correct}/${total}`, state.result.tier.key);
+        line(T('ledgerTest'), T('ledgerItems', total, L(MATCH_MODES.find(m => m.value === puzzle.match)?.label) ?? puzzle.match));
+        if (state.result) line(T('ledgerResult'), `${state.result.tier.label} ${state.result.correct}/${total}`, state.result.tier.key);
         return;
     }
     const per = eco.payout(1, total, puzzle.revenue);
@@ -633,24 +649,25 @@ function renderLedger() {
     if (isLine(puzzle) && state.items.some(it => it.done)) {
         const done = state.items.filter(it => it.done && it.actionOk);
         const rate = puzzle.perChimp.map((c, k) => done.filter(it => it.actionOk[k]).length);
-        line('공정 적중', rate.map((n, k) => `${k + 1}:${n}`).join(' '));
+        line(T('ledgerHits'), rate.map((n, k) => `${k + 1}:${n}`).join(' '));
     }
-    line('합격선', `${PASS_COUNT} / ${total}`);
-    line('납품가', `${eco.formatWon(per)} × ${total}`);
-    line('원재료', `-${eco.formatWon(puzzle.materialCost)}`, 'bad');
+    line(T('ledgerPass'), `${PASS_COUNT} / ${total}`);
+    line(T('ledgerPrice'), `${eco.formatWon(per)} × ${total}`);
+    line(T('ledgerMaterial'), `-${eco.formatWon(puzzle.materialCost)}`, 'bad');
+    if (!r) line(T('ledgerCash'), eco.formatWon(state.company.cash));
     if (r) {
         const profit = r.revenue - r.materialCost;
-        line('매출', `${eco.formatWon(per)} × ${r.correct} = ${eco.formatWon(r.revenue)}`, r.revenue > 0 ? 'good' : '');
-        line('손익', `${profit >= 0 ? '+' : ''}${eco.formatWon(profit)}`, `total ${profit >= 0 ? 'good' : 'bad'}`);
-        line('판정', `${r.tier.label} ${starString(r.stars)}`, `total ${r.tier.key}`);
-        line('현금', eco.formatWon(state.company.cash));
+        line(T('ledgerRevenue'), `${eco.formatWon(per)} × ${r.correct} = ${eco.formatWon(r.revenue)}`, r.revenue > 0 ? 'good' : '');
+        line(T('ledgerProfit'), `${profit >= 0 ? '+' : ''}${eco.formatWon(profit)}`, `total ${profit >= 0 ? 'good' : 'bad'}`);
+        line(T('ledgerVerdict'), r.tier.label, `total ${r.tier.key}`);
+        line(T('ledgerCash'), eco.formatWon(state.company.cash));
     }
 }
 
 function applyKnobsToCard(b, knobs, k) {
     b.limit = knobs.promptLimit;
     b.textarea.maxLength = knobs.promptLimit;
-    b.textarea.placeholder = `침팬지 ${k + 1}에게 내릴 지시 (${knobs.promptLimit}자)`;
+    b.textarea.placeholder = T('placeholder', k + 1, knobs.promptLimit);
     if (b.textarea.value.length > knobs.promptLimit) {
         b.textarea.value = b.textarea.value.slice(0, knobs.promptLimit);
         state.prompts[k] = b.textarea.value;
@@ -671,6 +688,7 @@ function updateCounter(b) {
 }
 
 function resetCards() {
+    if (inspectCard) inspectCard.shown = 0;
     scene.reset();
     speechHideAll();
     for (const c of cards) {
@@ -691,11 +709,11 @@ function showCurrentItem() {
 async function runChain() {
     const puzzle = state.puzzle;
     if (!state.sandbox && !isUnlocked(state.levelIndex, state.company.passed)) {
-        showMessage('이 작업은 아직 잠겨 있습니다.', 'hint');
+        showMessage(T('locked'), 'hint');
         return;
     }
     if (state.prompts.some(p => !p.trim())) {
-        showMessage('모든 침팬지에게 지시를 내려야 합니다.', 'hint');
+        showMessage(T('needAll'), 'hint');
         const idx = state.prompts.findIndex(p => !p.trim());
         cards[idx]?.textarea.focus();
         return;
@@ -704,7 +722,7 @@ async function runChain() {
     const knobs = currentKnobs();
     const materialCost = state.sandbox ? 0 : puzzle.materialCost;
     if (!state.sandbox && eco.needsLoan(state.company, materialCost)) {
-        showLoanOffer(`원재료 값 ${eco.formatWon(materialCost)}이 없습니다.`);
+        showLoanOffer(T('noMaterialMoney', eco.formatWon(materialCost)));
         return;
     }
 
@@ -742,7 +760,7 @@ async function runChain() {
         speechHideAll();
         scene.hideParcel();
         boss.itemDone = false;
-        if (hasBench(puzzle)) { scene.setWorkpiece(clone(item.world)); renderWorkSteps(null); renderWork(item.world, -1, `전표 ${i + 1}/${state.items.length}`); }
+        if (hasBench(puzzle)) { scene.setWorkpiece(clone(item.world)); renderWorkSteps(null); renderWork(item.world, -1, T('ticketN', i + 1, state.items.length)); }
         if (i === 0) scrollCardIntoView(inputCard.card);
         await scene.spawnParcel();
         if (ctrl.signal.aborted) { aborted = true; markAborted(cards[0]); break outer; }
@@ -783,7 +801,7 @@ async function runChain() {
                 scene.chimpState(k, 'dead');
                 speechText(k, '…');
                 speechMark(k, 'dead');
-                b.status.textContent = `오류: ${String(err?.message ?? err).slice(0, 80)}`;
+                b.status.textContent = T('error', String(err?.message ?? err).slice(0, 80));
                 b.status.classList.add('error');
                 b.card.classList.remove('active');
                 b.card.classList.add('failed');
@@ -791,7 +809,7 @@ async function runChain() {
             }
             const cleaned = state.rawMode ? raw.trim() : postClean(raw);
             item.outputs[k] = cleaned;
-            if (!state.rawMode && cleaned !== raw.trim()) b.status.textContent = '잡담을 정리했습니다';
+            if (!state.rawMode && cleaned !== raw.trim()) b.status.textContent = T('trimmed');
             carry = cleaned;
 
             if (isLine(puzzle) || (isAction(puzzle) && roleOf(puzzle, k) === 'worker')) {
@@ -853,8 +871,8 @@ async function runChain() {
         boss.streak = item.ok ? boss.streak + 1 : 0;
         if (boss.streak === 3) sayBoss('streak3');
         speechMark(puzzle.chimps - 1, item.ok ? 'ok' : 'bad');
-        await scene.parcelTo(puzzle.chimps);
         if (hasBench(puzzle)) await scene.showVerdict(item.ok, item.world);
+        await scene.parcelTo(puzzle.chimps);
         scene.chimpState(puzzle.chimps - 1, item.ok ? 'happy' : 'sad');
         scene.itemProgress(i + 1, state.items.length, state.items.filter(it => it.ok).length);
         renderInspection();
@@ -868,7 +886,7 @@ async function runChain() {
     if (failed) {
         setPhase('IDLE');
         renderQueue();
-        showMessage(`침팬지가 쓰러졌습니다. 원재료 ${eco.formatWon(materialCost)}은 이미 녹았습니다.`, 'hint');
+        showMessage(T('chimpDown', eco.formatWon(materialCost)), 'hint');
         if (!state.sandbox) offerLoanIfNeeded();
         return;
     }
@@ -889,7 +907,7 @@ function maybeBoss(ev, isHighlight) {
 }
 
 function sayBoss(key) {
-    const lines = state.puzzle?.boss?.[key] ?? BOSS_LINES[key];
+    const lines = state.puzzle?.boss?.[key] ?? L(BOSS_LINES)[key];
     if (!lines?.length) return;
     boss.seen.add(key);
     boss.runCount++;
@@ -898,7 +916,7 @@ function sayBoss(key) {
 }
 
 function markAborted(b) {
-    b.status.textContent = '중단됨';
+    b.status.textContent = T('aborted');
     b.status.classList.add('aborted');
     b.card.classList.remove('active');
 }
@@ -913,10 +931,10 @@ function postClean(text) {
 }
 
 function tierFor(correct, total) {
-    if (correct === total) return { key: 'perfect', label: '전량 합격!', emoji: 'PERFECT' };
-    if (eco.isPass(correct)) return { key: 'pass', label: '합격', emoji: 'PASS' };
-    if (correct >= 3) return { key: 'close', label: '아깝다', emoji: 'CLOSE' };
-    return { key: 'disaster', label: '대참사', emoji: 'FAIL' };
+    if (correct === total) return { key: 'perfect', label: T('tierPerfect'), emoji: 'PERFECT' };
+    if (eco.isPass(correct)) return { key: 'pass', label: T('tierPass'), emoji: 'PASS' };
+    if (correct >= 3) return { key: 'close', label: T('tierClose'), emoji: 'CLOSE' };
+    return { key: 'disaster', label: T('tierDisaster'), emoji: 'FAIL' };
 }
 
 function finish(materialCost, aborted) {
@@ -942,7 +960,6 @@ function finish(materialCost, aborted) {
                 stars: Math.max(stars, prev?.stars ?? 0),
                 bestCorrect: Math.max(correct, prev?.bestCorrect ?? 0),
             };
-            el.levelStars.textContent = starString(state.company.passed[puzzle.id].stars);
         }
         saveCompany();
         leveledUp = eco.levelOf(state.company) > levelBefore;
@@ -954,8 +971,8 @@ function finish(materialCost, aborted) {
     renderInspection();
     renderQueue();
 
-    if (aborted) showMessage(`컨베이어를 멈췄습니다. ${state.items.filter(i => i.done).length}건까지의 결과만 남았습니다.`, 'hint');
-    else if (leveledUp) showMessage('현장 숙련도가 올랐습니다. 지시서가 길어지고 집중력과 출력 용지가 늘어납니다.');
+    if (aborted) showMessage(T('stopped', state.items.filter(i => i.done).length), 'hint');
+    else if (leveledUp) showMessage(T('leveledUp'));
 
     if (!state.sandbox) {
         if (campaignComplete(state.company.passed) && !state.company.reportSeen) {
@@ -971,8 +988,8 @@ function finish(materialCost, aborted) {
 function buildTranscript() {
     const p = state.puzzle;
     const k = currentKnobs();
-    const lines = [`🏭 컨베이어 위의 침팬지 — [${DEPARTMENTS[p.dept] ?? ''}] ${p.title}`];
-    state.prompts.forEach((pr, i) => lines.push(`[침팬지 ${i + 1}] "${pr}"`));
+    const lines = [T('transcriptHead', L(DEPARTMENTS[p.dept]) ?? '', L(p.title))];
+    state.prompts.forEach((pr, i) => lines.push(T('transcriptChimp', i + 1, pr)));
     lines.push('');
     state.items.forEach((it, i) => {
         if (!it.done) return;
@@ -981,15 +998,15 @@ function buildTranscript() {
         if (hasBench(p)) {
             const lab = isLine(p) ? line.eventLabel : machine.eventLabel;
             it.runs.forEach((r, k) => { if (r) lines.push(`     [${k + 1}] ${r.events.map(lab).join(' / ')}`); });
-            lines.push(`     판정: ${it.final}` + (it.ok ? '' : ` (기대: ${it.target})`));
-        } else if (!it.ok) lines.push(`     (기대: ${it.target})`);
+            lines.push(T('transcriptVerdict', it.final, it.ok ? '' : it.target));
+        } else if (!it.ok) lines.push(T('transcriptExpected', it.target));
     });
     if (state.result) {
         const r = state.result;
-        lines.push('', `결과: ${r.tier.label} ${r.correct}/${r.total} (합격선 ${PASS_COUNT})`);
-        if (!state.sandbox) lines.push(`손익: 매출 ${eco.formatWon(r.revenue)} − 원재료 ${eco.formatWon(r.materialCost)} = ${eco.formatWon(r.revenue - r.materialCost)}`);
+        lines.push('', T('transcriptResult', r.tier.label, r.correct, r.total, PASS_COUNT));
+        if (!state.sandbox) lines.push(T('transcriptProfit', eco.formatWon(r.revenue), eco.formatWon(r.materialCost), eco.formatWon(r.revenue - r.materialCost)));
     }
-    lines.push(`숙련도 Lv.${eco.levelOf(state.company)} · 지시서 ${k.promptLimit}자 · 집중력 t=${k.temperature} · 출력 ${k.maxTokens ?? DEFAULT_MAX_TOKENS}토큰 · ${eco.MODEL_ID}`);
+    lines.push(T('transcriptKnobs', eco.levelOf(state.company), k.promptLimit, k.temperature, k.maxTokens ?? DEFAULT_MAX_TOKENS, eco.MODEL_ID));
     return lines.join('\n');
 }
 
@@ -997,16 +1014,16 @@ function showFinalReport() {
     const s = state.company.stats;
     const net = eco.netProfit(state.company);
     const rate = s.items ? Math.round(s.correct / s.items * 100) : 0;
-    showOverlay('📊', '연간 결산',
-        `총매출 ${eco.formatWon(s.revenue)}\n원재료 ${eco.formatWon(s.material)}\n침팬지 임금 ₩0\n은행 대출 ${eco.formatWon(state.company.debt)}\n가동 ${s.runs}회 · 전표 ${s.items}장 중 ${s.correct}장 정답 (${rate}%)\n\n순이익 ${eco.formatWon(net)}\n\n${eco.verdict(net)}`,
-        [{ label: '계속 굴리기', accent: true, onClick: hideOverlay }]);
+    showOverlay('📊', T('reportTitle'),
+        T('reportBody', { rev: eco.formatWon(s.revenue), mat: eco.formatWon(s.material), runs: s.runs, items: s.items, correct: s.correct }, eco.formatWon(state.company.debt), rate, eco.formatWon(net), eco.verdict(net)),
+        [{ label: T('keepRolling'), accent: true, onClick: hideOverlay }]);
 }
 
 // ---------- loans ----------
 function offerLoanIfNeeded() {
     if (state.sandbox) return;
     if (eco.needsLoan(state.company, state.puzzle.materialCost)) {
-        showLoanOffer('현금이 원재료 값에도 못 미칩니다.');
+        showLoanOffer(T('loanNeeded'));
     }
 }
 
@@ -1014,19 +1031,19 @@ function showLoanOffer(text) {
     showMessage(text + ' ', 'hint');
     const btn = document.createElement('button');
     btn.className = 'btn small loan';
-    btn.textContent = `🏦 대출 ${eco.formatWon(eco.LOAN_AMOUNT)}`;
+    btn.textContent = T('loanButton', eco.formatWon(eco.LOAN_AMOUNT));
     btn.addEventListener('click', () => {
         state.company = eco.takeLoan(state.company);
         saveCompany();
         renderHud(1);
         renderInspection();
-        showMessage('은행이 "AI 혁신 기업"이라며 기꺼이 빌려줬습니다. 부채가 늘었습니다.');
+        showMessage(T('loanTaken'));
     });
     el.message.appendChild(btn);
 }
 
 function resetProgress() {
-    if (!confirm('진행(현금, 부채, 통과 기록, 숙련도)을 모두 초기화할까요? 모델 캐시는 남습니다.')) return;
+    if (!confirm(T('resetConfirm'))) return;
     state.company = { ...eco.newCompany(), introSeen: true };
     state.lastPrompts = {};
     remove('lastPrompts');
@@ -1034,7 +1051,7 @@ function resetProgress() {
     save('levelIndex', 0);
     renderHud();
     selectPuzzle(0);
-    showMessage('새 회계연도가 시작됐습니다.');
+    showMessage(T('newYear'));
 }
 
 // ---------- animation helpers ----------
@@ -1073,13 +1090,13 @@ function showHint() {
     const p = state.puzzle;
     const fails = state.result && !(state.result.tier.key === 'pass' || state.result.tier.key === 'perfect');
     if (p.sampleSolution && (fails || !p.hint)) {
-        const ok = p.hint ? confirm('힌트를 넘어 예시 지시서를 볼까요? (별은 그대로 받을 수 있습니다)') : true;
+        const ok = p.hint ? confirm(T('hintConfirm')) : true;
         if (ok) {
-            showMessage('예시 지시서: ' + p.sampleSolution.map((s, i) => `[${i + 1}] ${s}`).join('  '), 'hint');
+            showMessage(T('hintExample') + p.sampleSolution.map((s, i) => `[${i + 1}] ${s}`).join('  '), 'hint');
             return;
         }
     }
-    showMessage(p.hint ? `힌트: ${p.hint}` : '이 작업에는 힌트가 없습니다.', 'hint');
+    showMessage(p.hint ? `${L(p.flavor) ?? ''} ${T('hintPrefix', L(p.hint))}`.trim() : (L(p.flavor) ?? T('noHint')), 'hint');
 }
 
 let promptSaveTimer = null;
@@ -1099,9 +1116,9 @@ async function copyTranscript() {
     const text = buildTranscript();
     try {
         await navigator.clipboard.writeText(text);
-        showMessage('릴레이 기록을 복사했습니다.');
+        showMessage(T('copied'));
     } catch {
-        window.prompt('클립보드 접근이 막혔습니다. 아래 기록을 직접 복사하세요.', text);
+        window.prompt(T('copyBlocked'), text);
     }
 }
 
@@ -1131,6 +1148,12 @@ function wireEvents() {
     el.btnSbApply.addEventListener('click', applySandboxForm);
     el.btnHint.addEventListener('click', showHint);
     el.btnResetProgress.addEventListener('click', resetProgress);
+    el.btnLang.addEventListener('click', () => { setLang(lang() === 'ko' ? 'en' : 'ko'); location.reload(); });
+    el.btnMenu.addEventListener('click', e => { e.stopPropagation(); el.menuPanel.hidden = !el.menuPanel.hidden; });
+    el.btnCopy.addEventListener('click', () => { el.menuPanel.hidden = true; copyTranscript(); });
+    el.menuPanel.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('click', () => { el.menuPanel.hidden = true; });
+    el.btnSandbox.addEventListener('click', () => { el.menuPanel.hidden = true; });
 
     el.toggleSkip.addEventListener('change', () => { state.skipAnim = el.toggleSkip.checked; save('skipAnim', state.skipAnim); scene.setSkipAnim(state.skipAnim); });
     el.toggleRaw.addEventListener('change', () => { state.rawMode = el.toggleRaw.checked; save('rawMode', state.rawMode); });

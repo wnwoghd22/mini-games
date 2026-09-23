@@ -7,6 +7,7 @@
 //
 // Pure ESM, no DOM. Reuses the token parser and vocab helpers of machine.js.
 import { parse, FATAL_KO as BASE_FATAL_KO, CODES, CELL } from './machine.js';
+import { tr, L } from './i18n.js';
 
 const RANK = { SOFT: 0, MEDIUM: 1, HARD: 2 };
 const NEED = { glass: 'SOFT', pine: 'MEDIUM', oak: 'MEDIUM', walnut: 'MEDIUM', wood: 'MEDIUM', steel: 'HARD' };
@@ -57,7 +58,7 @@ function holes(w) { return ALL_CELLS.filter(c => w.cells[c].hole); }
 /* ---------------- stations ---------------- */
 export const LINE = [
     {
-        id: 'nailer', label: '못 꽂기', field: 'nail', verbs: ['PUT'], defaultVerb: 'PUT',
+        id: 'nailer', label: { ko: '못 꽂기', en: 'Set nail' }, field: 'nail', verbs: ['PUT'], defaultVerb: 'PUT',
         run(w, args, goal, emit) {
             const cells = cellsOf(args), off = offOf(args);
             if (!cells.length && !off.length) return emit('noop', { reason: 'empty' });
@@ -70,7 +71,7 @@ export const LINE = [
         },
     },
     {
-        id: 'hammer', label: '못 박기', field: 'hit', verbs: ['HAMMER'], defaultVerb: 'HAMMER',
+        id: 'hammer', label: { ko: '못 박기', en: 'Hammer' }, field: 'hit', verbs: ['HAMMER'], defaultVerb: 'HAMMER',
         run(w, args, goal, emit) {
             const force = lastForce(args);
             if (!force) return emit('no_force');
@@ -93,7 +94,7 @@ export const LINE = [
         },
     },
     {
-        id: 'washer', label: '와셔', field: 'washer', verbs: ['PUT'], defaultVerb: 'PUT',
+        id: 'washer', label: { ko: '와셔', en: 'Washer' }, field: 'washer', verbs: ['PUT'], defaultVerb: 'PUT',
         run(w, args, goal, emit) {
             let cells = cellsOf(args);
             const type = args.find(a => WASHERS.includes(a));
@@ -108,7 +109,7 @@ export const LINE = [
         },
     },
     {
-        id: 'screw', label: '나사', field: 'screw', verbs: ['SCREW', 'PUT'], defaultVerb: 'SCREW',
+        id: 'screw', label: { ko: '나사', en: 'Screw' }, field: 'screw', verbs: ['SCREW', 'PUT'], defaultVerb: 'SCREW',
         run(w, args, goal, emit) {
             const cells = cellsOf(args);
             if (!cells.length) return emit('noop', { reason: 'empty' });
@@ -123,7 +124,7 @@ export const LINE = [
         },
     },
     {
-        id: 'pane', label: '유리판', field: 'pane', verbs: ['PUT'], defaultVerb: 'PUT',
+        id: 'pane', label: { ko: '유리판', en: 'Glass pane' }, field: 'pane', verbs: ['PUT'], defaultVerb: 'PUT',
         run(w, args, goal, emit) {
             const cells = cellsOf(args);
             if (!cells.length) return emit('noop', { reason: 'empty' });
@@ -136,7 +137,7 @@ export const LINE = [
         },
     },
     {
-        id: 'drill', label: '전선 구멍', field: 'hole', verbs: ['DRILL'], defaultVerb: 'DRILL',
+        id: 'drill', label: { ko: '전선 구멍', en: 'Cable hole' }, field: 'hole', verbs: ['DRILL'], defaultVerb: 'DRILL',
         run(w, args, goal, emit) {
             const cells = cellsOf(args), off = offOf(args);
             if (!cells.length && !off.length) return emit('thumb');
@@ -153,7 +154,7 @@ export const LINE = [
         },
     },
     {
-        id: 'lid', label: '덮개', field: 'lid', verbs: ['PUT'], defaultVerb: 'PUT',
+        id: 'lid', label: { ko: '덮개', en: 'Lid' }, field: 'lid', verbs: ['PUT'], defaultVerb: 'PUT',
         run(w, args, goal, emit) {
             const types = args.filter(a => LIDS.includes(a));
             if (!types.length) return emit('noop', { reason: 'empty' });
@@ -165,7 +166,7 @@ export const LINE = [
         },
     },
     {
-        id: 'socket', label: '소켓 압입', field: 'hit', verbs: ['PRESS'], defaultVerb: 'PRESS',
+        id: 'socket', label: { ko: '소켓 압입', en: 'Press socket' }, field: 'hit', verbs: ['PRESS'], defaultVerb: 'PRESS',
         run(w, args, goal, emit) {
             const force = lastForce(args);
             if (!force) return emit('thumb');
@@ -189,7 +190,7 @@ export const LINE = [
         },
     },
     {
-        id: 'bulb', label: '전구', field: 'bulb', verbs: ['PUT'], defaultVerb: 'PUT',
+        id: 'bulb', label: { ko: '전구', en: 'Bulb' }, field: 'bulb', verbs: ['PUT'], defaultVerb: 'PUT',
         run(w, args, goal, emit) {
             const types = args.filter(a => BULBS.includes(a));
             if (!types.length) return emit('noop', { reason: 'empty' });
@@ -202,7 +203,7 @@ export const LINE = [
         },
     },
     {
-        id: 'paint', label: '도색', field: 'color', verbs: ['PAINT', 'PUT'], defaultVerb: 'PAINT',
+        id: 'paint', label: { ko: '도색', en: 'Paint' }, field: 'color', verbs: ['PAINT', 'PUT'], defaultVerb: 'PAINT',
         run(w, args, goal, emit) {
             const cs = args.filter(a => COLORS.includes(a));
             if (!cs.length) return emit('noop', { reason: 'empty' });
@@ -213,7 +214,7 @@ export const LINE = [
         },
     },
     {
-        id: 'pack', label: '포장', field: 'wrap', verbs: ['WRAP', 'PUT', 'SEAL'], defaultVerb: 'WRAP',
+        id: 'pack', label: { ko: '포장', en: 'Wrap' }, field: 'wrap', verbs: ['WRAP', 'PUT', 'SEAL'], defaultVerb: 'WRAP',
         run(w, args, goal, emit) {
             const n = args.includes('HEAVY') ? 3 : args.includes('LIGHT') ? 1 : (firstInt(args) ?? 1);
             if (w.pack.sealed) { w.pack.outer += n; return emit('wrap_outside', { n }); }
@@ -224,7 +225,7 @@ export const LINE = [
         },
     },
     {
-        id: 'dock', label: '출하', field: 'dest', verbs: ['SHIP'], defaultVerb: 'SHIP', loose: true,
+        id: 'dock', label: { ko: '출하', en: 'Ship' }, field: 'dest', verbs: ['SHIP'], defaultVerb: 'SHIP', loose: true,
         run(w, args, goal, emit) {
             if (w.truck) return emit('noop', { reason: 'gone' });
             if (!w.pack.sealed) return emit('unsealed');
@@ -239,7 +240,8 @@ export const LINE = [
 ];
 
 const STOP_WORDS = new Set(['THE', 'AND', 'FOR', 'TO', 'IT', 'ALL', 'OUT', 'NOW', 'NOT', 'ONLY', 'THEN', 'WITH', 'INTO', 'ON', 'IN', 'AT', 'OF', 'BY', 'VALUE', 'OUTPUT', 'NOTHING', 'ELSE']);
-export const LINE_FATAL_KO = { ...BASE_FATAL_KO, wire_spark: '전선 합선', jig_crack: '받침판 쪼개짐', housing_crack: '받침판 균열' };
+const LINE_FATAL = { ...BASE_FATAL_KO, wire_spark: { ko: '전선 합선', en: 'wire short-circuit' }, jig_crack: { ko: '받침판 쪼개짐', en: 'base plate split' }, housing_crack: { ko: '받침판 균열', en: 'base plate cracked' } };
+export const fatalLabel = type => L(LINE_FATAL[type]) ?? type;
 export const LINE_BIG = new Set(['shatter', 'jig_crack', 'housing_crack', 'bit_snap', 'table_hole', 'wire_spark', 'bulge']);
 const OK_EVENTS = new Set(['set', 'hit', 'washer', 'skip', 'screw', 'pane', 'lid', 'bulb', 'paint', 'wrap', 'ship']);
 
@@ -315,58 +317,58 @@ export function scoreLine(job, targets, outputs, n, { cosmeticPaint = false } = 
         const st = LINE[k];
         switch (st.id) {
             case 'nailer': {
-                for (const c of ALL_CELLS) if (gc[c].nail) F(k, !!ac[c].nail, `못 ${c}${ac[c].nail ? '' : ' 없음'}`);
-                for (const c of ALL_CELLS) if (ac[c].nail && !gc[c].nail) F(k, false, `여분 못 ${c}`);
+                for (const c of ALL_CELLS) if (gc[c].nail) F(k, !!ac[c].nail, `${tr('못', 'nail')} ${c}${ac[c].nail ? '' : tr(' 없음', ' missing')}`);
+                for (const c of ALL_CELLS) if (ac[c].nail && !gc[c].nail) F(k, false, `${tr('여분 못', 'extra nail')} ${c}`);
                 break;
             }
             case 'hammer': {
-                for (const c of ALL_CELLS) if (gc[c].nail) F(k, ac[c].nail === 'flush', ac[c].nail === 'flush' ? `${c} 박힘` : ac[c].nail === 'bent' ? `${c} 못 휨` : ac[c].nail === 'standing' ? `${c} 못 서 있음` : `${c} 박을 못 없음`);
+                for (const c of ALL_CELLS) if (gc[c].nail) F(k, ac[c].nail === 'flush', ac[c].nail === 'flush' ? `${c} ${tr('박힘', 'driven')}` : ac[c].nail === 'bent' ? `${c} ${tr('못 휨', 'nail bent')}` : ac[c].nail === 'standing' ? `${c} ${tr('못 서 있음', 'nail still standing')}` : `${c} ${tr('박을 못 없음', 'no nail to drive')}`);
                 const dents = ALL_CELLS.filter(c => ac[c].dent);
-                if (dents.length) F(k, false, `찍힘 ${dents.join(' ')}`, true);
+                if (dents.length) F(k, false, `${tr('찍힘', 'dents')} ${dents.join(' ')}`, true);
                 break;
             }
             case 'washer': {
                 // An extra washer under a screw is harmless hardware-wise: cosmetic. Elsewhere it protrudes: structural.
                 const want = ALL_CELLS.filter(c => gc[c].washer);
                 const extra = ALL_CELLS.filter(c => ac[c].washer && !gc[c].washer);
-                if (!want.length && !extra.length) F(k, true, '와셔 없음');
-                for (const c of want) F(k, ac[c].washer === 1, `와셔 ${c}${ac[c].washer === 1 ? '' : ac[c].washer > 1 ? ' 이단' : ' 없음'}`);
-                for (const c of extra) F(k, false, `여분 와셔 ${c}${gc[c].screw ? ' (나사 밑, 무해)' : ''}`, !!gc[c].screw && ac[c].washer === 1);
+                if (!want.length && !extra.length) F(k, true, tr('와셔 없음', 'no washer'));
+                for (const c of want) F(k, ac[c].washer === 1, `${tr('와셔', 'washer')} ${c}${ac[c].washer === 1 ? '' : ac[c].washer > 1 ? tr(' 이단', ' stacked') : tr(' 없음', ' missing')}`);
+                for (const c of extra) F(k, false, `${tr('여분 와셔', 'extra washer')} ${c}${gc[c].screw ? tr(' (나사 밑, 무해)', ' (under the screw, harmless)') : ''}`, !!gc[c].screw && ac[c].washer === 1);
                 break;
             }
             case 'screw': {
-                for (const c of ALL_CELLS) if (gc[c].screw) F(k, ac[c].screw === 'flush' && !!ac[c].washer === !!gc[c].washer, `나사 ${c}${ac[c].screw === 'flush' ? (!!ac[c].washer === !!gc[c].washer ? '' : (ac[c].washer ? ' 와셔 남음' : ' 와셔 없이')) : ac[c].screw === 'stripped' ? ' 헛돎' : ' 없음'}`);
-                for (const c of ALL_CELLS) if (ac[c].screw && !gc[c].screw) F(k, false, `여분 나사 ${c}${ac[c].screw === 'stripped' ? ' (못 위에서 헛돎)' : ''}`);
+                for (const c of ALL_CELLS) if (gc[c].screw) F(k, ac[c].screw === 'flush' && !!ac[c].washer === !!gc[c].washer, `${tr('나사', 'screw')} ${c}${ac[c].screw === 'flush' ? (!!ac[c].washer === !!gc[c].washer ? '' : (ac[c].washer ? tr(' 와셔 남음', ' stray washer') : tr(' 와셔 없이', ' without washer'))) : ac[c].screw === 'stripped' ? tr(' 헛돎', ' stripped') : tr(' 없음', ' missing')}`);
+                for (const c of ALL_CELLS) if (ac[c].screw && !gc[c].screw) F(k, false, `${tr('여분 나사', 'extra screw')} ${c}${ac[c].screw === 'stripped' ? tr(' (못 위에서 헛돎)', ' (stripped on a nail)') : ''}`);
                 break;
             }
-            case 'pane': F(k, !!a.pane && a.pane.at === goal.pane?.at && a.pane.seated, a.pane ? `유리 ${a.pane.at}${a.pane.seated ? '' : ' 들뜸'}${a.pane.at !== goal.pane?.at ? ' (자리 다름)' : ''}` : '유리 없음'); break;
+            case 'pane': F(k, !!a.pane && a.pane.at === goal.pane?.at && a.pane.seated, a.pane ? `${tr('유리', 'glass')} ${a.pane.at}${a.pane.seated ? '' : tr(' 들뜸', ' unseated')}${a.pane.at !== goal.pane?.at ? tr(' (자리 다름)', ' (wrong spot)') : ''}` : tr('유리 없음', 'no glass')); break;
             case 'drill': {
-                for (const c of ALL_CELLS) if (gc[c].hole) F(k, ac[c].hole, `구멍 ${c}${ac[c].hole ? '' : ' 없음'}`);
-                for (const c of ALL_CELLS) if (ac[c].hole && !gc[c].hole) F(k, false, `여분 구멍 ${c}`);
+                for (const c of ALL_CELLS) if (gc[c].hole) F(k, ac[c].hole, `${tr('구멍', 'hole')} ${c}${ac[c].hole ? '' : tr(' 없음', ' missing')}`);
+                for (const c of ALL_CELLS) if (ac[c].hole && !gc[c].hole) F(k, false, `${tr('여분 구멍', 'extra hole')} ${c}`);
                 break;
             }
-            case 'lid': F(k, !!a.lid && a.lid.type === goal.lid?.type && !a.lid.wobble && a.lid.layers === 1, a.lid ? `덮개 ${a.lid.type}${a.lid.layers > 1 ? ' 두 겹' : ''}${a.lid.wobble ? ' 들썩' : ''}${a.lid.type !== goal.lid?.type ? ' (종류 다름)' : ''}` : '덮개 없음'); break;
-            case 'socket': F(k, a.socket === 'seated' && a.socketAt === goal.socketAt, a.socket === 'seated' ? `소켓 ${a.socketAt}${a.socketAt !== goal.socketAt ? ' (엉뚱한 구멍)' : ''}` : a.socket === 'half' ? '소켓 반쯤' : a.socket === 'crushed' ? '소켓 찌그러짐' : '소켓 없음'); break;
-            case 'bulb': F(k, !!a.bulb && a.bulb.state === 'in' && a.bulb.type === goal.bulb?.type, a.bulb ? (a.bulb.state === 'popped' ? '전구 둘 다 깨짐' : `전구 ${a.bulb.type}${a.bulb.state === 'tilt' ? ' 기울어짐' : a.bulb.state === 'dropped' ? ' 추락' : ''}${a.bulb.type !== goal.bulb?.type ? ' (종류 다름)' : ''}`) : '전구 없음'); break;
-            case 'paint': F(k, a.paint === goal.paint && !a.glassPainted, a.paint ? (a.paint === 'MUD' ? '도색 흙탕물' : `도색 ${a.paint}${a.glassPainted ? ' (유리에)' : ''}${a.paint !== goal.paint ? ' (색 다름)' : ''}`) : '도색 없음', cosmeticPaint); break;
-            case 'pack': F(k, a.pack.layers === goal.pack.layers && a.pack.sealed && !a.pack.outer, `뽁뽁이 ${a.pack.layers}겹${a.pack.outer ? ` +겉 ${a.pack.outer}` : ''}${a.pack.sealed ? '' : ' 미봉'}`); break;
-            case 'dock': F(k, a.truck === goal.truck, a.truck ? (a.truck.startsWith('LOST') ? `행방불명(${a.truck.slice(5)})` : `${a.truck}행`) : (a.pack.sealed ? '출하 안 됨' : '미봉 상태로 출하 시도')); break;
+            case 'lid': F(k, !!a.lid && a.lid.type === goal.lid?.type && !a.lid.wobble && a.lid.layers === 1, a.lid ? `${tr('덮개', 'lid')} ${a.lid.type}${a.lid.layers > 1 ? tr(' 두 겹', ' doubled') : ''}${a.lid.wobble ? tr(' 들썩', ' wobbles') : ''}${a.lid.type !== goal.lid?.type ? tr(' (종류 다름)', ' (wrong type)') : ''}` : tr('덮개 없음', 'no lid')); break;
+            case 'socket': F(k, a.socket === 'seated' && a.socketAt === goal.socketAt, a.socket === 'seated' ? `${tr('소켓', 'socket')} ${a.socketAt}${a.socketAt !== goal.socketAt ? tr(' (엉뚱한 구멍)', ' (wrong hole)') : ''}` : a.socket === 'half' ? tr('소켓 반쯤', 'socket halfway') : a.socket === 'crushed' ? tr('소켓 찌그러짐', 'socket crushed') : tr('소켓 없음', 'no socket')); break;
+            case 'bulb': F(k, !!a.bulb && a.bulb.state === 'in' && a.bulb.type === goal.bulb?.type, a.bulb ? (a.bulb.state === 'popped' ? tr('전구 둘 다 깨짐', 'both bulbs popped') : `${tr('전구', 'bulb')} ${a.bulb.type}${a.bulb.state === 'tilt' ? tr(' 기울어짐', ' tilted') : a.bulb.state === 'dropped' ? tr(' 추락', ' dropped') : ''}${a.bulb.type !== goal.bulb?.type ? tr(' (종류 다름)', ' (wrong type)') : ''}`) : tr('전구 없음', 'no bulb')); break;
+            case 'paint': F(k, a.paint === goal.paint && !a.glassPainted, a.paint ? (a.paint === 'MUD' ? tr('도색 흙탕물', 'paint: mud') : `${tr('도색', 'paint')} ${a.paint}${a.glassPainted ? tr(' (유리에)', ' (on the glass)') : ''}${a.paint !== goal.paint ? tr(' (색 다름)', ' (wrong colour)') : ''}`) : tr('도색 없음', 'unpainted'), cosmeticPaint); break;
+            case 'pack': F(k, a.pack.layers === goal.pack.layers && a.pack.sealed && !a.pack.outer, `${tr('뽁뽁이', 'bubble wrap')} ${a.pack.layers}${tr('겹', ' layers')}${a.pack.outer ? ` +${tr('겉', 'outer')} ${a.pack.outer}` : ''}${a.pack.sealed ? '' : tr(' 미봉', ' unsealed')}`); break;
+            case 'dock': F(k, a.truck === goal.truck, a.truck ? (a.truck.startsWith('LOST') ? `${tr('행방불명', 'lost')} (${a.truck.slice(5)})` : tr(`${a.truck}행`, `to ${a.truck}`)) : (a.pack.sealed ? tr('출하 안 됨', 'not shipped') : tr('미봉 상태로 출하 시도', 'shipped unsealed'))); break;
         }
     }
     const fatal = a.fatal;
-    if (fatal) facts.unshift({ k: -1, ok: false, cosmetic: false, t: `${LINE_FATAL_KO[fatal] ?? fatal}★` });
+    if (fatal) facts.unshift({ k: -1, ok: false, cosmetic: false, t: `${fatalLabel(fatal)}★` });
     const structural = facts.filter(f => !f.cosmetic);
     const correct = !fatal && structural.every(f => f.ok);
     const bad = structural.filter(f => !f.ok);
-    const summary = correct ? `${n}공정 ✓` : (fatal ? LINE_FATAL_KO[fatal] ?? fatal : bad[0].t.replace(/^.\s/, '')) + (bad.length > 1 ? ` 외 ${bad.length - 1}` : '');
-    const detail = facts.map(f => `${f.ok ? '✓' : f.cosmetic ? '△' : '✗'} ${f.t}${f.cascade !== undefined ? ` ↳${f.cascade + 1}번 여파` : ''}`).join('\n');
+    const summary = correct ? tr(`${n}공정 ✓`, `${n} stations ✓`) : (fatal ? fatalLabel(fatal) : bad[0].t.replace(/^.\s/, '')) + (bad.length > 1 ? tr(` 외 ${bad.length - 1}`, ` +${bad.length - 1} more`) : '');
+    const detail = facts.map(f => `${f.ok ? '✓' : f.cosmetic ? '△' : '✗'} ${f.t}${f.cascade !== undefined ? tr(` ↳${f.cascade + 1}번 여파`, ` ↳ fallout from #${f.cascade + 1}`) : ''}`).join('\n');
     const score = structural.length ? structural.filter(f => f.ok).length / structural.length : 1;
     return { correct, fatal, facts, actionOk, summary, detail, world: a, goal, score: correct ? 1 : fatal ? 0 : score };
 }
 
 export function eventLabel(ev) {
     const c = ev.cell ? `${ev.cell} ` : '';
-    const L = {
+    const ko = {
         set: `${c}못 세움`, set_wrong: `${c}못 세움 (자리 다름)`, drop: `${c}판 밖, 못 떨어짐`, occupied: `${c}이미 있음`,
         no_force: '힘 단어 없음, 망치 안 내려옴', no_nail: '칠 못 없음, 허공', dent: `${c}빈 칸 찍음`, bent: `${c}못 휨`, hit: `${c}${ev.verb === 'DRILL' ? '구멍' : '명중'}`, miss: `${c}빗나감`,
         skip: '와셔 없이 통과', washer: `${c}와셔`, washer_wrong: `${c}와셔 (자리 다름)`, washer_stack: `${c}와셔 이단`,
@@ -379,5 +381,19 @@ export function eventLabel(ev) {
         wrap: `${ev.n}겹`, overwrap: `${ev.n}겹 (과다)`, wrap_outside: `봉한 뒤 ${ev.n}겹`, ship: `${ev.code}행`, wrong_ship: `${ev.code}행 (오배송)`, lost: `${ev.code}? 행방불명`, unsealed: '미봉 상태, 트럭에서 굴러떨어짐',
         thumb: '엄지 찧음', noop: ev.reason === 'empty' ? '멍' : '이미 끝난 일', idle: '앞 사고로 손 놓음', tired: '지침',
     };
-    return L[ev.type] ?? (LINE_FATAL_KO[ev.type] ? `${c}${LINE_FATAL_KO[ev.type]}★` : ev.type);
+    const en = {
+        set: `${c}nail set`, set_wrong: `${c}nail set (wrong spot)`, drop: `${c}off the board, nail dropped`, occupied: `${c}already there`,
+        no_force: 'no force word, hammer stays up', no_nail: 'no nail to hit, swings at air', dent: `${c}dented an empty cell`, bent: `${c}nail bent`, hit: `${c}${ev.verb === 'DRILL' ? 'hole' : 'hit'}`, miss: `${c}miss`,
+        skip: 'no washer, passed', washer: `${c}washer`, washer_wrong: `${c}washer (wrong spot)`, washer_stack: `${c}washer stacked`,
+        screw: `${c}screw`, screw_wrong: `${c}screw (wrong spot)`, strip: `${c}stripped on the nail head`, no_washer: `${c}screwed without washer`,
+        pane: `${c}glass seated`, pane_wrong: `${c}glass (wrong spot)`, glass_unseated: `${c}glass unseated (on ${ev.blocker ?? ''})`,
+        lid: `lid ${ev.type}`, lid_wrong: `lid ${ev.type} (wrong type)`, cover_wobble: `lid ${ev.type} wobbles`, lid_stack: 'two lids',
+        half: 'socket halfway', socket_crush: 'no hole, socket crushed',
+        bulb: `bulb ${ev.type}`, bulb_wrong: `bulb ${ev.type} (wrong type)`, bulb_tilt: `bulb ${ev.type} tilted`, bulb_drop: `bulb ${ev.type} dropped`, bulb_pop: 'both bulbs popped',
+        paint: `paint ${ev.color}`, paint_wrong: `paint ${ev.color} (wrong colour)`, paint_mud: 'two colours → mud', glass_painted: `painted the glass ${ev.color}`,
+        wrap: `${ev.n} layers`, overwrap: `${ev.n} layers (too many)`, wrap_outside: `${ev.n} layers over the seal`, ship: `to ${ev.code}`, wrong_ship: `to ${ev.code} (wrong)`, lost: `${ev.code}? lost`, unsealed: 'unsealed, rolled off the truck',
+        thumb: 'hit thumb', noop: ev.reason === 'empty' ? 'blank stare' : 'already done', idle: 'hands off after the accident', tired: 'exhausted',
+    };
+    const L = tr(ko, en);
+    return L[ev.type] ?? (LINE_FATAL[ev.type] ? `${c}${fatalLabel(ev.type)}★` : ev.type);
 }
