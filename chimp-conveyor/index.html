@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>컨베이어 위의 침팬지</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="hud">
+            <a class="home-link" href="../index.html" title="Back to hub">&#8592;</a>
+            <span class="brand">컨베이어 위의 침팬지</span>
+            <div class="hud-stat" title="현금"><span class="hud-label">CASH</span><span id="hud-cash" class="hud-value">₩0</span></div>
+            <div class="hud-stat" id="hud-debt-wrap" hidden title="은행 대출"><span class="hud-label">DEBT</span><span id="hud-debt" class="hud-value bad">₩0</span></div>
+            <div class="hud-stat" title="통과한 작업 수에 따라 자동으로 오릅니다"><span class="hud-label">LV</span><span id="hud-skill" class="hud-value">—</span></div>
+            <div class="knobs" id="knobs"></div>
+            <div class="load-status" id="load-status">
+                <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
+                <span class="load-text" id="load-text">준비 중…</span>
+            </div>
+            <label class="toggle"><input type="checkbox" id="toggle-skip-anim"> 애니 생략</label>
+            <label class="toggle" title="침팬지 잡담을 정리하지 않고 그대로 다음 침팬지에게 넘깁니다"><input type="checkbox" id="toggle-raw"> 날것 모드</label>
+            <div class="hud-actions">
+                <button id="btn-sandbox" class="btn tiny">샌드박스</button>
+                <button id="btn-hint" class="btn tiny">힌트</button>
+                <button id="btn-reset-progress" class="btn tiny danger" title="진행 초기화">초기화</button>
+            </div>
+        </header>
+
+        <section class="order-head">
+            <div class="order-title">
+                <span class="level-index" id="level-index">작업 1/12</span>
+                <span class="level-title" id="level-title">—</span>
+                <span class="level-stars" id="level-stars"></span>
+            </div>
+            <p class="brief" id="brief"></p>
+            <p class="flavor" id="flavor"></p>
+        </section>
+
+        <main class="line">
+                <section id="sandbox-panel" class="sandbox-panel" hidden>
+                    <label>배치 (한 줄에 한 건, "입력 => 목표", 최대 10건. 입력 안의 줄바꿈은 \n으로)<textarea id="sb-batch" rows="3"></textarea></label>
+                    <div class="sandbox-row">
+                        <label>침팬지 수 <input type="number" id="sb-chimps" min="1" max="5" value="1"></label>
+                        <label>채점 <select id="sb-match"></select></label>
+                        <button id="btn-sb-apply" class="btn small accent">적용</button>
+                    </div>
+                </section>
+                <div class="conveyor-wrap" id="conveyor-wrap">
+                    <div class="scene-layer"><canvas id="scene" class="scene" width="160" height="72"></canvas><div class="bubbles" id="bubbles"></div></div>
+                    <div class="conveyor" id="conveyor"></div>
+                </div>
+        </main>
+
+        <div id="message-area" class="message-area"></div>
+
+        <footer class="bottom-bar">
+            <button id="btn-prev" class="btn" title="이전 작업">&#9664; 이전</button>
+            <button id="btn-run" class="btn run" disabled>▶ 가동</button>
+            <button id="btn-clear" class="btn">지시 초기화</button>
+            <button id="btn-next" class="btn" title="다음 작업">다음 &#9654;</button>
+        </footer>
+    </div>
+
+    <div id="overlay" class="overlay" hidden>
+        <div class="overlay-card">
+            <div class="overlay-emoji" id="overlay-emoji"></div>
+            <h2 id="overlay-title"></h2>
+            <p id="overlay-text"></p>
+            <div class="overlay-actions" id="overlay-actions"></div>
+        </div>
+    </div>
+
+    <script src="app.js" type="module"></script>
+</body>
+
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Chimp Conveyor — similarity tests</title>
+    <style>
+        body { background: #0f172a; color: #f1f5f9; font-family: Consolas, monospace; padding: 20px; }
+        table { border-collapse: collapse; }
+        td, th { border: 1px solid #334155; padding: 4px 8px; text-align: left; vertical-align: top; }
+        .ok { color: #22c55e; } .fail { color: #ef4444; }
+        #summary { font-size: 1.2rem; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <div id="summary">running…</div>
+    <table id="results"><thead><tr><th>#</th><th>mode</th><th>output</th><th>target</th><th>expected</th><th>got</th><th>detail</th></tr></thead><tbody></tbody></table>
+    <script type="module">
+        import { score, normalize, listItems, firstNumber, tryParseJson, tier, stars } from './similarity.js';
+
+        // { mode, out, tgt, min, max } → score must be within [min, max]
+        const cases = [
+            // exact
+            { mode: 'exact', out: 'HELLO WORLD!', tgt: 'HELLO WORLD!', min: 1, max: 1 },
+            { mode: 'exact', out: '"HELLO WORLD!"', tgt: 'HELLO WORLD!', min: 1, max: 1 },
+            { mode: 'exact', out: '```\nHELLO WORLD!\n```', tgt: 'HELLO WORLD!', min: 1, max: 1 },
+            { mode: 'exact', out: '  HELLO   WORLD!  ', tgt: 'HELLO WORLD!', min: 1, max: 1 },
+            { mode: 'exact', out: 'hello world!', tgt: 'HELLO WORLD!', min: 0.9, max: 0.9 },
+            { mode: 'exact', out: 'HELLO WORLD', tgt: 'HELLO WORLD!', min: 0.9, max: 0.9 }, // trailing punct stripped → case-insensitive branch
+            { mode: 'exact', out: 'fox brown quick the', tgt: 'fox brown quick the', min: 1, max: 1 },
+            { mode: 'exact', out: 'xof nworb kciuq eht', tgt: 'fox brown quick the', min: 0, max: 0.84 },
+            { mode: 'exact', out: 'PNG', tgt: 'PNG', min: 1, max: 1 },
+            { mode: 'exact', out: 'P N G', tgt: 'PNG', min: 0, max: 0.84 },
+            { mode: 'exact', out: '[ NUT-M8 ]', tgt: '[NUT-M8]', min: 1, max: 1 },
+            { mode: 'exact', out: '"NUT-M8"', tgt: 'NUT-M8', min: 1, max: 1 },
+            // fuzzy
+            { mode: 'fuzzy', out: 'The red dragon ate seven pancakes at dawn.', tgt: 'The red dragon ate seven pancakes at dawn', min: 1, max: 1 },
+            { mode: 'fuzzy', out: 'The red dragon ate seven pancakes at dusk', tgt: 'The red dragon ate seven pancakes at dawn', min: 0.85, max: 0.99 },
+            { mode: 'fuzzy', out: 'A dragon ate pancakes', tgt: 'The red dragon ate seven pancakes at dawn', min: 0.3, max: 0.7 },
+            // set
+            { mode: 'set', out: 'mango, apples, bananas', tgt: 'apples, bananas, mango', min: 1, max: 1 },
+            { mode: 'set', out: '- apples\n- bananas\n- mango', tgt: 'apples, bananas, mango', min: 1, max: 1 },
+            { mode: 'set', out: 'apples, bananas', tgt: 'apples, bananas, mango', min: 0.66, max: 0.67 },
+            { mode: 'set', out: 'apples, bananas, mango, hammer', tgt: 'apples, bananas, mango', min: 0.74, max: 0.76 },
+            { mode: 'set', out: '☀️, 🌧️, ❄️', tgt: '☀️, 🌧️, ❄️', min: 1, max: 1 },
+            { mode: 'set', out: '❄️ 🌧️ ☀️', tgt: '☀️, 🌧️, ❄️', min: 0, max: 0.34 }, // spaces are not list separators → single item
+            // number
+            { mode: 'number', out: '5', tgt: '5', min: 1, max: 1 },
+            { mode: 'number', out: 'The answer is 5.', tgt: '5', min: 0.9, max: 0.9 },
+            { mode: 'number', out: '```\n5\n```', tgt: '5', min: 1, max: 1 },
+            { mode: 'number', out: '6', tgt: '5', min: 0.35, max: 0.45 },
+            { mode: 'number', out: 'five', tgt: '5', min: 0, max: 0 },
+            { mode: 'number', out: '1,000', tgt: '1000', min: 1, max: 1 },
+            // json
+            { mode: 'json', out: '{"name":"Minsu","age":12,"hobby":"soccer"}', tgt: '{"name":"Minsu","age":12,"hobby":"soccer"}', min: 1, max: 1 },
+            { mode: 'json', out: '```json\n{ "name": "minsu", "age": "12", "hobby": "Soccer" }\n```', tgt: '{"name":"Minsu","age":12,"hobby":"soccer"}', min: 1, max: 1 },
+            { mode: 'json', out: 'Here you go: {"name":"Minsu","age":12}', tgt: '{"name":"Minsu","age":12,"hobby":"soccer"}', min: 0.66, max: 0.67 },
+            { mode: 'json', out: '{"name":"Minsu","age":12,"hobby":"soccer","extra":1}', tgt: '{"name":"Minsu","age":12,"hobby":"soccer"}', min: 0.9, max: 0.9 },
+            { mode: 'json', out: 'not json', tgt: '{"a":1}', min: 0, max: 0 },
+            { mode: 'json', out: '{"item":["COIL-STL-09"],"qty":[3],"dest":["Busan"]}', tgt: '{"item":"COIL-STL-09","qty":3,"dest":"Busan"}', min: 1, max: 1 },
+            { mode: 'json', out: '{"item":["COIL-STL-09","X"],"qty":3,"dest":"Busan"}', tgt: '{"item":"COIL-STL-09","qty":3,"dest":"Busan"}', min: 0.66, max: 0.67 },
+        ];
+
+        const tbody = document.querySelector('#results tbody');
+        let pass = 0;
+        cases.forEach((c, i) => {
+            const r = score(c.out, c.tgt, c.mode);
+            const ok = r.score >= c.min - 1e-9 && r.score <= c.max + 1e-9;
+            if (ok) pass++;
+            const tr = document.createElement('tr');
+            tr.className = ok ? 'ok' : 'fail';
+            tr.innerHTML = `<td>${i + 1}</td><td>${c.mode}</td><td>${esc(c.out)}</td><td>${esc(c.tgt)}</td><td>${c.min}–${c.max}</td><td>${r.score.toFixed(3)}</td><td>${esc(r.detail)}</td>`;
+            tbody.appendChild(tr);
+        });
+
+        // helper sanity
+        const helpers = [
+            ['normalize', normalize('  "Hello,  World!" '), 'hello, world'],
+            ['listItems', JSON.stringify(listItems('1. Apples\n2) bananas, MANGO')), JSON.stringify(['apples', 'bananas', 'mango'])],
+            ['firstNumber', String(firstNumber('about -3.5 things')), '-3.5'],
+            ['tryParseJson', JSON.stringify(tryParseJson('blah {"a":[1,2]} blah')), '{"a":[1,2]}'],
+            ['tier', tier(1).key + tier(0.86).key + tier(0.6).key + tier(0.1).key, 'perfectpasscloseddisaster'.replace('closed', 'close')],
+            ['stars', [stars(0.9, 0.85, 0.5), stars(0.9, 0.85, 0.9), stars(0.6, 0.85, 0.1), stars(0.1, 0.85, 0.1)].join(''), '3210'],
+        ];
+        let total = cases.length;
+        for (const [name, got, exp] of helpers) {
+            total++;
+            const ok = got === exp;
+            if (ok) pass++;
+            const tr = document.createElement('tr');
+            tr.className = ok ? 'ok' : 'fail';
+            tr.innerHTML = `<td>${total}</td><td>${name}</td><td colspan="2">${esc(got)}</td><td colspan="3">${esc(exp)}</td>`;
+            tbody.appendChild(tr);
+        }
+
+        // economy (v4)
+        const eco = await import('./economy.js');
+        const co = eco.newCompany();
+        const ecoCases = [
+            ['starting cash', co.cash, 3000],
+            ['level 0 knobs', JSON.stringify(eco.progressionFor(0)), '{"promptLimit":60,"temperature":0.35,"memoryLevel":0,"maxTokens":48}'],
+            ['level clamp', eco.progressionFor(99).promptLimit, 160],
+            ['progression monotonic', (() => { for (let i = 1; i <= 12; i++) { const a = eco.progressionFor(i - 1), b = eco.progressionFor(i); if (b.promptLimit < a.promptLimit || b.temperature > a.temperature || b.maxTokens < a.maxTokens) return false; } return true; })(), true],
+            ['payout per item', eco.payout(7, 10, 2000), 1400],
+            ['payout zero', eco.payout(0, 10, 2000), 0],
+            ['isPass 6', eco.isPass(6), true],
+            ['isPass 5', eco.isPass(5), false],
+            ['chargeMaterial', JSON.stringify([eco.chargeMaterial(co, 400).cash, eco.chargeMaterial(co, 400).stats.runs]), '[2600,1]'],
+            ['addRevenue stats', JSON.stringify((() => { const c = eco.addRevenue(co, 1400, { items: 10, correct: 7 }); return [c.cash, c.stats.items, c.stats.correct]; })()), '[4400,10,7]'],
+            ['needsLoan', eco.needsLoan({ ...co, cash: 399 }, 400), true],
+            ['takeLoan', JSON.stringify([eco.takeLoan(co).cash, eco.takeLoan(co).debt]), '[8000,5000]'],
+            ['netProfit', eco.netProfit({ ...co, cash: 10000, debt: 5000 }), 2000],
+            ['verdict bands', [eco.verdict(30000), eco.verdict(0), eco.verdict(-1), eco.verdict(-30001)].map(v => v.slice(0, 2)).join('|'), '사장|흑자|적자|은행'],
+            ['formatWon', eco.formatWon(-12345), '-₩12,345'],
+        ];
+        const pz = await import('./puzzles.js');
+        const batchOk = pz.WORK_ORDERS.length === 12 && pz.WORK_ORDERS.every(w => w.batch.length === 10 && w.samples.length === 3 && w.sampleSolution.length === w.chimps && w.perChimp.length === w.chimps);
+        ecoCases.push(['work orders shape (10 batch, 3 samples, N prompts)', batchOk, true]);
+        ecoCases.push(['prompt limits fit sampleSolution', pz.WORK_ORDERS.every((w, i) => w.sampleSolution.every(p => p.length <= pz.PROGRESSION[i].promptLimit)), true]);
+        const NL = String.fromCharCode(10);
+        ecoCases.push(['parseBatchText', JSON.stringify(pz.parseBatchText('a => b' + NL + 'line1\\nline2 => c' + NL + NL + 'plain')), JSON.stringify([{ input: 'a', target: 'b' }, { input: 'line1' + NL + 'line2', target: 'c' }, { input: 'plain', target: 'plain' }])]);
+        for (const [name, got, exp] of ecoCases) {
+            total++;
+            const ok = got === exp;
+            if (ok) pass++;
+            const tr = document.createElement('tr');
+            tr.className = ok ? 'ok' : 'fail';
+            tr.innerHTML = `<td>${total}</td><td>${name}</td><td colspan="2">${esc(got)}</td><td colspan="3">${esc(exp)}</td>`;
+            tbody.appendChild(tr);
+        }
+
+        const s = document.getElementById('summary');
+        s.textContent = `${pass} / ${total} passed`;
+        s.className = pass === total ? 'ok' : 'fail';
+
+        function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '⏎'); }
+    </script>
+</body>
+</html>
