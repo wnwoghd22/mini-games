@@ -1,5 +1,5 @@
 // storage.js — tiny namespaced localStorage facade. Every access is guarded.
-const PREFIX = 'chimp-conveyor:v3:';
+const PREFIX = 'chimp-conveyor:v5:';
 
 export function load(key, fallback) {
     try {

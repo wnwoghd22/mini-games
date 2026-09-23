@@ -113,11 +113,75 @@
             ['formatWon', eco.formatWon(-12345), '-₩12,345'],
         ];
         const pz = await import('./puzzles.js');
-        const batchOk = pz.WORK_ORDERS.length === 12 && pz.WORK_ORDERS.every(w => w.batch.length === 10 && w.samples.length === 3 && w.sampleSolution.length === w.chimps && w.perChimp.length === w.chimps);
-        ecoCases.push(['work orders shape (10 batch, 3 samples, N prompts)', batchOk, true]);
+        const mc = await import('./machine.js');
+        const ln = await import('./line.js');
+        const batchOk = pz.WORK_ORDERS.length === 12 && pz.WORK_ORDERS.every((w, i) => w.chimps === i + 1 && w.batch.length === 10 && w.samples.length === 3 && w.sampleSolution.length === w.chimps && w.perChimp.length === w.chimps && w.lazy.length === w.chimps);
+        ecoCases.push(['line levels shape (N stations, 10 batch, 3 samples, N prompts)', batchOk, true]);
         ecoCases.push(['prompt limits fit sampleSolution', pz.WORK_ORDERS.every((w, i) => w.sampleSolution.every(p => p.length <= pz.PROGRESSION[i].promptLimit)), true]);
+        ecoCases.push(['all line chimps are workers', pz.WORK_ORDERS.every(w => w.perChimp.every(c => c.role === 'worker')), true]);
+        ecoCases.push(['tickets grow: level N ticket contains level N-1 fields', pz.WORK_ORDERS.every((w, i) => i === 0 || w.batch.every((b, j) => pz.FIELDS.slice(0, 3).every(f => b.input.includes(f + ':') || b.input.toLowerCase().includes(f + ':')))), true]);
+        // every reference line must reproduce itself without an accident, at every level
+        const selfOk = pz.WORK_ORDERS.every(w => [...w.batch, ...w.samples].every(b => { const r = ln.scoreLine(b.job, b.targets, b.targets, w.chimps); return r.correct && !r.fatal; }));
+        ecoCases.push(['reference lines are self-consistent', selfOk, true]);
+        const nailField = pz.WORK_ORDERS[11].batch.every(b => b.input.startsWith('job:'));
+        ecoCases.push(['L12 tickets start with job:', nailField, true]);
         const NL = String.fromCharCode(10);
         ecoCases.push(['parseBatchText', JSON.stringify(pz.parseBatchText('a => b' + NL + 'line1\\nline2 => c' + NL + NL + 'plain')), JSON.stringify([{ input: 'a', target: 'b' }, { input: 'line1' + NL + 'line2', target: 'c' }, { input: 'plain', target: 'plain' }])]);
+
+        // machine: parser + stations + accidents
+        const M = (out, item, station) => mc.score(out, item, { station });
+        const mcCases = [
+            ['default tool: bare cell hammers', M('B2', { target: 'B2' }, 'jig').correct, true],
+            ['prose with junk still hammers the cell', M('Press the C3 nail.', { target: 'C3' }, 'jig').correct, true],
+            ['no cell → thumb', M('Hammer the nail.', { target: 'B2' }, 'jig').events.map(e => e.type).join(), 'thumb'],
+            ['whole line copy hits the bin cell too', M('part: PLATE-7, nail: B2, bin: A3', { target: 'B2' }, 'jig').correct, false],
+            ['NOT has no button', M('Hammer B2. Do not hammer C1.', { target: 'B2', world: { pipe: 'C1' } }, 'jig').fatal, 'pipe_burst'],
+            ['order-free list', M('D4 A4 D1 A1', { target: 'A1 D1 A4 D4' }, 'jig').correct, true],
+            ['range trap reads the ends only', M('A1-A4', { target: 'A1 A2 A3 A4' }, 'jig').summary, '못 2/4'],
+            ['glass + MEDIUM shatters', M('B2', { target: 'B2 SOFT', world: { material: 'glass' } }, 'jig').fatal, 'shatter'],
+            ['last force wins', M('A4 SOFT not HARD', { target: 'A4 SOFT', world: { material: 'glass' } }, 'jig').fatal, 'shatter'],
+            ['steel + SOFT bends', M('A1 SOFT', { target: 'A1 HARD', world: { material: 'steel' } }, 'jig').events[0].type, 'bent'],
+            ['drill default tool', M('C3', { target: 'C3', world: { pipe: 'B2' } }, 'drill').correct, true],
+            ['drill off-grid → table hole', M('D9', { target: 'C3' }, 'drill').fatal, 'table_hole'],
+            ['press table value', M('PRESS HARD', { target: 'PRESS HARD', world: { material: 'steel' } }, 'press').correct, true],
+            ['press rubber soft pops out', M('PRESS SOFT', { target: 'PRESS HARD', world: { material: 'rubber' } }, 'press').events[0].type, 'popout'],
+            ['stock: number binds to next item', M('TAKE 1 OIL 6 TAPE', { target: 'TAKE 1 OIL 6 TAPE' }, 'stock').correct, true],
+            ['stock: preloaded cart, zero take', M('TAKE 0 TAPE', { target: 'TAKE 0 TAPE', world: { cart: { OIL: 1 } } }, 'stock').correct, true],
+            ['stock: milk joke', M('TAKE 6 OIL', { target: 'TAKE 6 TAPE', world: { cart: { OIL: 1 } } }, 'stock').correct, false],
+            ['stock: empty shelf → stuck', M('TAKE 6 TAPE', { target: 'TAKE 0 TAPE', world: { shelf: { TAPE: 0 } } }, 'stock').fatal, 'stuck'],
+            ['chute: last PUT wins', M('PUT LEFT PUT RIGHT', { target: 'PUT RIGHT' }, 'chute').correct, true],
+            ['chute: third move drops the box', M('PUT LEFT PUT RIGHT PUT LEFT', { target: 'PUT LEFT' }, 'chute').fatal, 'dropped'],
+            ['pack: HEAVY = 3 layers', M('PUT HEAVY', { target: 'WRAP 3' }, 'pack').correct, true],
+            ['pack: wrapping twice wraps outside', M('PUT HEAVY PUT LIGHT', { target: 'PUT HEAVY' }, 'pack').correct, false],
+            ['pack: 9 layers bulge', M('WRAP 9', { target: 'WRAP 3' }, 'pack').fatal, 'bulge'],
+            ['dock: code ships', M('PUS', { target: 'PUS' }, 'dock').correct, true],
+            ['dock: city name is lost', M('Busan', { target: 'PUS' }, 'dock').summary, '행방불명(BUSAN)'],
+            ['tokens carry sentence index', JSON.stringify(mc.parse('so B2 HAMMER C3', ['HAMMER'], 'HAMMER').tokens.map(t => t.s)), '[0,0,1,1]'],
+            ['inferStation', mc.inferStation(['PUT LEFT', 'PUT RIGHT']) + mc.inferStation(['B2']) + mc.inferStation(['PRESS HARD']) + mc.inferStation(['PUT HEAVY']), 'chutejigpresspack'],
+            ['parseSetup', JSON.stringify(mc.parseSetup('jig', 'Glass plate. Nail B2. Pipe behind C1.')), '{"material":"glass","pipe":"C1"}'],
+        ];
+        for (const [name, got, exp] of mcCases) ecoCases.push([name, got, exp]);
+        const J = { base: 'pine', wire: null };
+        const T12 = ['A1', 'MEDIUM', 'D4', 'D4', 'B2', 'A4', 'FLAT', 'MEDIUM', 'LED', 'RED', '1', 'PUS'];
+        const LS = (outs, n) => ln.scoreLine(J, T12, T12.map((t, i) => outs[i] ?? t), n);
+        const lineCases = [
+            ['line: copy ticket at L1 plants a bin nail', LS(['job: LMP-01, base: pine, bin: A4, nail: A1'], 1).correct, false],
+            ['line: no force word leaves the nail standing', LS([undefined, 'gentle'], 2).summary, 'A1 못 서 있음'],
+            ['line: glass + HARD shatters', ln.scoreLine({ base: 'glass' }, ['A4', 'SOFT'], ['A4', 'HARD'], 2).fatal, 'shatter'],
+            ['line: washer none echo lays a washer', LS([undefined, undefined, 'none (see screw: D2)'], 3).correct, false],
+            ['line: screw on a nail strips', LS([undefined, undefined, undefined, 'A1'], 4).detail.includes('헛돎'), true],
+            ['line: pane at D row slides off', LS([undefined, undefined, undefined, undefined, 'D2'], 5).fatal, 'shatter'],
+            ['line: drill under the pane', LS([undefined, undefined, undefined, undefined, undefined, 'B2'], 6).fatal, 'shatter'],
+            ['line: drill the wire', ln.scoreLine({ base: 'steel', wire: 'C1' }, ['D1', 'HARD', '', 'A4', 'B3', 'D4'], ['D1', 'HARD', '', 'A4', 'B3', 'D4 and C1'], 6).fatal, 'wire_spark'],
+            ['line: two lids wobble', LS([undefined, undefined, undefined, undefined, undefined, undefined, 'DOME, note: flat pack'], 7).detail.includes('두 겹'), true],
+            ['line: socket without hole crushes', LS([undefined, undefined, undefined, undefined, undefined, 'nothing here', undefined, 'MEDIUM'], 8).detail.includes('찌그러짐'), true],
+            ['line: cascade marker on a downstream station', LS(['B3'], 2).detail.includes('↳1번 여파'), true],
+            ['line: paint is cosmetic after L10', ln.scoreLine(J, T12, T12.map((t, i) => (i === 9 ? 'BLUE' : t)), 11, { cosmeticPaint: true }).correct, true],
+            ['line: dock understands city names', LS([undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'Busan'], 12).correct, true],
+            ['line: unknown city is lost', LS([undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'Jeju'], 12).summary.includes('행방불명'), true],
+            ['line: all twelve correct', LS([], 12).correct, true],
+        ];
+        for (const [name, got, exp] of lineCases) ecoCases.push([name, got, exp]);
         for (const [name, got, exp] of ecoCases) {
             total++;
             const ok = got === exp;

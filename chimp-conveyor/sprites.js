@@ -20,6 +20,10 @@ export const PALETTE = {
     p: '#3b3f52',   // belt dark
     P: '#555b73',   // belt light
     u: '#5bb7ff',   // blue accent
+    o: '#b5763a',   // wood
+    O: '#7a4a22',   // wood dark
+    q: '#a8e0ff',   // glass
+    Q: '#e8f8ff',   // glass highlight
 };
 
 // 16×16 chimp. Frames share the body; the face rows differ per state.

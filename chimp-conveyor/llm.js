@@ -77,13 +77,13 @@ function buildUserMessage({ prompt, input, context }) {
  * Run one chimp. Streams the text so far through onToken(text). Resolves with the full raw text.
  * Rejects with AbortError when signal aborts.
  */
-export async function generate({ prompt, input, context, signal, onToken, maxTokens = 64, temperature = 0.5 }) {
+export async function generate({ prompt, input, context, signal, onToken, maxTokens = 64, temperature = 0.5, systemExtra = '' }) {
     if (!engine) throw new Error('engine not loaded');
     if (signal?.aborted) throw abortError();
 
     const stream = await engine.chat.completions.create({
         messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemExtra ? `${SYSTEM_PROMPT}\n${systemExtra}` : SYSTEM_PROMPT },
             { role: 'user', content: buildUserMessage({ prompt, input, context }) },
         ],
         stream: true,

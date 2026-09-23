@@ -17,7 +17,7 @@
     --font-mono: 'GalmuriMono11', 'Galmuri11', Consolas, monospace;
     --font-arcade: 'Press Start 2P', 'Galmuri14', monospace;
 
-    --card-w: 220px;
+    --card-w: 196px;
 }
 
 * {
@@ -460,6 +460,32 @@ input:focus {
 }
 
 /* ---------- conveyor: scene + cards in ONE scroll container ---------- */
+.line-row {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.work-dock {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    background: var(--panel);
+    border: 2px solid var(--border);
+    box-shadow: 4px 4px 0 var(--shadow);
+    padding: 8px;
+    overflow: auto;
+}
+
+.work-dock .card.work {
+    width: 236px;
+    flex-basis: auto;
+    box-shadow: none;
+}
+
 .conveyor-wrap {
     position: relative;
     flex: 1 1 auto;
@@ -477,7 +503,7 @@ input:focus {
     position: relative;
     display: flex;
     align-items: stretch;
-    gap: 28px;
+    gap: 20px;
     min-width: max-content;
     flex: 1 1 auto;
     min-height: 0;
@@ -498,7 +524,7 @@ input:focus {
 .card+.card::before {
     content: '▶';
     position: absolute;
-    left: -22px;
+    left: -18px;
     top: 50%;
     transform: translateY(-50%);
     color: var(--muted);
@@ -650,6 +676,7 @@ input:focus {
 }
 
 .sample-foot {
+    white-space: pre-line;
     font-size: 11px;
     color: var(--yellow);
 }
@@ -659,7 +686,7 @@ input:focus {
     resize: none;
     line-height: 1.35;
     flex: 1 1 auto;
-    min-height: 96px;
+    min-height: 72px;
     font-size: 12px;
 }
 
@@ -759,6 +786,101 @@ input:focus {
     content: '';
 }
 
+.speech.side {
+    transform: translateX(calc(-100% + 10px));
+    max-width: 170px;
+}
+
+.speech.side::after {
+    left: auto;
+    right: 6px;
+    margin-left: 0;
+}
+
+.speech.script {
+    display: block;
+    max-height: 4.1em;
+}
+
+.speech .tok {
+    display: inline-block;
+    margin-right: 5px;
+    color: #6b6f86;
+}
+
+.speech .tok.verb { color: #b8860b; font-weight: 700; }
+.speech .tok.arg { color: #1f6fb2; font-weight: 700; }
+.speech .tok.active { background: var(--yellow); color: var(--bg); }
+
+.scene-layer.shake {
+    animation: shake 0.24s steps(4) 1;
+}
+
+@keyframes shake {
+    0% { transform: translate(0, 0); }
+    25% { transform: translate(-2px, 1px); }
+    50% { transform: translate(2px, -1px); }
+    75% { transform: translate(-1px, -2px); }
+    100% { transform: translate(0, 0); }
+}
+
+.message-area.boss {
+    color: var(--yellow);
+    font-family: var(--font-title);
+}
+
+.card.chimp.worker .card-title .label { color: var(--yellow); }
+
+/* ---------- workpiece panel (재공품) ---------- */
+.card.work {
+    width: 236px;
+    flex-basis: 236px;
+    align-items: center;
+}
+
+.work-canvas {
+    display: block;
+    width: 192px;
+    height: 192px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: var(--panel);
+    border: 2px solid var(--border);
+}
+
+.work-steps {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+}
+
+.work-step {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 2px 6px;
+    background: var(--panel);
+    color: var(--muted);
+    border-left: 3px solid transparent;
+}
+
+.work-step.active { color: var(--ink); border-left-color: var(--yellow); }
+.work-step.ok { color: var(--good); }
+.work-step.bad { color: var(--bad); }
+.work-step.warn { color: var(--yellow); }
+.work-step .st { font-family: var(--font-mono); opacity: 0.85; }
+
+.work-summary {
+    width: 100%;
+    min-height: 1.3em;
+    text-align: center;
+    font-size: 12px;
+    color: var(--yellow);
+}
+
 .speech.ok { border-color: var(--good); box-shadow: 3px 3px 0 var(--good); }
 .speech.bad { border-color: var(--bad); box-shadow: 3px 3px 0 var(--bad); }
 .speech.dead { color: var(--bad); }
@@ -829,9 +951,9 @@ input:focus {
 }
 
 .inspect-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 8px;
     flex: 0 0 auto;
     font-family: var(--font-mono);
     font-size: 11px;
