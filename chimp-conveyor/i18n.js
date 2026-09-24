@@ -8,7 +8,7 @@
 //   t(key, ...args)  → UI dictionary lookup; entries may be functions of the args
 import { load, save } from './storage.js';
 
-let current = load('lang', null) ?? (typeof navigator !== 'undefined' && /^ko/i.test(navigator.language ?? '') ? 'ko' : 'en');
+let current = load('lang', null) ?? 'en';   // English by default; the menu toggle stores the choice
 
 export function lang() { return current; }
 export function setLang(l) {
