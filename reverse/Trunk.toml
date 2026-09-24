@@ -1,0 +1,6 @@
+[build]
+# gh-pages 하위 경로(/mini-games/evade-game/)에서도 동작하도록 상대 경로 사용
+public_url = "./"
+# gh-pages 커밋 시 파일명이 빌드마다 바뀌지 않도록 해시 비활성화
+filehash = false
+release = true

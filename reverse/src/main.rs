@@ -1,0 +1,310 @@
+//! REVERSE — Shift로 물질계/반물질계를 오가는 도트 탄막 슈팅.
+
+mod bullet;
+#[cfg(feature = "demo")]
+mod demo;
+mod enemy;
+mod hud;
+mod level;
+mod phase;
+mod pixel;
+mod player;
+
+use bevy::asset::AssetMetaCheck;
+use bevy::camera::ScalingMode;
+use bevy::prelude::*;
+use bevy::window::WindowResolution;
+
+use level::{LevelData, Scroll};
+use phase::{PhaseState, Wipe};
+use pixel::{sprite, Spr, SpriteSet};
+
+pub const VIEW_W: f32 = 320.0;
+pub const VIEW_H: f32 = 240.0;
+pub const HALF_W: f32 = VIEW_W / 2.0;
+pub const HALF_H: f32 = VIEW_H / 2.0;
+pub const TILE: f32 = 16.0;
+pub const SCALE: u32 = 3;
+
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum GameState {
+    #[default]
+    Title,
+    Playing,
+    GameOver,
+    Clear,
+}
+
+/// 월드 좌표(f32). PostUpdate에서 정수로 반올림해 Transform에 기록한다(픽셀 스냅)
+#[derive(Component, Clone, Copy)]
+pub struct Pos(pub Vec2);
+
+/// 라운드 재시작 시 일괄 제거되는 엔티티
+#[derive(Component)]
+pub struct GameEntity;
+
+/// 상태별 오버레이 텍스트 (상태를 나갈 때 제거)
+#[derive(Component)]
+pub struct Overlay;
+
+#[derive(Component)]
+pub struct MainCamera;
+
+#[derive(Resource, Default)]
+pub struct Score(pub u32);
+
+fn main() {
+    App::new()
+        .add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
+                    ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "REVERSE".into(),
+                        resolution: WindowResolution::new(
+                            VIEW_W as u32 * SCALE,
+                            VIEW_H as u32 * SCALE,
+                        ),
+                        resizable: false,
+                        canvas: Some("#bevy-canvas".into()),
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
+        .insert_resource(ClearColor(pixel::paper_color(false)))
+        .add_plugins(demo_plugin())
+        .init_resource::<SpriteSet>()
+        .init_state::<GameState>()
+        .init_resource::<Score>()
+        .init_resource::<PhaseState>()
+        .init_resource::<Wipe>()
+        .init_resource::<Scroll>()
+        .init_resource::<LevelData>()
+        .add_message::<player::PlayerHit>()
+        .add_systems(Startup, setup)
+        .add_systems(OnEnter(GameState::Title), show_title)
+        .add_systems(OnExit(GameState::Title), despawn_overlay)
+        .add_systems(OnEnter(GameState::Playing), (setup_round, hud::show_hud))
+        .add_systems(OnExit(GameState::Playing), hud::hide_hud)
+        .add_systems(OnEnter(GameState::GameOver), show_game_over)
+        .add_systems(OnExit(GameState::GameOver), despawn_overlay)
+        .add_systems(OnEnter(GameState::Clear), show_clear)
+        .add_systems(OnExit(GameState::Clear), despawn_overlay)
+        .add_systems(
+            Update,
+            (
+                phase::phase_input,
+                player::sync_phase,
+                level::scroll,
+                level::spawn_rows,
+                player::player_move,
+                player::player_shoot,
+                enemy::enemy_ai,
+                bullet::bullet_move,
+                bullet::bullet_walls,
+                bullet::bullet_hits,
+                player::handle_hits,
+                level::lines,
+                level::tick_switches,
+                enemy::tick_booms,
+                phase::wipe_tick,
+                level::despawn_below,
+                hud::update_hud,
+            )
+                .chain()
+                .run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(Update, title_input.run_if(in_state(GameState::Title)))
+        .add_systems(
+            Update,
+            restart_input.run_if(in_state(GameState::GameOver).or_else(in_state(GameState::Clear))),
+        )
+        .add_systems(
+            PostUpdate,
+            (
+                snap_camera,
+                snap_positions,
+                hud::bg_scroll,
+                phase::sync_clear_color,
+                phase::apply_visuals,
+                phase::draw_wipe,
+            )
+                .chain()
+                .before(bevy::transform::TransformSystems::Propagate),
+        )
+        .run();
+}
+
+fn setup(mut commands: Commands, set: Res<SpriteSet>, mut gizmos: ResMut<GizmoConfigStore>) {
+    gizmos.config_mut::<DefaultGizmoConfigGroup>().0.line.width = 4.0;
+    let mut cam = commands.spawn((
+        Camera2d,
+        Projection::Orthographic(OrthographicProjection {
+            scaling_mode: ScalingMode::Fixed {
+                width: VIEW_W,
+                height: VIEW_H,
+            },
+            ..OrthographicProjection::default_2d()
+        }),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        MainCamera,
+    ));
+    hud::build(&mut cam, &set);
+}
+
+/// 라운드 시작: 이전 엔티티 제거, 리소스 초기화, 플레이어 생성
+fn setup_round(
+    mut commands: Commands,
+    set: Res<SpriteSet>,
+    old: Query<Entity, With<GameEntity>>,
+    mut score: ResMut<Score>,
+    mut ps: ResMut<PhaseState>,
+    mut wipe: ResMut<Wipe>,
+    mut scroll: ResMut<Scroll>,
+    mut level: ResMut<LevelData>,
+) {
+    for e in &old {
+        commands.entity(e).despawn();
+    }
+    *score = Score::default();
+    *ps = PhaseState::default();
+    *wipe = Wipe::default();
+    *scroll = Scroll::default();
+    *level = LevelData::default();
+    player::spawn_player(&mut commands, &set, &scroll);
+}
+
+// ---------- 픽셀 스냅 ----------
+
+fn snap_camera(scroll: Res<Scroll>, mut q: Query<&mut Transform, With<MainCamera>>) {
+    if let Ok(mut tf) = q.single_mut() {
+        tf.translation.y = scroll.cam_y.round();
+    }
+}
+
+/// 카메라 기준 상대 좌표를 반올림해 화면상 픽셀 위치가 흔들리지 않게 한다
+/// (플레이어처럼 카메라와 함께 움직이는 오브젝트를 월드 좌표로 따로 반올림하면 1px 지터가 생김)
+fn snap_positions(scroll: Res<Scroll>, mut q: Query<(&Pos, &mut Transform)>) {
+    let cam_y = scroll.cam_y.round();
+    for (pos, mut tf) in &mut q {
+        let x = pos.0.x.round();
+        let y = cam_y + (pos.0.y - scroll.cam_y).round();
+        if tf.translation.x != x || tf.translation.y != y {
+            tf.translation.x = x;
+            tf.translation.y = y;
+        }
+    }
+}
+
+// ---------- 타이틀 / 게임 오버 / 클리어 ----------
+
+/// 카메라 자식으로 가운데 정렬 텍스트 오버레이 생성
+fn overlay_text(commands: &mut Commands, set: &SpriteSet, camera: Entity, text: &str, y: f32, scale: f32) {
+    let tf = pixel::centered_text_transform(text, Vec3::new(0.0, y, hud::Z_HUD + 1.0), scale);
+    commands
+        .spawn((tf, Visibility::default(), Overlay, ChildOf(camera)))
+        .with_children(|p| {
+            // 벽 위에서도 읽히도록 페이퍼 배경판
+            let w = pixel::text_width(text);
+            let mut back = Sprite::from_image(set.get(Spr::PixPaper, false, pixel::Accent::Ink));
+            back.custom_size = Some(Vec2::new(w + 4.0, pixel::GLYPH_H + 4.0));
+            p.spawn((
+                back,
+                pixel::SpriteKind(Spr::PixPaper),
+                Transform::from_xyz(w / 2.0, -pixel::GLYPH_H / 2.0, -0.5),
+            ));
+            pixel::spawn_glyphs(p, set, text);
+        });
+}
+
+fn show_title(mut commands: Commands, set: Res<SpriteSet>, camera: Query<Entity, With<MainCamera>>) {
+    // 초기 OnEnter는 Startup보다 먼저 실행되므로 카메라가 없으면 월드 좌표(카메라 원점)로 배치
+    let cam = camera.single().ok();
+    let mut text = |t: &str, y: f32, s: f32| match cam {
+        Some(c) => overlay_text(&mut commands, &set, c, t, y, s),
+        None => {
+            let tf = pixel::centered_text_transform(t, Vec3::new(0.0, y, hud::Z_HUD + 1.0), s);
+            commands
+                .spawn((tf, Visibility::default(), Overlay))
+                .with_children(|p| pixel::spawn_glyphs(p, &set, t));
+        }
+    };
+    text("REVERSE", 62.0, 3.0);
+    text("SHIFT BETWEEN MATTER AND ANTIMATTER", 34.0, 1.0);
+    text("RED IS MATTER - BLUE IS ANTIMATTER", 24.0, 1.0);
+    text("TOUCHING AN ACTIVE WALL IS FATAL", 14.0, 1.0);
+    text("ARROWS/WASD  MOVE", -4.0, 1.0);
+    text("Z/SPACE  SHOOT", -14.0, 1.0);
+    text("SHIFT  PHASE SHIFT", -24.0, 1.0);
+    text("PRESS Z TO START", -60.0, 1.0);
+    drop(text);
+
+    if cam.is_none() {
+        commands.spawn((sprite(&set, Spr::Player, Vec3::new(-40.0, -44.0, hud::Z_HUD + 1.0)), Overlay));
+        commands.spawn((
+            sprite(&set, Spr::WallM, Vec3::new(24.0, -44.0, hud::Z_HUD + 1.0)),
+            Overlay,
+        ));
+        commands.spawn((
+            sprite(&set, Spr::WallA, Vec3::new(40.0, -44.0, hud::Z_HUD + 1.0)),
+            Overlay,
+        ));
+    }
+}
+
+fn show_game_over(
+    mut commands: Commands,
+    set: Res<SpriteSet>,
+    score: Res<Score>,
+    camera: Query<Entity, With<MainCamera>>,
+) {
+    let Ok(cam) = camera.single() else { return };
+    overlay_text(&mut commands, &set, cam, "GAME OVER", 30.0, 2.0);
+    overlay_text(&mut commands, &set, cam, &format!("SCORE {:06}", score.0), 6.0, 1.0);
+    overlay_text(&mut commands, &set, cam, "PRESS R TO RESTART", -30.0, 1.0);
+}
+
+fn show_clear(
+    mut commands: Commands,
+    set: Res<SpriteSet>,
+    score: Res<Score>,
+    camera: Query<Entity, With<MainCamera>>,
+) {
+    let Ok(cam) = camera.single() else { return };
+    overlay_text(&mut commands, &set, cam, "STAGE CLEAR!", 30.0, 2.0);
+    overlay_text(&mut commands, &set, cam, &format!("SCORE {:06}", score.0), 6.0, 1.0);
+    overlay_text(&mut commands, &set, cam, "PRESS R TO RESTART", -30.0, 1.0);
+}
+
+fn despawn_overlay(mut commands: Commands, q: Query<Entity, With<Overlay>>) {
+    for e in &q {
+        commands.entity(e).despawn();
+    }
+}
+
+fn title_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
+    if keys.any_just_pressed([KeyCode::KeyZ, KeyCode::Space, KeyCode::Enter]) {
+        next.set(GameState::Playing);
+    }
+}
+
+fn restart_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
+    if keys.any_just_pressed([KeyCode::KeyR, KeyCode::Enter]) {
+        next.set(GameState::Playing);
+    }
+}
+
+#[cfg(feature = "demo")]
+fn demo_plugin() -> impl Plugin {
+    demo::DemoPlugin
+}
+
+#[cfg(not(feature = "demo"))]
+fn demo_plugin() -> impl Plugin {
+    |_: &mut App| {}
+}
