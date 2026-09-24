@@ -69,6 +69,7 @@ fn run(
     mut exit: MessageWriter<AppExit>,
     mut virt: ResMut<Time<Virtual>>,
     mut players: Query<&mut crate::player::Player>,
+    enemies: Query<Entity, With<crate::enemy::Enemy>>,
 ) {
     if script.god {
         for mut p in &mut players {
@@ -85,7 +86,13 @@ fn run(
         script.next += 1;
         let Some(cmd) = args.first() else { continue };
         match cmd.as_str() {
-            "hold" => args[1..].iter().for_each(|k| keys.press(key(k))),
+            "hold" => {
+                for k in &args[1..] {
+                    let kc = key(k);
+                    script.pending_release.retain(|p| *p != kc);
+                    keys.press(kc);
+                }
+            }
             "release" => args[1..].iter().for_each(|k| keys.release(key(k))),
             "tap" => {
                 for k in &args[1..] {
@@ -101,6 +108,11 @@ fn run(
                     .observe(save_to_disk(path));
             }
             "god" => script.god = !script.god,
+            "nuke" => {
+                for e in &enemies {
+                    commands.entity(e).despawn();
+                }
+            }
             "fast" => {
                 let f: f32 = args[1].parse().unwrap_or(1.0);
                 virt.set_relative_speed(f);

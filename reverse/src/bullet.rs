@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 
-use crate::enemy::{self, Core, Enemy};
+use crate::enemy::{self, Core, Enemy, Rng, Shielded};
+use crate::item;
 use crate::level::{self, LockGroup, Scroll, Switch, Wall};
 use crate::phase::{interacts, Phase};
 use crate::pixel::{sprite, Spr, SpriteKind, SpriteSet};
@@ -102,8 +103,9 @@ pub fn bullet_hits(
     mut score: ResMut<Score>,
     bullets: Query<(Entity, &Pos, &Phase, &Bullet)>,
     player: Query<(&Pos, &Phase, &Player)>,
-    mut enemies: Query<(Entity, &Pos, &Phase, &mut Enemy, Option<&Core>)>,
+    mut enemies: Query<(Entity, &Pos, &Phase, &mut Enemy, Option<&Core>, Has<Shielded>)>,
     locks: Query<(Entity, &Pos, &LockGroup)>,
+    mut rng: ResMut<Rng>,
     mut hits: MessageWriter<PlayerHit>,
 ) {
     let player = player.single().ok();
@@ -120,15 +122,20 @@ pub fn bullet_hits(
                 }
             }
             Owner::Player => {
-                for (ee, ep, eph, mut en, core) in &mut enemies {
-                    if !interacts(*bph, *eph) || !overlap(bp.0, BULLET_HALF, ep.0, en.kind.half()) {
+                for (ee, ep, eph, mut en, core, shielded) in &mut enemies {
+                    // 이미 이 프레임에 죽은 적은 건너뜀 (중복 처리 방지)
+                    if en.hp <= 0 || !interacts(*bph, *eph) || !overlap(bp.0, BULLET_HALF, ep.0, en.kind.half()) {
                         continue;
                     }
                     commands.entity(e).despawn();
+                    if shielded {
+                        break;
+                    }
                     en.hp -= 1;
                     if en.hp <= 0 {
                         score.0 += en.kind.score();
                         enemy::spawn_boom(&mut commands, &set, ep.0, *eph);
+                        item::maybe_drop(&mut commands, &set, &mut rng, en.kind, ep.0);
                         if en.kind == enemy::Kind::Boss {
                             for d in [Vec2::new(-10.0, 8.0), Vec2::new(9.0, -7.0), Vec2::new(0.0, 12.0)] {
                                 enemy::spawn_boom(&mut commands, &set, ep.0 + d, *eph);

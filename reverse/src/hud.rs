@@ -5,10 +5,10 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::enemy::{Boss, Enemy};
-use crate::level::Scroll;
+use crate::level::{Scroll, Stage};
 use crate::phase::PhaseState;
 use crate::pixel::{self, sprite, Accent, Spr, SpriteKind, SpriteSet};
-use crate::player::{GaugeSeg, Player, START_LIVES};
+use crate::player::{GaugeSeg, LifeDot, Player};
 use crate::{Score, HALF_H, HALF_W, TILE};
 
 pub const Z_BG: f32 = -50.0;
@@ -31,9 +31,6 @@ pub struct HudRoot;
 pub struct ScoreText {
     shown: u32,
 }
-
-#[derive(Component)]
-pub struct LifeIcon(i32);
 
 #[derive(Component)]
 pub struct BossBar;
@@ -64,34 +61,17 @@ pub fn build(camera: &mut EntityCommands, set: &SpriteSet) {
         .with_children(|c| {
             // 점수 (좌상단) — 벽 위에서도 읽히도록 페이퍼 배경판
             let mut back = Sprite::from_image(set.get(Spr::PixPaper, false, Accent::Ink));
-            back.custom_size = Some(Vec2::new(52.0, 9.0));
+            back.custom_size = Some(Vec2::new(64.0, 9.0));
             c.spawn((
                 back,
                 SpriteKind(Spr::PixPaper),
-                Transform::from_xyz(-HALF_W + 28.0, HALF_H - 6.0, Z_HUD - 0.5),
+                Transform::from_xyz(-HALF_W + 34.0, HALF_H - 6.0, Z_HUD - 0.5),
             ));
             c.spawn((
                 Transform::from_xyz(-HALF_W + 4.0, HALF_H - 4.0, Z_HUD),
                 Visibility::default(),
                 ScoreText { shown: u32::MAX },
             ));
-
-            // 목숨 아이콘 (우상단)
-            let mut back = Sprite::from_image(set.get(Spr::PixPaper, false, Accent::Ink));
-            back.custom_size = Some(Vec2::new(10.0 * START_LIVES as f32 + 4.0, 11.0));
-            c.spawn((
-                back,
-                SpriteKind(Spr::PixPaper),
-                Transform::from_xyz(HALF_W - 3.0 - 5.0 * START_LIVES as f32 - 1.0, HALF_H - 6.0, Z_HUD - 0.5),
-            ));
-            for i in 0..START_LIVES {
-                let x = HALF_W - 8.0 - i as f32 * 10.0;
-                c.spawn((
-                    sprite(set, Spr::Life, Vec3::new(x, HALF_H - 7.0, Z_HUD)),
-                    Accent::Red,
-                    LifeIcon(i),
-                ));
-            }
 
             // 보스 HP (상단 중앙, 보스가 있을 때만 표시)
             let by = HALF_H - 6.0;
@@ -139,29 +119,31 @@ pub fn update_hud(
     time: Res<Time>,
     set: Res<SpriteSet>,
     score: Res<Score>,
+    stage: Res<Stage>,
     ps: Res<PhaseState>,
     player: Query<&Player>,
     mut score_text: Query<(Entity, &mut ScoreText)>,
-    mut lives: Query<(&LifeIcon, &mut Visibility)>,
-    mut gauge: Query<(&GaugeSeg, &mut Visibility, &mut Accent), Without<LifeIcon>>,
+    mut lives: Query<(&LifeDot, &mut Visibility)>,
+    mut gauge: Query<(&GaugeSeg, &mut Visibility, &mut Accent), Without<LifeDot>>,
     bosses: Query<(&Enemy, &crate::phase::Phase), With<Boss>>,
-    mut boss_bar: Query<(&mut Sprite, &mut Visibility, &mut Accent), (With<BossBar>, Without<GaugeSeg>, Without<LifeIcon>)>,
-    mut boss_frame: Query<&mut Visibility, (With<BossBarFrame>, Without<BossBar>, Without<GaugeSeg>, Without<LifeIcon>)>,
+    mut boss_bar: Query<(&mut Sprite, &mut Visibility, &mut Accent), (With<BossBar>, Without<GaugeSeg>, Without<LifeDot>)>,
+    mut boss_frame: Query<&mut Visibility, (With<BossBarFrame>, Without<BossBar>, Without<GaugeSeg>, Without<LifeDot>)>,
 ) {
     // 점수
     if let Ok((e, mut st)) = score_text.single_mut() {
-        if st.shown != score.0 {
-            st.shown = score.0;
-            let text = format!("SCORE {:06}", score.0);
+        let key = score.0 * 10 + stage.index as u32;
+        if st.shown != key {
+            st.shown = key;
+            let text = format!("ST{} SCORE {:06}", stage.index, score.0);
             commands.entity(e).despawn_related::<Children>();
             commands.entity(e).with_children(|p| pixel::spawn_glyphs(p, &set, &text));
         }
     }
 
-    // 목숨
+    // 체력: 게이지 바깥 동그라미 (남은 목숨 수만큼 아래에서부터 켜짐)
     let lives_left = player.single().map(|p| p.lives).unwrap_or(0);
-    for (icon, mut vis) in &mut lives {
-        *vis = if icon.0 < lives_left { Visibility::Inherited } else { Visibility::Hidden };
+    for (dot, mut vis) in &mut lives {
+        *vis = if dot.0 < lives_left { Visibility::Inherited } else { Visibility::Hidden };
     }
 
     // 호 게이지: 잔량만큼 아래에서부터 채움. 잠금/간섭/전환 거부 중이면 전체 점멸
@@ -178,14 +160,15 @@ pub fn update_hud(
         }
     }
 
-    // 보스 HP
-    let boss = bosses.iter().next();
+    // 보스 HP: 화면의 모든 보스 hp 합 / max 합 (트윈 보스는 둘을 합쳐 표시)
+    let (hp, max) = bosses.iter().fold((0, 0), |(h, m), (b, _)| (h + b.hp.max(0), m + b.max_hp));
+    let boss_phase = bosses.iter().next().map(|(_, ph)| *ph);
     if let Ok((mut sprite, mut vis, mut accent)) = boss_bar.single_mut() {
-        match boss {
-            Some((b, ph)) => {
-                sprite.custom_size = Some(Vec2::new((BOSS_W * b.hp as f32 / 70.0).clamp(0.0, BOSS_W).round(), 3.0));
+        match boss_phase {
+            Some(ph) => {
+                sprite.custom_size = Some(Vec2::new((BOSS_W * hp as f32 / max.max(1) as f32).clamp(0.0, BOSS_W).round(), 3.0));
                 *vis = Visibility::Inherited;
-                let want = ph.accent();
+                let want = if bosses.iter().count() > 1 { Accent::Ink } else { ph.accent() };
                 if *accent != want {
                     *accent = want;
                 }
@@ -194,7 +177,7 @@ pub fn update_hud(
         }
     }
     if let Ok(mut vis) = boss_frame.single_mut() {
-        *vis = if boss.is_some() { Visibility::Inherited } else { Visibility::Hidden };
+        *vis = if boss_phase.is_some() { Visibility::Inherited } else { Visibility::Hidden };
     }
 }
 

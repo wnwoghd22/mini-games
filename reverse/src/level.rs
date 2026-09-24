@@ -4,6 +4,7 @@
 //! 타일: `.` 빈칸 `#` 중립 벽 `M` 물질 벽 `A` 반물질 벽 `m`/`a` 물질/반물질 터렛
 //! `d`/`D` 물질/반물질 드리프터 `p` 페이저 `~` 간섭 필드 `S` 스위치 블록 `B` 보스 `E` 클리어 라인
 //! `1`~`4` 코어(홀수 물질, 짝수 반물질) `q`/`w`/`e`/`r` 코어 1~4에 연결된 잠금 벽(중립, 코어 파괴 시 사라짐)
+//! `o` 위성 적(중립 본체 + 물질/반물질 위성) `L` 레이저 보스 `T` 트윈 보스(좌우 한 쌍)
 //! `---hold---` 행: 화면 중앙에 도달하면 스크롤 정지, 화면 안 적을 모두 제거하면 재개
 
 use bevy::prelude::*;
@@ -14,7 +15,38 @@ use crate::pixel::{sprite, Spr, SpriteKind, SpriteSet};
 use crate::{GameEntity, GameState, Pos, HALF_H, HALF_W, TILE};
 
 pub const COLS: usize = 20;
-pub const SCROLL_SPEED: f32 = 26.0;
+pub const LAST_STAGE: u8 = 3;
+
+/// 현재 스테이지 (1..=LAST_STAGE)
+#[derive(Resource)]
+pub struct Stage {
+    pub index: u8,
+}
+
+impl Default for Stage {
+    fn default() -> Self {
+        Stage { index: 1 }
+    }
+}
+
+/// 스테이지별 난이도 계수
+pub struct Tuning {
+    pub scroll_speed: f32,
+    /// 적 발사 간격 배율 (작을수록 빠름)
+    pub fire_mul: f32,
+    /// 적 탄 속도 배율
+    pub bullet_mul: f32,
+}
+
+impl Stage {
+    pub fn tuning(&self) -> Tuning {
+        match self.index {
+            1 => Tuning { scroll_speed: 26.0, fire_mul: 1.0, bullet_mul: 1.0 },
+            2 => Tuning { scroll_speed: 28.0, fire_mul: 0.85, bullet_mul: 1.1 },
+            _ => Tuning { scroll_speed: 30.0, fire_mul: 0.7, bullet_mul: 1.2 },
+        }
+    }
+}
 
 pub const Z_WALL: f32 = 10.0;
 pub const Z_FIELD: f32 = 5.0;
@@ -55,7 +87,13 @@ pub struct LevelData {
 
 impl Default for LevelData {
     fn default() -> Self {
-        let rows = build_level();
+        Self::new(1)
+    }
+}
+
+impl LevelData {
+    pub fn new(stage: u8) -> Self {
+        let rows = build_level(stage);
         for (i, r) in rows.iter().enumerate() {
             assert!(
                 r.len() == COLS || r.starts_with("---"),
@@ -66,9 +104,7 @@ impl Default for LevelData {
         let next = rows.len() as isize - 1;
         Self { rows, next }
     }
-}
 
-impl LevelData {
     /// 행 r의 월드 y (마지막 행 = 화면 맨 아래 타일)
     fn row_y(&self, r: usize) -> f32 {
         -HALF_H + TILE / 2.0 + TILE * (self.rows.len() - 1 - r) as f32
@@ -109,6 +145,7 @@ pub struct Scrolled;
 
 pub fn scroll(
     time: Res<Time>,
+    stage: Res<Stage>,
     mut scroll: ResMut<Scroll>,
     enemies: Query<&Pos, With<enemy::Enemy>>,
 ) {
@@ -121,7 +158,7 @@ pub fn scroll(
             scroll.held = false;
         }
     }
-    scroll.dy = if scroll.held { 0.0 } else { SCROLL_SPEED * dt };
+    scroll.dy = if scroll.held { 0.0 } else { stage.tuning().scroll_speed * dt };
     scroll.cam_y += scroll.dy;
 }
 
@@ -175,13 +212,15 @@ fn spawn_row(commands: &mut Commands, set: &SpriteSet, row: &str, y: f32) {
                     GameEntity,
                 ));
             }
-            'm' | 'a' | 'd' | 'D' | 'p' | 'B' => {
+            'm' | 'a' | 'd' | 'D' | 'p' | 'o' | 'L' | 'B' => {
                 let (kind, phase) = match ch {
                     'm' => (Kind::Turret, Phase::Matter),
                     'a' => (Kind::Turret, Phase::Anti),
                     'd' => (Kind::Drifter, Phase::Matter),
                     'D' => (Kind::Drifter, Phase::Anti),
                     'p' => (Kind::Phaser, Phase::Matter),
+                    'o' => (Kind::Orbiter, Phase::Neutral),
+                    'L' => (Kind::LaserBoss, Phase::Matter),
                     _ => (Kind::Boss, Phase::Matter),
                 };
                 enemy::spawn(commands, set, kind, phase, pos);
@@ -189,6 +228,7 @@ fn spawn_row(commands: &mut Commands, set: &SpriteSet, row: &str, y: f32) {
             'E' => {
                 commands.spawn((ClearLine, Pos(pos), Scrolled, GameEntity));
             }
+            'T' => enemy::spawn_twins(commands, set, pos),
             '1'..='4' => {
                 let g = ch as u8 - b'0';
                 let e = enemy::spawn(commands, set, Kind::Core, core_phase(g), pos);
@@ -245,6 +285,7 @@ pub fn wall_sprite(phase: Phase) -> Spr {
 pub fn lines(
     mut commands: Commands,
     mut scroll: ResMut<Scroll>,
+    stage: Res<Stage>,
     holds: Query<(Entity, &Pos), With<HoldLine>>,
     clears: Query<&Pos, With<ClearLine>>,
     mut next: ResMut<NextState<GameState>>,
@@ -256,7 +297,7 @@ pub fn lines(
         }
     }
     if clears.iter().any(|p| p.0.y <= scroll.cam_y + 40.0) {
-        next.set(GameState::Clear);
+        next.set(if stage.index < LAST_STAGE { GameState::StageClear } else { GameState::Clear });
     }
 }
 
@@ -302,16 +343,19 @@ pub fn tick_switches(time: Res<Time>, mut q: Query<&mut Switch>) {
 
 // ---------- 레벨 데이터 (위 → 아래) ----------
 
-fn build_level() -> Vec<&'static str> {
+fn build_level(stage: u8) -> Vec<&'static str> {
+    let segs: &[&[&str]] = match stage {
+        // ST1 입문: 벽/위상 기본, 스위치·필드, 다이아몬드 보스
+        1 => &[SEG_END, SEG_BOSS, SEG_PUZZLE2, SEG_SCROLL2, SEG_PUZZLE1, SEG_SCROLL1, SEG_INTRO],
+        // ST2 코어와 레이저: 코어 퍼즐, 스위치+코어 복합, 레이저 보스
+        2 => &[SEG_END, SEG_LASERBOSS, SEG_CORE, SEG_SCROLL3, SEG_PUZZLE3, SEG_INTRO2],
+        // ST3 총합: 위성 웨이브, 이중 코어, 혼합 스크롤, 페이저 회랑, 트윈 보스
+        _ => &[SEG_END, SEG_TWINBOSS, SEG_PUZZLE4, SEG_SCROLL4, SEG_CORE2, SEG_WAVE, SEG_INTRO3],
+    };
     let mut v = Vec::new();
-    v.extend_from_slice(SEG_END);
-    v.extend_from_slice(SEG_BOSS);
-    v.extend_from_slice(SEG_CORE);
-    v.extend_from_slice(SEG_PUZZLE2);
-    v.extend_from_slice(SEG_SCROLL2);
-    v.extend_from_slice(SEG_PUZZLE1);
-    v.extend_from_slice(SEG_SCROLL1);
-    v.extend_from_slice(SEG_INTRO);
+    for s in segs {
+        v.extend_from_slice(s);
+    }
     v
 }
 
@@ -362,7 +406,7 @@ const SEG_SCROLL1: &[&str] = &[
     "....................",
     "..........d.........",
     "....................",
-    "....................",
+    ".........o..........",
     "....m..........a....",
     "....................",
     "....................",
@@ -411,6 +455,24 @@ const SEG_PUZZLE1: &[&str] = &[
     "....................",
 ];
 
+/// ST2 보스: 방어막 + 레이저. 파훼법은 레이저와 반대 계로 숨는 것
+const SEG_LASERBOSS: &[&str] = &[
+    "....................",
+    "....................",
+    ".........L..........",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "---hold---",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+];
+
 /// 스크롤 2: 페이저(위상을 바꾸는 적)
 const SEG_SCROLL2: &[&str] = &[
     "....................",
@@ -423,7 +485,7 @@ const SEG_SCROLL2: &[&str] = &[
     "......MMMM..AAAA....",
     "....................",
     "....................",
-    ".....p........p.....",
+    ".....p.....o........",
     "....................",
     "....................",
     "....AAAA..MMMM......",
@@ -491,11 +553,180 @@ const SEG_CORE: &[&str] = &[
     "....................",
     "..a..............a..",
     "....................",
+    "..........o.........",
     "....................",
     "....................",
 ];
 
-/// 보스: 홀드 라인이 화면 중앙에 오면 정지, 보스 격파 후 재개
+// ---------- ST2 ----------
+
+/// ST2 도입: 벽 없이 적만
+const SEG_INTRO2: &[&str] = &[
+    "....................",
+    "......d......D......",
+    "....................",
+    "....m..........a....",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+];
+
+/// ST2 퍼즐: 필드에서 계 선택 → 코어(물질)로 잠금 행 열기 → 필드 안 반물질 벽은 스위치로 뒤집거나 물질계로 통과
+const SEG_PUZZLE3: &[&str] = &[
+    "....................",
+    "....................",
+    "####AAAAAAASAAAA####",
+    "#~~~~~~~~~~~~~~~~~~#",
+    "#~~~~~~~~~~~~~~~~~~#",
+    "qqqqqqqqqqqqqqqqqqqq",
+    "....................",
+    "....................",
+    "MMMM....1......MMMMM",
+    "....................",
+    "....................",
+    "~~~~~~~~~~~~~~~~~~~~",
+    "~~~~a~~~~~~~~~~m~~~~",
+    "~~~~~~~~~~~~~~~~~~~~",
+    "....................",
+    "....................",
+];
+
+/// ST2 스크롤: 위성 적과 드리프터 무리, 짧은 벽 지그재그
+const SEG_SCROLL3: &[&str] = &[
+    "....................",
+    "....o.........o.....",
+    "....................",
+    "....................",
+    ".....D....d....D....",
+    "....................",
+    "MMMM....AAAA....MMMM",
+    "....................",
+    "....................",
+    "..........o.........",
+    "....................",
+    "....................",
+    "AAAA....MMMM....AAAA",
+    "....................",
+    "....m....a....m.....",
+    "....................",
+    "....................",
+    "....................",
+];
+
+// ---------- ST3 ----------
+
+const SEG_INTRO3: &[&str] = &[
+    "....................",
+    "....m....a....m.....",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+];
+
+/// ST3 위성 웨이브: 홀드 중 위성 적 2기를 모두 제거해야 진행
+const SEG_WAVE: &[&str] = &[
+    "....................",
+    "....................",
+    "....o.........o.....",
+    "....................",
+    "....................",
+    "....................",
+    "---hold---",
+    "....................",
+    "....................",
+];
+
+/// ST3 이중 코어: 반물질 코어(물질 벽 사이) → 물질 코어(필드 안), 잠금 행 두 겹
+const SEG_CORE2: &[&str] = &[
+    "....................",
+    "eeeeeeeeeeeeeeeeeeee",
+    "....................",
+    "....................",
+    "~~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~3~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~",
+    "....................",
+    "wwwwwwwwwwwwwwwwwwww",
+    "....................",
+    "....................",
+    "MMMM....2......MMMMM",
+    "....................",
+    "....................",
+    "..a..............a..",
+    "....................",
+    "....................",
+];
+
+/// ST3 스크롤: 모든 적 종류 혼합
+const SEG_SCROLL4: &[&str] = &[
+    "....................",
+    "..o..............o..",
+    "....................",
+    ".....p........p.....",
+    "....................",
+    "##.....MMMMMM.....##",
+    "##................##",
+    "##..D....d....D...##",
+    "##................##",
+    "##.AAAA......AAAA.##",
+    "##..a...........m.##",
+    "##................##",
+    "....................",
+    "..........o.........",
+    "....................",
+    "....m....a....m.....",
+    "....................",
+    "....................",
+];
+
+/// ST3 퍼즐: 교대 벽 회랑 안에서 페이저가 위상을 바꾸며 쏜다 (게이지 관리 극한)
+const SEG_PUZZLE4: &[&str] = &[
+    "....................",
+    "AAAAAAAAAAAAAAAAAAAA",
+    "....................",
+    ".....p..............",
+    "....................",
+    "MMMMMMMMMMMMMMMMMMMM",
+    "....................",
+    "..............p.....",
+    "....................",
+    "AAAAAAAAAAAAAAAAAAAA",
+    "....................",
+    "....................",
+    "MMMMMMMMMMMMMMMMMMMM",
+    "....................",
+    "....................",
+    "AAAAAAAAAAAAAAAAAAAA",
+    "....................",
+    "....................",
+    "....................",
+];
+
+/// ST3 보스: 트윈 (좌우 한 쌍, 물질/반물질)
+const SEG_TWINBOSS: &[&str] = &[
+    "....................",
+    "....................",
+    ".........T..........",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "---hold---",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+];
+
+/// ST1 보스: 홀드 라인이 화면 중앙에 오면 정지, 보스 격파 후 재개
 const SEG_BOSS: &[&str] = &[
     "....................",
     "....................",

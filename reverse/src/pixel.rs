@@ -85,10 +85,26 @@ pub enum Spr {
     Bg1,
     Bg2,
     Boss,
+    /// 레이저 보스 (32x32 렌즈 링)
+    Boss2,
+    /// 트윈 보스 (32x32 맞물린 반원)
+    Boss3,
     /// 파괴하면 연결된 잠금 벽이 사라지는 코어
     Core,
     /// 코어에 연결된 잠금 벽 (중립, 항상 활성)
     LockWall,
+    /// 위성을 거느린 적 본체
+    Orbiter,
+    /// 위성 (8x8)
+    Satellite,
+    /// 보스 방어막 (40x40 링)
+    Shield,
+    /// 레이저 조각 (8x3)
+    LaserBit,
+    ItemLife,
+    ItemPower,
+    /// 체력 표시용 3x3 동그라미
+    LifeDot,
     Boom0,
     Boom1,
     Boom2,
@@ -121,8 +137,17 @@ const ALL: &[Spr] = &[
     Spr::Bg1,
     Spr::Bg2,
     Spr::Boss,
+    Spr::Boss2,
+    Spr::Boss3,
     Spr::Core,
     Spr::LockWall,
+    Spr::Orbiter,
+    Spr::Satellite,
+    Spr::Shield,
+    Spr::LaserBit,
+    Spr::ItemLife,
+    Spr::ItemPower,
+    Spr::LifeDot,
     Spr::Boom0,
     Spr::Boom1,
     Spr::Boom2,
@@ -274,6 +299,47 @@ const LIFE: [&str; 8] = [
     "........",
 ];
 
+const SATELLITE: [&str; 8] = [
+    "..####..",
+    ".#+##+#.",
+    "#+#**#+#",
+    "##*##*##",
+    "##*##*##",
+    "#+#**#+#",
+    ".#+##+#.",
+    "..####..",
+];
+
+const ITEM_LIFE: [&str; 12] = [
+    "############",
+    "#..........#",
+    "#....##....#",
+    "#....##....#",
+    "#...####...#",
+    "#...#**#...#",
+    "#..######..#",
+    "#.###..###.#",
+    "#.#......#.#",
+    "#..........#",
+    "#..........#",
+    "############",
+];
+
+const ITEM_POWER: [&str; 12] = [
+    "############",
+    "#..........#",
+    "#..*****...#",
+    "#..*...**..#",
+    "#..*....*..#",
+    "#..*...**..#",
+    "#..*****...#",
+    "#..*.......#",
+    "#..*.......#",
+    "#..*.......#",
+    "#..........#",
+    "############",
+];
+
 // ---------- 절차적 패턴 ----------
 
 fn rows_of(a: &[&str]) -> Vec<String> {
@@ -336,6 +402,48 @@ fn switch(on: bool) -> Vec<String> {
             'o'
         }
     })
+}
+
+/// 위성 적 본체: 굵은 링 + 대각 스포크 + 부분컬러 핵
+fn orbiter() -> Vec<String> {
+    grid(16, 16, |x, y| {
+        let dx = x as f32 - 7.5;
+        let dy = y as f32 - 7.5;
+        let d = (dx * dx + dy * dy).sqrt();
+        if d < 2.3 {
+            '*'
+        } else if d < 3.5 {
+            '#'
+        } else if d >= 6.0 && d < 7.6 {
+            '#'
+        } else if d >= 5.0 && d < 6.0 {
+            '+'
+        } else if (dx.abs() - dy.abs()).abs() < 0.6 && d < 6.0 {
+            '+'
+        } else {
+            '.'
+        }
+    })
+}
+
+/// 보스 방어막: 40x40 점선 링
+fn shield() -> Vec<String> {
+    grid(40, 40, |x, y| {
+        let dx = x as f32 - 19.5;
+        let dy = y as f32 - 19.5;
+        let d = (dx * dx + dy * dy).sqrt();
+        if d >= 17.5 && d < 19.5 {
+            let a = dy.atan2(dx);
+            if ((a * 6.0).floor() as i32).rem_euclid(2) == 0 { '*' } else { '#' }
+        } else {
+            '.'
+        }
+    })
+}
+
+/// 레이저 조각: 8x3, 가운데 부분컬러
+fn laser_bit() -> Vec<String> {
+    vec!["########".into(), "********".into(), "########".into()]
 }
 
 /// 코어: 회전하는 링 안의 부분컬러 결정
@@ -403,6 +511,61 @@ fn boss() -> Vec<String> {
             '#'
         } else {
             '.'
+        }
+    })
+}
+
+/// 레이저 보스: 32x32 굵은 링 + 가로 렌즈 + 부분컬러 조리개
+fn boss2() -> Vec<String> {
+    grid(32, 32, |x, y| {
+        let dx = x as f32 - 15.5;
+        let dy = y as f32 - 15.5;
+        let d = (dx * dx + dy * dy).sqrt();
+        if d > 15.5 {
+            '.'
+        } else if d > 13.5 {
+            '#'
+        } else if d > 12.0 {
+            if (x + y) % 2 == 0 { '+' } else { '#' }
+        } else if dy.abs() < 2.5 && dx.abs() < 11.0 {
+            // 가로 렌즈
+            if dx.abs() < 3.0 { '*' } else if dy.abs() < 1.0 { '*' } else { '#' }
+        } else if d < 4.0 {
+            '*'
+        } else if (dx.abs() - dy.abs()).abs() < 1.0 && d < 11.0 {
+            '+'
+        } else {
+            '.'
+        }
+    })
+}
+
+/// 트윈 보스: 굵은 원 안에 S자로 맞물린 두 반원(한쪽 빗금, 한쪽 페이퍼), 중앙 부분컬러 코어
+fn boss3() -> Vec<String> {
+    grid(32, 32, |x, y| {
+        let dx = x as f32 - 15.5;
+        let dy = y as f32 - 15.5;
+        let d = (dx * dx + dy * dy).sqrt();
+        if d > 15.5 {
+            '.'
+        } else if d > 13.0 {
+            '#'
+        } else if d < 3.5 {
+            '*'
+        } else if d < 5.0 {
+            '#'
+        } else {
+            // S자 경계: 위 반은 왼쪽 원, 아래 반은 오른쪽 원이 튀어나옴
+            let upper = dy > 0.0;
+            let left = if upper { dx < 4.0 } else { dx < -4.0 };
+            let boundary = if upper { (dx - 4.0).abs() < 1.2 } else { (dx + 4.0).abs() < 1.2 } && d > 5.0;
+            if boundary {
+                '#'
+            } else if left {
+                if (x + y) % 2 == 0 { '+' } else { 'o' }
+            } else {
+                'o'
+            }
         }
     })
 }
@@ -514,8 +677,17 @@ fn pattern(spr: Spr) -> Vec<String> {
         Spr::Bg1 => bg(1),
         Spr::Bg2 => bg(2),
         Spr::Boss => boss(),
+        Spr::Boss2 => boss2(),
+        Spr::Boss3 => boss3(),
         Spr::Core => core(),
         Spr::LockWall => lock_wall(),
+        Spr::Orbiter => orbiter(),
+        Spr::Satellite => rows_of(&SATELLITE),
+        Spr::Shield => shield(),
+        Spr::LaserBit => laser_bit(),
+        Spr::ItemLife => rows_of(&ITEM_LIFE),
+        Spr::ItemPower => rows_of(&ITEM_POWER),
+        Spr::LifeDot => vec![".#.".into(), "###".into(), ".#.".into()],
         Spr::Boom0 => boom(0),
         Spr::Boom1 => boom(1),
         Spr::Boom2 => boom(2),

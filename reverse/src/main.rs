@@ -5,6 +5,7 @@ mod bullet;
 mod demo;
 mod enemy;
 mod hud;
+mod item;
 mod level;
 mod phase;
 mod pixel;
@@ -15,7 +16,7 @@ use bevy::camera::ScalingMode;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 
-use level::{LevelData, Scroll};
+use level::{LevelData, Scroll, Stage, LAST_STAGE};
 use phase::{PhaseState, Wipe};
 use pixel::{sprite, Spr, SpriteSet};
 
@@ -31,7 +32,10 @@ pub enum GameState {
     #[default]
     Title,
     Playing,
+    /// 스테이지 클리어 화면 (잠시 후 다음 스테이지로)
+    StageClear,
     GameOver,
+    /// 전 스테이지 클리어
     Clear,
 }
 
@@ -39,19 +43,33 @@ pub enum GameState {
 #[derive(Component, Clone, Copy)]
 pub struct Pos(pub Vec2);
 
-/// 라운드 재시작 시 일괄 제거되는 엔티티
+/// 스테이지가 바뀔 때 일괄 제거되는 엔티티 (레벨 오브젝트, 탄, 이펙트)
 #[derive(Component)]
 pub struct GameEntity;
+
+/// 한 판(런) 동안 유지되는 엔티티 (플레이어). 타이틀/게임오버에서 재시작할 때만 제거
+#[derive(Component)]
+pub struct RunEntity;
 
 /// 상태별 오버레이 텍스트 (상태를 나갈 때 제거)
 #[derive(Component)]
 pub struct Overlay;
+
+/// 스테이지 시작 배너 (시간이 지나면 제거)
+#[derive(Component)]
+pub struct Banner {
+    t: f32,
+}
 
 #[derive(Component)]
 pub struct MainCamera;
 
 #[derive(Resource, Default)]
 pub struct Score(pub u32);
+
+/// 스테이지 클리어 화면 남은 시간
+#[derive(Resource, Default)]
+pub struct StageClearTimer(f32);
 
 fn main() {
     App::new()
@@ -81,16 +99,43 @@ fn main() {
         .init_resource::<SpriteSet>()
         .init_state::<GameState>()
         .init_resource::<Score>()
+        .init_resource::<Stage>()
+        .init_resource::<StageClearTimer>()
         .init_resource::<PhaseState>()
         .init_resource::<Wipe>()
         .init_resource::<Scroll>()
         .init_resource::<LevelData>()
+        .init_resource::<enemy::Rng>()
         .add_message::<player::PlayerHit>()
         .add_systems(Startup, setup)
         .add_systems(OnEnter(GameState::Title), show_title)
         .add_systems(OnExit(GameState::Title), despawn_overlay)
-        .add_systems(OnEnter(GameState::Playing), (setup_round, hud::show_hud))
+        // 새 런: 타이틀/게임오버/올클리어에서 들어올 때만 점수·플레이어 초기화 (OnTransition은 OnEnter보다 먼저)
+        .add_systems(
+            OnTransition {
+                exited: GameState::Title,
+                entered: GameState::Playing,
+            },
+            reset_run,
+        )
+        .add_systems(
+            OnTransition {
+                exited: GameState::GameOver,
+                entered: GameState::Playing,
+            },
+            reset_run,
+        )
+        .add_systems(
+            OnTransition {
+                exited: GameState::Clear,
+                entered: GameState::Playing,
+            },
+            reset_run,
+        )
+        .add_systems(OnEnter(GameState::Playing), (setup_stage, hud::show_hud))
         .add_systems(OnExit(GameState::Playing), hud::hide_hud)
+        .add_systems(OnEnter(GameState::StageClear), show_stage_clear)
+        .add_systems(OnExit(GameState::StageClear), despawn_overlay)
         .add_systems(OnEnter(GameState::GameOver), show_game_over)
         .add_systems(OnExit(GameState::GameOver), despawn_overlay)
         .add_systems(OnEnter(GameState::Clear), show_clear)
@@ -98,28 +143,40 @@ fn main() {
         .add_systems(
             Update,
             (
-                phase::phase_input,
-                player::sync_phase,
-                level::scroll,
-                level::spawn_rows,
-                player::player_move,
-                player::player_shoot,
-                enemy::enemy_ai,
-                bullet::bullet_move,
-                bullet::bullet_walls,
-                bullet::bullet_hits,
-                player::handle_hits,
-                level::lines,
-                level::tick_switches,
-                enemy::tick_booms,
-                phase::wipe_tick,
-                level::despawn_below,
-                hud::update_hud,
+                (
+                    phase::phase_input,
+                    player::sync_phase,
+                    level::scroll,
+                    level::spawn_rows,
+                    player::player_move,
+                    player::player_shoot,
+                    enemy::enemy_ai,
+                    enemy::twins,
+                    enemy::satellites,
+                    enemy::lasers,
+                    item::items,
+                )
+                    .chain(),
+                (
+                    bullet::bullet_move,
+                    bullet::bullet_walls,
+                    bullet::bullet_hits,
+                    player::handle_hits,
+                    level::lines,
+                    level::tick_switches,
+                    enemy::tick_booms,
+                    phase::wipe_tick,
+                    level::despawn_below,
+                    tick_banners,
+                    hud::update_hud,
+                )
+                    .chain(),
             )
                 .chain()
                 .run_if(in_state(GameState::Playing)),
         )
         .add_systems(Update, title_input.run_if(in_state(GameState::Title)))
+        .add_systems(Update, stage_clear_tick.run_if(in_state(GameState::StageClear)))
         .add_systems(
             Update,
             restart_input.run_if(in_state(GameState::GameOver).or_else(in_state(GameState::Clear))),
@@ -157,26 +214,48 @@ fn setup(mut commands: Commands, set: Res<SpriteSet>, mut gizmos: ResMut<GizmoCo
     hud::build(&mut cam, &set);
 }
 
-/// 라운드 시작: 이전 엔티티 제거, 리소스 초기화, 플레이어 생성
-fn setup_round(
+/// 새 런 시작: 플레이어·점수·스테이지 초기화 (스테이지 오브젝트는 setup_stage가 정리)
+fn reset_run(
     mut commands: Commands,
     set: Res<SpriteSet>,
-    old: Query<Entity, With<GameEntity>>,
+    old: Query<Entity, With<RunEntity>>,
     mut score: ResMut<Score>,
-    mut ps: ResMut<PhaseState>,
-    mut wipe: ResMut<Wipe>,
-    mut scroll: ResMut<Scroll>,
-    mut level: ResMut<LevelData>,
+    mut stage: ResMut<Stage>,
 ) {
     for e in &old {
         commands.entity(e).despawn();
     }
     *score = Score::default();
+    *stage = Stage::default();
+    player::spawn_player(&mut commands, &set, &Scroll::default());
+}
+
+/// 스테이지 시작: 이전 스테이지 오브젝트 제거, 스크롤/위상/레벨 리셋, 플레이어 위치 복귀, 배너
+fn setup_stage(
+    mut commands: Commands,
+    set: Res<SpriteSet>,
+    stage: Res<Stage>,
+    old: Query<Entity, With<GameEntity>>,
+    mut ps: ResMut<PhaseState>,
+    mut wipe: ResMut<Wipe>,
+    mut scroll: ResMut<Scroll>,
+    mut level: ResMut<LevelData>,
+    mut player: Query<(&mut Pos, &mut player::Player)>,
+    camera: Query<Entity, With<MainCamera>>,
+) {
+    for e in &old {
+        commands.entity(e).despawn();
+    }
     *ps = PhaseState::default();
     *wipe = Wipe::default();
     *scroll = Scroll::default();
-    *level = LevelData::default();
-    player::spawn_player(&mut commands, &set, &scroll);
+    *level = LevelData::new(stage.index);
+    if let Ok((mut pos, mut pl)) = player.single_mut() {
+        player::reset_for_stage(&mut pos, &mut pl, &scroll);
+    }
+    if let Ok(cam) = camera.single() {
+        banner_text(&mut commands, &set, cam, &format!("STAGE {}", stage.index), 20.0, 2.0);
+    }
 }
 
 // ---------- 픽셀 스냅 ----------
@@ -188,7 +267,7 @@ fn snap_camera(scroll: Res<Scroll>, mut q: Query<&mut Transform, With<MainCamera
 }
 
 /// 카메라 기준 상대 좌표를 반올림해 화면상 픽셀 위치가 흔들리지 않게 한다
-/// (플레이어처럼 카메라와 함께 움직이는 오브젝트를 월드 좌표로 따로 반올림하면 1px 지터가 생김)
+/// (플레이어처럼 카메라와 함께 움직이는 오브젠트를 월드 좌표로 따로 반올림하면 1px 지터가 생김)
 fn snap_positions(scroll: Res<Scroll>, mut q: Query<(&Pos, &mut Transform)>) {
     let cam_y = scroll.cam_y.round();
     for (pos, mut tf) in &mut q {
@@ -201,15 +280,14 @@ fn snap_positions(scroll: Res<Scroll>, mut q: Query<(&Pos, &mut Transform)>) {
     }
 }
 
-// ---------- 타이틀 / 게임 오버 / 클리어 ----------
+// ---------- 오버레이 ----------
 
-/// 카메라 자식으로 가운데 정렬 텍스트 오버레이 생성
-fn overlay_text(commands: &mut Commands, set: &SpriteSet, camera: Entity, text: &str, y: f32, scale: f32) {
+/// 카메라 자식으로 가운데 정렬 텍스트(페이퍼 배경판 포함) 생성. 반환: 부모 엔티티
+fn spawn_text_overlay(commands: &mut Commands, set: &SpriteSet, camera: Entity, text: &str, y: f32, scale: f32) -> Entity {
     let tf = pixel::centered_text_transform(text, Vec3::new(0.0, y, hud::Z_HUD + 1.0), scale);
     commands
-        .spawn((tf, Visibility::default(), Overlay, ChildOf(camera)))
+        .spawn((tf, Visibility::default(), ChildOf(camera)))
         .with_children(|p| {
-            // 벽 위에서도 읽히도록 페이퍼 배경판
             let w = pixel::text_width(text);
             let mut back = Sprite::from_image(set.get(Spr::PixPaper, false, pixel::Accent::Ink));
             back.custom_size = Some(Vec2::new(w + 4.0, pixel::GLYPH_H + 4.0));
@@ -219,7 +297,29 @@ fn overlay_text(commands: &mut Commands, set: &SpriteSet, camera: Entity, text: 
                 Transform::from_xyz(w / 2.0, -pixel::GLYPH_H / 2.0, -0.5),
             ));
             pixel::spawn_glyphs(p, set, text);
-        });
+        })
+        .id()
+}
+
+fn overlay_text(commands: &mut Commands, set: &SpriteSet, camera: Entity, text: &str, y: f32, scale: f32) {
+    let e = spawn_text_overlay(commands, set, camera, text, y, scale);
+    commands.entity(e).insert(Overlay);
+}
+
+fn banner_text(commands: &mut Commands, set: &SpriteSet, camera: Entity, text: &str, y: f32, scale: f32) {
+    let e = spawn_text_overlay(commands, set, camera, text, y, scale);
+    commands.entity(e).insert(Banner { t: 2.0 });
+}
+
+fn tick_banners(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Banner, &mut Visibility)>) {
+    for (e, mut b, mut vis) in &mut q {
+        b.t -= time.delta_secs();
+        // 마지막 0.5초는 점멸
+        *vis = if b.t < 0.5 && ((b.t * 10.0) as i32) % 2 == 0 { Visibility::Hidden } else { Visibility::Inherited };
+        if b.t <= 0.0 {
+            commands.entity(e).despawn();
+        }
+    }
 }
 
 fn show_title(mut commands: Commands, set: Res<SpriteSet>, camera: Query<Entity, With<MainCamera>>) {
@@ -257,6 +357,35 @@ fn show_title(mut commands: Commands, set: Res<SpriteSet>, camera: Query<Entity,
     }
 }
 
+fn show_stage_clear(
+    mut commands: Commands,
+    set: Res<SpriteSet>,
+    score: Res<Score>,
+    stage: Res<Stage>,
+    mut timer: ResMut<StageClearTimer>,
+    camera: Query<Entity, With<MainCamera>>,
+) {
+    timer.0 = 2.5;
+    let Ok(cam) = camera.single() else { return };
+    overlay_text(&mut commands, &set, cam, &format!("STAGE {} CLEAR!", stage.index), 30.0, 2.0);
+    overlay_text(&mut commands, &set, cam, &format!("SCORE {:06}", score.0), 6.0, 1.0);
+    overlay_text(&mut commands, &set, cam, "GET READY", -30.0, 1.0);
+}
+
+fn stage_clear_tick(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut timer: ResMut<StageClearTimer>,
+    mut stage: ResMut<Stage>,
+    mut next: ResMut<NextState<GameState>>,
+) {
+    timer.0 -= time.delta_secs();
+    if timer.0 <= 0.0 || keys.any_just_pressed([KeyCode::KeyZ, KeyCode::Enter]) {
+        stage.index += 1;
+        next.set(GameState::Playing);
+    }
+}
+
 fn show_game_over(
     mut commands: Commands,
     set: Res<SpriteSet>,
@@ -276,8 +405,9 @@ fn show_clear(
     camera: Query<Entity, With<MainCamera>>,
 ) {
     let Ok(cam) = camera.single() else { return };
-    overlay_text(&mut commands, &set, cam, "STAGE CLEAR!", 30.0, 2.0);
-    overlay_text(&mut commands, &set, cam, &format!("SCORE {:06}", score.0), 6.0, 1.0);
+    overlay_text(&mut commands, &set, cam, "ALL CLEAR!", 30.0, 2.0);
+    overlay_text(&mut commands, &set, cam, &format!("{} STAGES COMPLETE", LAST_STAGE), 12.0, 1.0);
+    overlay_text(&mut commands, &set, cam, &format!("SCORE {:06}", score.0), 0.0, 1.0);
     overlay_text(&mut commands, &set, cam, "PRESS R TO RESTART", -30.0, 1.0);
 }
 
