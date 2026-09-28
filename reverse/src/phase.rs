@@ -137,7 +137,7 @@ pub fn phase_input(
     if !pressed {
         return;
     }
-    if ps.cooldown > 0.0 || ps.locked || ps.jammed || player.invuln > 1.5 {
+    if ps.cooldown > 0.0 || ps.locked || ps.jammed || (player.invuln > 1.5 && player.invuln < 100.0) {
         player.deny_flash = 0.2;
         return;
     }
@@ -206,7 +206,7 @@ pub fn apply_visuals(
             _ => 1.0,
         };
         if let Some(pl) = player {
-            if pl.invuln > 0.0 && ((t * 12.0) as i32) % 2 == 0 {
+            if pl.invuln > 0.0 && pl.invuln < 100.0 && ((t * 12.0) as i32) % 2 == 0 {
                 alpha = 0.15;
             }
         }

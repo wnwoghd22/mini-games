@@ -117,7 +117,7 @@ pub enum Spr {
     Glyph(char),
 }
 
-pub const GLYPHS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :-!./>";
+pub const GLYPHS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :-!./><";
 
 const ALL: &[Spr] = &[
     Spr::Player,
@@ -654,6 +654,7 @@ fn glyph(c: char) -> [&'static str; 5] {
         '.' => ["...", "...", "...", "...", ".#."],
         '/' => ["..#", "..#", ".#.", "#..", "#.."],
         '>' => ["#..", ".#.", "..#", ".#.", "#.."],
+        '<' => ["..#", ".#.", "#..", ".#.", "..#"],
         _ => ["...", "...", "...", "...", "..."],
     }
 }
@@ -812,5 +813,5 @@ pub fn spawn_glyphs(parent: &mut ChildSpawnerCommands, set: &SpriteSet, text: &s
 pub fn centered_text_transform(text: &str, center: Vec3, scale: f32) -> Transform {
     let w = text_width(text) * scale;
     let origin = center + Vec3::new(-w / 2.0, GLYPH_H * scale / 2.0, 0.0);
-    Transform::from_translation(origin.round()).with_scale(Vec3::splat(scale))
+    Transform::from_translation(Vec3::new(origin.x.round(), origin.y.round(), origin.z)).with_scale(Vec3::splat(scale))
 }

@@ -73,7 +73,7 @@ fn run(
 ) {
     if script.god {
         for mut p in &mut players {
-            p.invuln = p.invuln.max(0.5);
+            p.invuln = 1000.0;
         }
     }
     // 이전 프레임의 tap 해제

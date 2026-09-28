@@ -101,6 +101,7 @@ fn main() {
         .init_resource::<Score>()
         .init_resource::<Stage>()
         .init_resource::<StageClearTimer>()
+        .init_resource::<TitleTimer>()
         .init_resource::<PhaseState>()
         .init_resource::<Wipe>()
         .init_resource::<Scroll>()
@@ -175,7 +176,7 @@ fn main() {
                 .chain()
                 .run_if(in_state(GameState::Playing)),
         )
-        .add_systems(Update, title_input.run_if(in_state(GameState::Title)))
+        .add_systems(Update, (title_demo, phase::wipe_tick, title_input).run_if(in_state(GameState::Title)))
         .add_systems(Update, stage_clear_tick.run_if(in_state(GameState::StageClear)))
         .add_systems(
             Update,
@@ -322,38 +323,140 @@ fn tick_banners(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &
     }
 }
 
-fn show_title(mut commands: Commands, set: Res<SpriteSet>, camera: Query<Entity, With<MainCamera>>) {
-    // 초기 OnEnter는 Startup보다 먼저 실행되므로 카메라가 없으면 월드 좌표(카메라 원점)로 배치
-    let cam = camera.single().ok();
-    let mut text = |t: &str, y: f32, s: f32| match cam {
-        Some(c) => overlay_text(&mut commands, &set, c, t, y, s),
-        None => {
-            let tf = pixel::centered_text_transform(t, Vec3::new(0.0, y, hud::Z_HUD + 1.0), s);
-            commands
-                .spawn((tf, Visibility::default(), Overlay))
-                .with_children(|p| pixel::spawn_glyphs(p, &set, t));
-        }
-    };
-    text("REVERSE", 62.0, 3.0);
-    text("SHIFT BETWEEN MATTER AND ANTIMATTER", 34.0, 1.0);
-    text("RED IS MATTER - BLUE IS ANTIMATTER", 24.0, 1.0);
-    text("TOUCHING AN ACTIVE WALL IS FATAL", 14.0, 1.0);
-    text("ARROWS/WASD  MOVE", -4.0, 1.0);
-    text("Z/SPACE  SHOOT", -14.0, 1.0);
-    text("SHIFT  PHASE SHIFT", -24.0, 1.0);
-    text("PRESS Z TO START", -60.0, 1.0);
-    drop(text);
+/// 타이틀 데모 기체 (주기적으로 위상이 바뀌며 화면 전체가 반전된다)
+#[derive(Component)]
+pub struct TitleShip;
 
-    if cam.is_none() {
-        commands.spawn((sprite(&set, Spr::Player, Vec3::new(-40.0, -44.0, hud::Z_HUD + 1.0)), Overlay));
+/// 타이틀 "PRESS Z" 점멸
+#[derive(Component)]
+pub struct TitleBlink;
+
+#[derive(Resource, Default)]
+pub struct TitleTimer(f32);
+
+/// 키캡 아이콘: 잉크 테두리 + 페이퍼 안쪽 + 글자. 반환: 키캡 폭
+fn spawn_keycap(commands: &mut Commands, set: &SpriteSet, text: &str, center: Vec2, z: f32) -> f32 {
+    let w = pixel::text_width(text) + 6.0;
+    let h = pixel::GLYPH_H + 6.0;
+    let mut border = Sprite::from_image(set.get(Spr::Pix, false, pixel::Accent::Ink));
+    border.custom_size = Some(Vec2::new(w, h));
+    commands.spawn((
+        border,
+        pixel::SpriteKind(Spr::Pix),
+        Transform::from_xyz(center.x, center.y, z),
+        Overlay,
+    ));
+    let mut inner = Sprite::from_image(set.get(Spr::PixPaper, false, pixel::Accent::Ink));
+    inner.custom_size = Some(Vec2::new(w - 2.0, h - 2.0));
+    commands.spawn((
+        inner,
+        pixel::SpriteKind(Spr::PixPaper),
+        Transform::from_xyz(center.x, center.y, z + 0.1),
+        Overlay,
+    ));
+    // 키캡 바닥 그림자 1px
+    let mut shadow = Sprite::from_image(set.get(Spr::PixMid, false, pixel::Accent::Ink));
+    shadow.custom_size = Some(Vec2::new(w, 1.0));
+    commands.spawn((
+        shadow,
+        pixel::SpriteKind(Spr::PixMid),
+        Transform::from_xyz(center.x, center.y - h / 2.0 - 0.5, z),
+        Overlay,
+    ));
+    let tf = pixel::centered_text_transform(text, Vec3::new(center.x, center.y, z + 0.2), 1.0);
+    commands
+        .spawn((tf, Visibility::default(), Overlay))
+        .with_children(|p| pixel::spawn_glyphs(p, set, text));
+    w
+}
+
+/// 키캡 + 라벨 한 묶음 (왼쪽 정렬, x는 시작점). 반환: 전체 폭
+fn spawn_key_legend(commands: &mut Commands, set: &SpriteSet, keys: &[&str], label: &str, x: f32, y: f32) -> f32 {
+    let z = hud::Z_HUD + 1.0;
+    let mut cx = x;
+    for k in keys {
+        let w = pixel::text_width(k) + 6.0;
+        spawn_keycap(commands, set, k, Vec2::new(cx + w / 2.0, y), z);
+        cx += w + 2.0;
+    }
+    cx += 3.0;
+    let tf = pixel::centered_text_transform(label, Vec3::new(cx + pixel::text_width(label) / 2.0, y, z), 1.0);
+    commands
+        .spawn((tf, Visibility::default(), Overlay))
+        .with_children(|p| pixel::spawn_glyphs(p, set, label));
+    cx + pixel::text_width(label) - x
+}
+
+/// 타이틀: 문장 설명 없이, 데모 기체가 위상을 바꾸는 모습과 키캡 범례만 보여준다.
+/// (초기 OnEnter는 Startup보다 먼저 실행되므로 카메라 자식이 아닌 월드 좌표(원점 = 카메라)로 배치)
+fn show_title(mut commands: Commands, set: Res<SpriteSet>, mut timer: ResMut<TitleTimer>) {
+    timer.0 = 0.0;
+    let z = hud::Z_HUD + 1.0;
+    let title = |commands: &mut Commands, t: &str, y: f32, s: f32| {
+        let tf = pixel::centered_text_transform(t, Vec3::new(0.0, y, z), s);
+        commands
+            .spawn((tf, Visibility::default(), Overlay))
+            .with_children(|p| pixel::spawn_glyphs(p, &set, t));
+    };
+    title(&mut commands, "REVERSE", 66.0, 3.0);
+
+    // 데모: 빨간(물질) 벽 - 기체 - 파란(반물질) 벽. 기체의 계가 바뀔 때마다 세계가 반전되고 벽의 실체/고스트가 뒤바뀐다
+    let demo_y = 20.0;
+    for (x, ph) in [(-48.0, phase::Phase::Matter), (-32.0, phase::Phase::Matter), (32.0, phase::Phase::Anti), (48.0, phase::Phase::Anti)] {
         commands.spawn((
-            sprite(&set, Spr::WallM, Vec3::new(24.0, -44.0, hud::Z_HUD + 1.0)),
+            sprite(&set, level::wall_sprite(ph), Vec3::new(x, demo_y, z)),
+            ph,
             Overlay,
         ));
-        commands.spawn((
-            sprite(&set, Spr::WallA, Vec3::new(40.0, -44.0, hud::Z_HUD + 1.0)),
-            Overlay,
-        ));
+    }
+    commands.spawn((
+        sprite(&set, Spr::Player, Vec3::new(0.0, demo_y, z + 0.5)),
+        phase::Phase::Matter,
+        TitleShip,
+        Overlay,
+    ));
+
+    // 키캡 범례 한 줄: [<][>] MOVE   [Z] SHOOT   [SHIFT] FLIP
+    let y = -24.0;
+    let gap = 12.0;
+    let w1 = pixel::text_width("<") + 6.0 + 2.0 + pixel::text_width(">") + 6.0 + 3.0 + pixel::text_width("MOVE");
+    let w2 = pixel::text_width("Z") + 6.0 + 3.0 + pixel::text_width("SHOOT");
+    let w3 = pixel::text_width("SHIFT") + 6.0 + 3.0 + pixel::text_width("FLIP");
+    let total = w1 + gap + w2 + gap + w3;
+    let mut x = (-total / 2.0).round();
+    x += spawn_key_legend(&mut commands, &set, &["<", ">"], "MOVE", x, y) + gap;
+    x += spawn_key_legend(&mut commands, &set, &["Z"], "SHOOT", x, y) + gap;
+    spawn_key_legend(&mut commands, &set, &["SHIFT"], "FLIP", x, y);
+
+    // 시작 안내 (점멸)
+    let tf = pixel::centered_text_transform("PRESS Z", Vec3::new(0.0, -64.0, z), 1.0);
+    commands
+        .spawn((tf, Visibility::default(), Overlay, TitleBlink))
+        .with_children(|p| pixel::spawn_glyphs(p, &set, "PRESS Z"));
+}
+
+/// 타이틀 데모: 2.4초마다 기체의 계를 뒤집고 기체 위치에서 와이프를 시작. PRESS Z 점멸
+fn title_demo(
+    time: Res<Time>,
+    mut timer: ResMut<TitleTimer>,
+    mut ps: ResMut<PhaseState>,
+    mut wipe: ResMut<Wipe>,
+    mut ship: Query<(&Transform, &mut phase::Phase), With<TitleShip>>,
+    mut blink: Query<&mut Visibility, With<TitleBlink>>,
+) {
+    let dt = time.delta_secs().min(0.05);
+    let before = (timer.0 / 2.4) as i32;
+    timer.0 += dt;
+    let after = (timer.0 / 2.4) as i32;
+    if after != before && timer.0 > 1.0 {
+        ps.player = ps.player.flip();
+        if let Ok((tf, mut ph)) = ship.single_mut() {
+            *ph = ps.player;
+            wipe.start(tf.translation.truncate(), ps.inverted());
+        }
+    }
+    for mut v in &mut blink {
+        *v = if ((timer.0 * 2.0) as i32) % 2 == 0 { Visibility::Inherited } else { Visibility::Hidden };
     }
 }
 
