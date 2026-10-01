@@ -227,6 +227,13 @@ impl World {
         true
     }
 
+    pub fn release_grip(&mut self, velocity: Point) {
+        if matches!(self.frog.support, Support::Grip(_)) {
+            self.frog.support = Support::Air;
+            self.frog.velocity = velocity;
+        }
+    }
+
     pub fn generate_next(&mut self) -> Transition {
         let source = self.frontier.clone();
         let rise = self.rng.range(28.0, 55.0);

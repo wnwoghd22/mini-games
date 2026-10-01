@@ -9,8 +9,10 @@ trunk serve --open
 
 Click or press Enter to start. Hold the left mouse button anywhere, pull down and
 back, then release to jump in the opposite direction. Land before the next jump.
-The left and right sides of the pond wrap. While airborne, click anywhere when a
-ring lights up to grab it; use a new drag to jump from the ring. Rings are reusable.
+The left and right sides of the pond wrap. While airborne, hold the left mouse
+button as you overlap a ring to immediately start aiming. You can hold before
+reaching the ring. Drag and release that same press to jump; releasing without
+a valid drag resumes your flight. Rings are reusable.
 Cracked platforms disappear when you jump from them.
 
 P or Escape pauses, the right mouse button cancels aiming, and R restarts.

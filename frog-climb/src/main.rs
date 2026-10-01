@@ -21,6 +21,7 @@ enum Screen {
 struct Aim {
     origin: Point,
     drag: Point,
+    resume_velocity: Option<Point>,
 }
 
 #[derive(Resource)]
@@ -31,6 +32,9 @@ struct Game {
     accumulator: f32,
     best: u32,
     seed: u64,
+    holding_left: bool,
+    grip_armed: bool,
+    cursor: Option<Point>,
 }
 
 impl Game {
@@ -43,6 +47,9 @@ impl Game {
             accumulator: 0.0,
             best: load_best(),
             seed,
+            holding_left: false,
+            grip_armed: false,
+            cursor: None,
         }
     }
 
@@ -52,6 +59,84 @@ impl Game {
         self.screen = Screen::Playing;
         self.aim = None;
         self.accumulator = 0.0;
+        self.holding_left = false;
+        self.grip_armed = false;
+        self.cursor = None;
+    }
+
+    fn cancel_aim(&mut self) {
+        if let Some(aim) = self.aim.take()
+            && let Some(velocity) = aim.resume_velocity
+        {
+            self.pond.release_grip(velocity);
+        }
+        self.grip_armed = false;
+    }
+
+    fn arm_grip(&mut self) {
+        if !self.holding_left || !self.grip_armed || self.aim.is_some() {
+            return;
+        }
+        let Some(origin) = self.cursor else { return };
+        let velocity = self.pond.frog.velocity;
+        if self.pond.grab() {
+            self.aim = Some(Aim {
+                origin,
+                drag: Point::default(),
+                resume_velocity: Some(velocity),
+            });
+        }
+    }
+
+    fn pointer_input(&mut self, held: bool, pressed: bool, cursor: Option<Point>, cancel: bool) {
+        self.holding_left = held;
+        self.cursor = cursor.or(self.cursor);
+        if pressed {
+            self.grip_armed = true;
+            if self.pond.frog.support != Support::Air
+                && let Some(origin) = self.cursor
+            {
+                self.aim = Some(Aim {
+                    origin,
+                    drag: Point::default(),
+                    resume_velocity: None,
+                });
+            }
+        }
+        self.arm_grip();
+        if let Some(aim) = &mut self.aim
+            && let Some(cursor) = self.cursor
+        {
+            aim.drag = Point::new(cursor.x - aim.origin.x, cursor.y - aim.origin.y);
+        }
+        if cancel {
+            self.cancel_aim();
+        }
+        if !held {
+            self.grip_armed = false;
+            if let Some(aim) = self.aim.take() {
+                let launched = core::launch_velocity(aim.drag)
+                    .is_some_and(|velocity| self.pond.launch(velocity));
+                if !launched && let Some(velocity) = aim.resume_velocity {
+                    self.pond.release_grip(velocity);
+                }
+            }
+        }
+    }
+
+    fn advance(&mut self, dt: f32) {
+        self.accumulator += dt.min(0.1);
+        while self.accumulator >= STEP {
+            self.pond.step(STEP);
+            // Check each physics step so an existing hold catches a passing ring.
+            self.arm_grip();
+            self.accumulator -= STEP;
+            if self.pond.over {
+                self.screen = Screen::Over;
+                self.cancel_aim();
+                break;
+            }
+        }
     }
 }
 
@@ -173,7 +258,8 @@ fn input(
     }
     if !window.focused || keys.any_just_pressed([KeyCode::Escape, KeyCode::KeyP]) {
         game.screen = Screen::Paused;
-        game.aim = None;
+        game.cancel_aim();
+        game.holding_left = false;
         game.accumulator = 0.0;
         return;
     }
@@ -187,48 +273,19 @@ fn input(
             -p.y * HEIGHT / window.height(),
         )
     });
-    if clicked {
-        if game.pond.frog.support == Support::Air {
-            game.pond.grab();
-            // Grabbing consumes this press. Only a later press starts aiming.
-            game.aim = None;
-        } else if let Some(origin) = cursor {
-            game.aim = Some(Aim {
-                origin,
-                drag: Point::default(),
-            });
-        }
-    }
-    if let Some(aim) = &mut game.aim
-        && let Some(cursor) = cursor
-    {
-        aim.drag = Point::new(cursor.x - aim.origin.x, cursor.y - aim.origin.y);
-    }
-    if mouse.just_pressed(MouseButton::Right) {
-        game.aim = None;
-    }
-    if mouse.just_released(MouseButton::Left)
-        && let Some(aim) = game.aim.take()
-        && let Some(velocity) = core::launch_velocity(aim.drag)
-    {
-        game.pond.launch(velocity);
-    }
+    game.pointer_input(
+        mouse.pressed(MouseButton::Left),
+        clicked,
+        cursor,
+        mouse.just_pressed(MouseButton::Right),
+    );
 }
 
 fn simulate(time: Res<Time>, mut game: ResMut<Game>) {
     if game.screen != Screen::Playing {
         return;
     }
-    game.accumulator += time.delta_secs().min(0.1);
-    while game.accumulator >= STEP {
-        game.pond.step(STEP);
-        game.accumulator -= STEP;
-        if game.pond.over {
-            game.screen = Screen::Over;
-            game.aim = None;
-            break;
-        }
-    }
+    game.advance(time.delta_secs());
     let score = game.pond.score();
     if score > game.best {
         game.best = score;
@@ -418,7 +475,7 @@ fn render(mut commands: Commands, game: Res<Game>, art: Res<Art>, mut pool: ResM
         }
         if Some(g.id) == nearest {
             frame.text(
-                "CLICK!",
+                "HOLD!",
                 g.pos.x.clamp(-138.0, 138.0),
                 y + 12.0,
                 1.0,
@@ -520,12 +577,12 @@ fn render(mut commands: Commands, game: Res<Game>, art: Res<Art>, mut pool: ResM
             }
         } else if pond.frog.support == Support::Air {
             if nearest.is_some() {
-                "CLICK ANYWHERE TO GRAB!"
+                "HOLD TO AIM ON THE RING!"
             } else {
                 "FIND A LANDING OR A RING"
             }
         } else if matches!(pond.frog.support, Support::Grip(_)) {
-            "HOLDING! DRAG TO JUMP"
+            "DRAG AND RELEASE TO JUMP"
         } else {
             "DRAG BACK. RELEASE. RISE."
         };
@@ -547,7 +604,7 @@ fn render(mut commands: Commands, game: Res<Game>, art: Res<Art>, mut pool: ResM
                 frame.text("DRAG. RELEASE. RISE.", 0.0, 40.0, 1.0, GOLD, true);
                 frame.image(art.frogs[0].clone(), 0.0, 8.0, 25.0, 3.0, WHITE);
                 frame.text("PULL DOWN TO AIM YOUR JUMP", 0.0, -27.0, 1.0, WHITE, true);
-                frame.text("CLICK NEAR A RING TO GRAB", 0.0, -40.0, 1.0, AQUA, true);
+                frame.text("HOLD ON A RING TO AIM", 0.0, -40.0, 1.0, AQUA, true);
                 frame.text(
                     "THE LEFT AND RIGHT SIDES LOOP",
                     0.0,
@@ -601,5 +658,88 @@ fn render(mut commands: Commands, game: Res<Game>, art: Res<Art>, mut pool: ResM
     }
     for entity in pool.0.drain(count..) {
         commands.entity(entity).despawn();
+    }
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+
+    fn flying_game() -> Game {
+        let mut game = Game::new();
+        game.pond = Pond::new(1);
+        game.screen = Screen::Playing;
+        game.pond.grips = vec![core::Grip {
+            id: 999,
+            pos: Point::new(0.0, 80.0),
+        }];
+        game.pond.frog.pos = Point::new(0.0, 75.0);
+        game.pond.frog.velocity = Point::new(20.0, 100.0);
+        game.pond.frog.support = Support::Air;
+        game
+    }
+
+    #[test]
+    fn overlapping_press_aims_and_the_same_release_jumps() {
+        let mut game = flying_game();
+        game.pointer_input(true, true, Some(Point::new(10.0, 0.0)), false);
+        assert_eq!(game.pond.frog.support, Support::Grip(999));
+        assert!(game.aim.is_some());
+        game.pointer_input(true, false, Some(Point::new(10.0, -40.0)), false);
+        let velocity = core::launch_velocity(game.aim.unwrap().drag).unwrap();
+        assert!(!game.pond.preview(velocity).is_empty());
+        game.pointer_input(false, false, Some(Point::new(10.0, -40.0)), false);
+        assert_eq!(game.pond.frog.support, Support::Air);
+        assert_eq!(game.pond.frog.velocity, Point::new(0.0, 120.0));
+        assert!(game.aim.is_none());
+    }
+
+    #[test]
+    fn holding_before_contact_arms_during_physics_without_another_press() {
+        let mut game = flying_game();
+        game.pond.frog.pos.y = 55.0;
+        game.pointer_input(true, true, Some(Point::new(10.0, 0.0)), false);
+        assert!(game.aim.is_none());
+        game.advance(0.1);
+        assert_eq!(game.pond.frog.support, Support::Grip(999));
+        assert!(game.aim.is_some());
+    }
+
+    #[test]
+    fn a_tap_without_drag_resumes_the_incoming_flight() {
+        let mut game = flying_game();
+        let incoming = game.pond.frog.velocity;
+        game.pointer_input(true, true, Some(Point::new(10.0, 0.0)), false);
+        game.pointer_input(false, false, Some(Point::new(10.0, 0.0)), false);
+        assert_eq!(game.pond.frog.support, Support::Air);
+        assert_eq!(game.pond.frog.velocity, incoming);
+        game.advance(STEP);
+        assert_eq!(game.pond.frog.support, Support::Air);
+        assert!(game.pond.frog.velocity.y < incoming.y);
+        // A fresh hold can aim again while still overlapping after a cancelled tap.
+        game.pointer_input(true, true, Some(Point::new(10.0, 0.0)), false);
+        assert_eq!(game.pond.frog.support, Support::Grip(999));
+        assert!(game.aim.is_some());
+    }
+
+    #[test]
+    fn cancel_does_not_rearm_while_the_button_is_still_held() {
+        let mut game = flying_game();
+        game.pointer_input(true, true, Some(Point::new(10.0, 0.0)), false);
+        game.pointer_input(true, false, Some(Point::new(10.0, -40.0)), true);
+        assert_eq!(game.pond.frog.support, Support::Air);
+        game.advance(STEP);
+        assert!(game.aim.is_none());
+        assert_eq!(game.pond.frog.support, Support::Air);
+    }
+
+    #[test]
+    fn overlapping_without_holding_does_not_stop_flight() {
+        let mut game = flying_game();
+        game.pointer_input(false, false, Some(Point::new(10.0, 0.0)), false);
+        game.advance(STEP);
+        assert_eq!(game.pond.frog.support, Support::Air);
+        assert!(game.aim.is_none());
+        assert!(game.pond.frog.pos.y > 75.0);
     }
 }
