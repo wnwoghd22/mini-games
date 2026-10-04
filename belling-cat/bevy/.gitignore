@@ -1,0 +1,7 @@
+# Blambot font software is installed locally; do not redistribute it in the repo.
+/assets/fonts/*.ttf
+/assets/fonts/*.otf
+/assets/fonts/*.zip
+/assets/fonts/anime-ace-bb/
+/dist/
+/verification/
