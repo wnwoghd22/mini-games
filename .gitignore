@@ -23,4 +23,8 @@ target
 # WASM build artifacts
 **/pkg/
 **/target/
+**/dist/
 Cargo.lock
+
+# itch.io upload bundles
+*-web.zip
