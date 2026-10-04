@@ -1,0 +1,26 @@
+[package]
+name = "reverse"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# 2d 우산 피처만: 3d(pbr/gltf)·ui·audio 제외 → wasm 크기 대폭 절감
+bevy = { version = "0.19.0", default-features = false, features = ["2d"] }
+
+# 디버그 빌드에서도 게임이 부드럽게 돌도록 의존성만 최적화
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+# wasm 크기 절감 (네이티브 개발은 dev 프로필이라 영향 없음)
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+
+# 개발용 자동 플레이/스크린샷 (cargo run --features demo). 웹 빌드에는 포함되지 않음
+[features]
+demo = ["bevy/png"]

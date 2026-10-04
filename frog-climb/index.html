@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="마우스로 개구리의 점프를 조준하고, 밤의 연못을 끝없이 올라가는 도트 플랫폼 게임.">
+  <title>Frog Climb</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2376d685' d='M2 4h4v2h4V4h4v8H2zM1 11h14v3H1z'/%3E%3Cpath fill='%23e7f1d5' d='M3 5h2v2H3zM11 5h2v2h-2z'/%3E%3Cpath fill='%23183034' d='M5 10h6v1H5z'/%3E%3C/svg%3E">
+  <style>
+    :root { color-scheme: dark; --green: #76d685; --muted: #89a9ad; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; padding: 20px 12px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px; color: #e7f1d5;
+      background: radial-gradient(ellipse at 50% 15%, #203f3e, #0a1723 55%, #060e16);
+      font-family: system-ui, sans-serif; }
+    header { width: min(960px, 96vw); display: flex; align-items: center; justify-content: space-between; }
+    h1 { margin: 0; font-size: 22px; letter-spacing: .15em; } h1 span { color: var(--green); }
+    a { font-size: 13px; color: var(--muted); text-decoration: none; } a:hover { color: var(--green); }
+    .game { position: relative; box-sizing: content-box; width: 960px; height: 720px; max-width: 96vw; overflow: hidden;
+      border: 1px solid #375553; box-shadow: 0 16px 60px #0007; background: #0a1723; }
+    canvas { display: block; width: 100% !important; height: 100% !important; image-rendering: pixelated; outline: none; touch-action: none; }
+    #loading { position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
+      color: var(--green); background: #0a1723; pointer-events: none; font-size: 16px; letter-spacing: .08em; }
+    #loading small { display: block; margin-top: 10px; color: var(--muted); font-size: 12px; letter-spacing: 0; }
+    .hint { margin: 0; max-width: 960px; text-align: center; font-size: 13px; line-height: 1.8; color: var(--muted); }
+    .hint b { color: #e7f1d5; } .ring { color: #7edee1; } .crumbly { color: #eca875; }
+  </style>
+  <link data-trunk rel="rust" data-wasm-opt="z"
+    data-wasm-opt-params="--enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext">
+</head>
+<body>
+  <header><h1>FROG <span>CLIMB</span></h1><a href="../index.html">← 게임 목록</a></header>
+  <div class="game" id="game-frame">
+    <canvas id="bevy-canvas" tabindex="0" aria-label="Frog Climb 게임. 클릭해서 시작한 뒤, 마우스를 아래로 당겨 놓으면 점프합니다."></canvas>
+    <div id="loading">연못을 깨우는 중…<small>첫 실행에는 잠시 시간이 걸릴 수 있습니다.</small></div>
+  </div>
+  <p class="hint">
+    <b>좌클릭 드래그 → 놓기</b> 점프 · <b>고리와 겹칠 때 누르고 드래그</b> 바로 재점프 조준 · <b>P / Esc</b> 일시정지 · <b>R</b> 다시 시작<br>
+    좌우 끝은 서로 이어집니다. <span class="crumbly">금이 간 발판</span>은 점프하면 부서지고, 빛나는 아이템은 10점입니다.
+  </p>
+  <script>
+    const canvas = document.getElementById('bevy-canvas');
+    const frame = document.getElementById('game-frame');
+    function resize() {
+      const available = Math.min(960, innerWidth * .96, Math.max(240, innerHeight - 175) * 4 / 3);
+      // Integer scaling wherever possible keeps every source pixel the same size.
+      const scale = available >= 320 ? Math.max(1, Math.floor(available / 320)) : available / 320;
+      frame.style.width = `${320 * scale}px`;
+      frame.style.height = `${240 * scale}px`;
+    }
+    addEventListener('resize', resize);
+    resize();
+    canvas.addEventListener('contextmenu', event => event.preventDefault());
+    canvas.addEventListener('pointerdown', event => {
+      canvas.focus();
+      canvas.setPointerCapture(event.pointerId);
+    });
+    addEventListener('TrunkApplicationStarted', () => {
+      document.getElementById('loading').remove();
+    });
+  </script>
+</body>
+</html>
