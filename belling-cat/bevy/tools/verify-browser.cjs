@@ -81,7 +81,13 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.equal(await shot('02-out-of-range'), initial, 'Out-of-range Z changed the scene');
     // SwiftShader can render at only a few frames/second on a busy CI desktop.
     // Walk to the right-hand panel bound rather than relying on a precise wall time.
-    await key('ArrowRight', 'ArrowRight', 39, 6500);
+    await keyEvent('keyDown', 'ArrowRight', 'ArrowRight', 39);
+    await sleep(220);
+    await shot('03a-walk-pose-a');
+    await sleep(430);
+    await shot('03b-walk-pose-b');
+    await sleep(5850);
+    await keyEvent('keyUp', 'ArrowRight', 'ArrowRight', 39);
     await sleep(1000);
     const near = await shot('03-near-bell');
     assert.notEqual(near, initial, 'Walking did not move the mouse');

@@ -1,6 +1,6 @@
 # Belling the Cat — comic prototype
 
-A Bevy 0.19 prototype of a game told across pencil-drawn comic panels. One playable kitchen panel and one interaction close-up are on the same world-space page. All in-game text is English, in Anime Ace BB (the downloaded package identifies itself as **Anime Ace 2.0 BB**).
+A Bevy 0.19 prototype of a game told across pencil-drawn comic panels ("cuts"). The first scene is a dark council room: a candle on a table, two council mice beside it and the player on the left. All in-game text is English, in Anime Ace BB (the downloaded package identifies itself as **Anime Ace 2.0 BB**).
 
 From the repository root:
 
@@ -17,20 +17,35 @@ The original JavaScript version remains at `belling-cat/index.html` while this n
 
 | Key | Action |
 | --- | --- |
-| Left / Right or A / D | Walk within the kitchen panel |
+| Left / Right or A / D | Walk within the current cut |
 | Space or Up | Jump |
-| Z near the loose bell, while grounded | Inspect and slide to the sleeping-cat panel |
+| Z in the council room | Listen: the camera slides to the elder's close-up |
 | Z while a line is appearing | Reveal the rest of the line |
-| Z after a line is complete | Next line; after the last line, return |
-| R | Restart the prototype |
+| Z after a line is complete | Next line / next cut; the last line returns to the room |
+| Walk off the right edge after the meeting | Slide to the door cut |
+| R | Restart the scene |
+| F12 (native only) | Save a screenshot to `verification/` |
 
-Movement and jump are locked during the camera slide and dialogue. The balloon appears after arrival. The same camera slides back, preserving the player's exact position and facing. Z uses `just_pressed`, so holding it does not skip through the conversation. Inspection is repeatable.
+Movement is locked while the camera slides and while a balloon is active. Balloons stay on the page once shown, so returning to a close-up shows what was said there.
+
+## Modules (`src/`)
+
+| Module | Role |
+| --- | --- |
+| `art` | Asset handles, loading, atlas cell rectangles, code-generated placeholder textures (candle, table) |
+| `dissolve` | `CrossDissolveTick` resource + `FixedUpdate` `cross_dissolve` system + `CrossDissolvable` component |
+| `cut` | `Cut` panels on the page, `Focus` camera slide/zoom, `FollowCamera` page text |
+| `balloon` | `SpeechBalloon` spawn, typewriter, hand-inked outline |
+| `player` | Input, side-view walking/jumping, pose selection |
+| `script` | Engine-free scene progression (`Beat`s → `Command`s), unit-tested |
+| `ink` | Gizmo outlines for cuts and balloons, title and footer hints |
+| `scenes` | Script driver, restart, and `scenes::meeting_room` (the first scene) |
 
 ## Pencil motion
 
-Position and physics are updated independently from pose changes. Four transparent poses are arranged in a 2×2 atlas: idle, walk A, walk B, jump. Walking alternates two drawings at **5 poses/second**. Each replacement fades the outgoing drawing out and the incoming drawing in over **100 ms**, with a smooth opacity curve and no interpolated drawing or skeletal animation. The current blend finishes before accepting a newly requested pose or facing, preventing visible opacity pops on rapid input changes.
+Every animated drawing — the candle flame, the council mice, the player — is a `CrossDissolvable` owning two sprite layers. One global `CrossDissolveTick` beats every 360 ms in `FixedUpdate`; on each beat every drawing swaps to its next frame, and right after the beat the old drawing fades out while the new one fades in over 180 ms. A pair showing the same drawing at the same place does not blend, so an idle pose holds steady. Because there is one tick, everything on the page changes on the same cadence. `Cycle` drawings loop their frames (candle, NPCs); the player uses `Hold` so its pose (idle / two walk strides / jump) is chosen by `player.rs`, and its `SampledMotion` marker keeps the drawings at the positions sampled on the last two beats while the physics underneath stays continuous.
 
-Adjust `POSE_SECONDS` and `FADE_SECONDS` in `src/animation.rs`. `SLIDE_SECONDS` in `src/story.rs` controls the 900 ms camera slide. Player position, dialogue state, and camera targets are separate from the artwork. This scope has a flat floor and bounds; environmental collisions, additional playable panels, and action/combat poses are future work.
+Timing constants live in `src/dissolve.rs`; `SLIDE_SECONDS` in `src/cut.rs` controls the 900 ms camera slide.
 
 ## Browser preview
 
@@ -44,14 +59,16 @@ trunk serve --address 127.0.0.1 --port 8138
 Open `http://127.0.0.1:8138`. Click the canvas to focus the keyboard if necessary. `trunk build --release` creates a local browser build in `dist/`. Assets use relative URLs, so a subdirectory works. This prototype supports desktop keyboards; touch controls are not implemented.
 
 ```powershell
-cargo test --lib --no-default-features
+cargo test
 cargo clippy --all-targets -- -D warnings
 ```
 
-Tests cover interaction range/grounding, movement lock and return position, dialogue advancement, jumping/landing, and pose blending under direction changes and different update rates. The story and animation model has no engine dependency, so these tests run without compiling or opening Bevy.
+`tools/shot.ps1` posts key presses to the running window (without stealing focus) and captures it, e.g. `powershell -File tools/shot.ps1 -keys "z,z,f12" -waitMs 2000 -out x.png`; F12 inside the game writes a real frame to `verification/`.
+
+Tests cover the cross-fade curve, frame cycling, camera slide easing, typewriter reveal, walking/jumping bounds, and the script's beat progression (slide locks, read delay, persistent balloons, leaving only after the meeting).
 
 ## Artwork and font
 
-Generated artwork is saved in `assets/art/panels.png` and `assets/art/mouse-poses.png`. The backgrounds preserve each panel's original 3:4 ratio. Texture rectangles select the atlas cells at runtime without altering the generated images. `ART_DIRECTION.md` records the built-in image generation prompts.
+Generated artwork is saved in `assets/art/mouse-poses.png` and `assets/art/mouse-walk-poses.png` (`panels.png` belongs to the earlier kitchen prototype and is no longer used). The candle and table are rasterised in code until drawings exist; `ART_DIRECTION.md` records the prompts and the file layouts expected for `candle.png`, `table.png` and `meeting-room.png`. Point the `*_ART` constants in `src/art.rs` at the files to use them.
 
 Anime Ace BB is by Nate Piekos / Blambot. The original `assets/fonts/font info.txt` is preserved. Font files, archives, extracted packages, and local preview builds are excluded from Git. This is a local prototype, not a published font bundle. [Blambot's license page](https://blambot.com/pages/licenses) distinguishes comic usage from game embedding; obtain the appropriate rights before distributing a build that includes the font. The repository's game-code license does not apply to the font software.
