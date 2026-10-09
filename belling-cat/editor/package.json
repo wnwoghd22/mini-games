@@ -1,0 +1,69 @@
+{
+  "name": "belling-cat-cut-editor",
+  "displayName": "Belling the Cat — Cut Editor",
+  "description": "2D editor for *.scene.json: polygon cuts, Z flow and camera paths.",
+  "version": "0.3.0",
+  "publisher": "belling-cat",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "bellingCat.sceneEditor",
+        "displayName": "Cut Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.scene.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "*.scene.json",
+        "url": "./schema/scene.schema.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "bellingCat.openSceneEditor",
+        "title": "Belling the Cat: Open Cut Editor"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs && node -e \"require('fs').copyFileSync('../schema/scene.schema.json','schema/scene.schema.json')\"",
+    "watch": "node esbuild.mjs --watch",
+    "test": "node esbuild.mjs --test && node --test out/test.js",
+    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository",
+    "dev": "npm run build && node dev/serve.mjs",
+    "install-ext": "npm run package && node -e \"const f=require('fs').readdirSync('.').filter(n=>n.endsWith('.vsix')).sort().pop();require('child_process').execFileSync('code',['--install-extension',f,'--force'],{stdio:'inherit',shell:true})\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.0",
+    "@vscode/vsce": "^3.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://example.invalid/belling-cat"
+  },
+  "license": "UNLICENSED",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The editor only reads and edits the opened scene file and its dialogue file."
+    },
+    "virtualWorkspaces": false
+  }
+}

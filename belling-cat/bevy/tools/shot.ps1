@@ -1,9 +1,9 @@
 # Drives the running game without stealing focus: posts key events to its window and
 # saves a PrintWindow capture. Usage: powershell -File tools/shot.ps1 -out x.png -keys "z,right:1500,f12" -waitMs 800
 # Keys: z, r, right, left, space, f12 (":ms" = hold time). F12 makes the game save a frame to verification/.
-param([string]$out, [int]$waitMs = 0, [string]$keys = "")
+param([string]$out, [int]$waitMs = 0, [string]$keys = "", [string]$proc = "belling-cat-comic", [string]$title = "", [string]$exclude = "")
 Add-Type -AssemblyName System.Drawing
-$p = Get-Process belling-cat-comic -ErrorAction SilentlyContinue | Select-Object -First 1
+$p = Get-Process $proc -ErrorAction SilentlyContinue | Where-Object { ($title -eq "" -or $_.MainWindowTitle -like "*$title*") -and ($exclude -eq "" -or $_.MainWindowTitle -notlike "*$exclude*") } | Select-Object -First 1
 if (-not $p) { Write-Output "NO PROCESS"; exit 1 }
 Add-Type @"
 using System; using System.Runtime.InteropServices;

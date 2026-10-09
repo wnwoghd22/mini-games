@@ -1,0 +1,10 @@
+src/**
+media/*.ts
+dev/**
+node_modules/**
+.vscode/**
+esbuild.mjs
+tsconfig.json
+*.vsix
+out/*.map
+out/test.js

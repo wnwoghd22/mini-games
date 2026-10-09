@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="/media/editor.css">
+<style>
+  :root { --vscode-font-family: system-ui, sans-serif; --vscode-foreground: #ddd; --vscode-editor-background: #1e1e1e;
+    --vscode-panel-border: #444; --vscode-button-secondaryBackground: #3a3d41; --vscode-button-secondaryForeground: #fff;
+    --vscode-button-secondaryHoverBackground: #45494e; --vscode-button-background: #0e639c; --vscode-button-foreground: #fff;
+    --vscode-list-activeSelectionBackground: #094771; --vscode-list-activeSelectionForeground: #fff; --vscode-input-background: #3c3c3c;
+    --vscode-input-foreground: #ccc; --vscode-focusBorder: #007fd4; }
+  #json { position: fixed; left: 8px; bottom: 8px; width: 420px; height: 160px; font: 10px monospace; opacity: 0.85; }
+</style>
+<title>Cut Editor (dev harness)</title>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <button data-tool="select" class="tool active" title="V">Select</button>
+    <button data-tool="draw" class="tool" title="P">Draw cut</button>
+    <button id="btn-play" title="Play selected trigger (Space = next Z)">&#9654; Play</button>
+    <button id="btn-stop" disabled>&#9632;</button>
+    <span id="status"></span>
+    <span class="spacer"></span>
+    <button id="btn-fit">Fit</button>
+    <button id="btn-text">JSON</button>
+  </div>
+  <div id="main">
+    <canvas id="canvas" tabindex="0"></canvas>
+    <aside id="side">
+      <section id="cuts-panel"><h3>Cuts</h3><ul id="cut-list"></ul></section>
+      <section id="props-panel"><h3>Cut</h3><div id="props"></div></section>
+      <section id="flow-panel"><h3>Flow</h3><div id="flow"></div></section>
+    </aside>
+  </div>
+</div>
+<textarea id="json" readonly title="Last edit sent to the host"></textarea>
+<script>
+  // Stub of the VS Code webview API: the "document" is the scene file served by dev/serve.mjs.
+  const params = new URLSearchParams(location.search);
+  const scenePath = params.get("scene") || "/scene/council.scene.json";
+  // Scripted runs (?run=...) never touch the real file: edits go to a sibling *.scratch.json.
+  const savePath = params.get("run") ? scenePath.replace(/\.scene\.json$/, ".scratch.json") : scenePath;
+  let version = 1;
+  window.acquireVsCodeApi = () => ({
+    postMessage: async (m) => {
+      if (m.type === "ready") {
+        const text = await (await fetch(scenePath)).text();
+        document.getElementById("json").value = text;
+        window.postMessage({ type: "init", text, version, assetsBase: location.origin + "/assets" }, "*");
+      } else if (m.type === "edit") {
+        version += 1;
+        document.getElementById("json").value = m.text;
+        window.__lastEdit = m.text;
+        await fetch(savePath, { method: "PUT", body: m.text });
+      } else if (m.type === "loadDialogue") {
+        const text = await (await fetch(new URL(m.path, location.origin + scenePath))).text();
+        window.postMessage({ type: "dialogue", text }, "*");
+      } else if (m.type === "openText") {
+        window.open(scenePath, "_blank");
+      }
+    },
+    getState: () => undefined,
+    setState: () => {},
+  });
+</script>
+<script src="/out/webview.js"></script>
+<script src="/dev/scenarios.js"></script>
+</body>
+</html>

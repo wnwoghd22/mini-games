@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "belling-cat/scene.schema.json",
+  "title": "Belling the Cat scene",
+  "description": "A page of comic cuts (panels), their children, the player and the Z-driven flow. See FORMAT.md.",
+  "type": "object",
+  "required": ["version", "cuts", "player", "flow"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "dialogue": { "type": "string", "description": "Dialogue script file, relative to this file." },
+    "cuts": { "type": "array", "items": { "$ref": "#/definitions/cut" } },
+    "player": { "$ref": "#/definitions/player" },
+    "flow": { "type": "array", "items": { "$ref": "#/definitions/trigger" } }
+  },
+  "definitions": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_]+$" },
+    "lineId": { "type": "string", "pattern": "^[A-Za-z0-9_.]+$" },
+    "vec2": {
+      "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2
+    },
+    "size": {
+      "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 2, "maxItems": 2
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^(#[0-9a-fA-F]{6}|ink|paper|dark)$",
+      "description": "#rrggbb or a palette name: ink, paper, dark"
+    },
+    "frame": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]+:[0-9]+$",
+      "description": "atlas:index, e.g. mouse:0"
+    },
+    "cut": {
+      "type": "object",
+      "required": ["id", "polygon"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "label": { "type": "string" },
+        "polygon": {
+          "type": "array", "items": { "$ref": "#/definitions/vec2" }, "minItems": 3,
+          "description": "Vertices in page coordinates; any winding; no self-intersection."
+        },
+        "fill": { "$ref": "#/definitions/color", "default": "dark" },
+        "floor_y": { "type": "number", "description": "Ground the player stands on. Omit for cuts the player cannot enter." },
+        "walk": { "$ref": "#/definitions/vec2", "description": "[min_x, max_x] the player may walk between." },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/child" }, "default": [] }
+      },
+      "dependencies": { "walk": ["floor_y"] }
+    },
+    "childBase": {
+      "type": "object",
+      "required": ["type", "id", "pos"],
+      "properties": {
+        "type": { "enum": ["sprite", "balloon", "text", "shape"] },
+        "id": { "$ref": "#/definitions/id" },
+        "pos": { "$ref": "#/definitions/vec2" },
+        "z": { "type": "number", "default": 1 },
+        "clip": { "type": "boolean", "default": true, "description": "true: clipped to the cut polygon. false: may stick out of the cut." }
+      }
+    },
+    "child": {
+      "oneOf": [
+        { "$ref": "#/definitions/sprite" },
+        { "$ref": "#/definitions/balloon" },
+        { "$ref": "#/definitions/text" },
+        { "$ref": "#/definitions/shape" }
+      ]
+    },
+    "sprite": {
+      "allOf": [{ "$ref": "#/definitions/childBase" }],
+      "type": "object",
+      "required": ["size", "frames"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "sprite" },
+        "id": {}, "pos": {}, "z": {}, "clip": {},
+        "size": { "$ref": "#/definitions/size" },
+        "frames": { "type": "array", "items": { "$ref": "#/definitions/frame" }, "minItems": 1 },
+        "mode": { "enum": ["cycle", "hold"], "default": "cycle" },
+        "flip": { "type": "boolean", "default": false },
+        "tint": { "$ref": "#/definitions/color" }
+      }
+    },
+    "balloon": {
+      "allOf": [{ "$ref": "#/definitions/childBase" }],
+      "type": "object",
+      "required": ["size", "line"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "balloon" },
+        "id": {}, "pos": {}, "z": {}, "clip": {},
+        "size": { "$ref": "#/definitions/size" },
+        "tail": { "$ref": "#/definitions/vec2", "description": "Point the tail aims at, relative to the balloon centre. Omitted or [0,0]: no tail." },
+        "kind": { "enum": ["speech", "shout", "thought"], "default": "speech", "description": "speech: oval; shout: jagged; thought: cloud with trailing bubbles instead of a pointer." },
+        "line": { "$ref": "#/definitions/lineId", "description": "Dialogue id in the *.dialogue.txt file." },
+        "initially": { "enum": ["hidden", "shown"], "default": "hidden" }
+      }
+    },
+    "text": {
+      "allOf": [{ "$ref": "#/definitions/childBase" }],
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "text" },
+        "id": {}, "pos": {}, "z": {}, "clip": {},
+        "text": { "type": "string" },
+        "size": { "type": "number", "default": 22, "description": "Font size in px." },
+        "color": { "$ref": "#/definitions/color", "default": "ink" },
+        "box": { "$ref": "#/definitions/size", "description": "Optional wrapping box." }
+      }
+    },
+    "shape": {
+      "allOf": [{ "$ref": "#/definitions/childBase" }],
+      "type": "object",
+      "required": ["shape", "size"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "shape" },
+        "id": {}, "pos": {}, "z": {}, "clip": {},
+        "shape": { "enum": ["ellipse", "rect"] },
+        "size": { "$ref": "#/definitions/size" },
+        "color": { "$ref": "#/definitions/color", "default": "ink" },
+        "alpha": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 }
+      }
+    },
+    "player": {
+      "type": "object",
+      "required": ["cut", "x", "frames"],
+      "additionalProperties": false,
+      "properties": {
+        "cut": { "$ref": "#/definitions/id" },
+        "x": { "type": "number" },
+        "size": { "$ref": "#/definitions/size", "default": [142, 142] },
+        "frames": {
+          "type": "object",
+          "required": ["idle", "walk", "jump"],
+          "additionalProperties": false,
+          "properties": {
+            "idle": { "$ref": "#/definitions/frame" },
+            "walk": { "type": "array", "items": { "$ref": "#/definitions/frame" }, "minItems": 1 },
+            "jump": { "$ref": "#/definitions/frame" }
+          }
+        },
+        "clip": { "type": "boolean", "default": true }
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "required": ["on", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "on": { "enum": ["z", "right_edge", "left_edge", "enter"] },
+        "when": { "enum": ["always", "flow_done"], "default": "always" },
+        "once": { "type": "boolean", "default": true },
+        "steps": { "type": "array", "items": { "$ref": "#/definitions/step" }, "minItems": 1 }
+      }
+    },
+    "step": {
+      "oneOf": [
+        {
+          "type": "object", "required": ["focus"], "additionalProperties": false,
+          "properties": { "focus": { "$ref": "#/definitions/id" } }
+        },
+        {
+          "type": "object", "required": ["say"], "additionalProperties": false,
+          "properties": { "say": { "$ref": "#/definitions/id" } }
+        },
+        {
+          "type": "object", "required": ["path"], "additionalProperties": false,
+          "properties": { "path": { "type": "array", "items": { "$ref": "#/definitions/keyframe" }, "minItems": 1 } }
+        },
+        {
+          "type": "object", "required": ["wait"], "additionalProperties": false,
+          "properties": { "wait": { "type": "number", "minimum": 0 } }
+        },
+        {
+          "type": "object", "required": ["player"], "additionalProperties": false,
+          "properties": {
+            "player": {
+              "type": "object", "required": ["cut", "x"], "additionalProperties": false,
+              "properties": { "cut": { "$ref": "#/definitions/id" }, "x": { "type": "number" } }
+            }
+          }
+        },
+        {
+          "type": "object", "required": ["return"], "additionalProperties": false,
+          "properties": { "return": { "const": true } }
+        }
+      ]
+    },
+    "keyframe": {
+      "type": "object",
+      "required": ["x", "y", "zoom", "t"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "zoom": { "type": "number", "exclusiveMinimum": 0, "description": "1 = default view; smaller zooms in." },
+        "t": { "type": "number", "minimum": 0, "description": "Seconds from the start of the path at which this frame is reached." },
+        "ease": { "enum": ["smooth", "linear"], "default": "smooth" }
+      }
+    }
+  }
+}

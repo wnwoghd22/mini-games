@@ -1,0 +1,22 @@
+# Council scene — placeholder lines. Edit freely; balloons reference these ids.
+
+[elder.1] elder
+The council has spoken.
+The old bell is failing.
+
+[elder.2] elder
+You will carry the new one.
+Good luck, little one.
+
+[me.1] me
+Good luck. As if luck
+has ever saved one of us.
+
+[scout.1] scout
+It sleeps by the hearth
+in the big house.
+
+[scout.2] scout
+Past the pantry, on the right.
+Go before the candle
+burns out.

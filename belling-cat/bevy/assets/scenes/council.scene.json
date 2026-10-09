@@ -1,0 +1,108 @@
+{
+  "$schema": "../../../schema/scene.schema.json",
+  "version": 1,
+  "dialogue": "council.dialogue.txt",
+  "cuts": [
+    {
+      "id": "council",
+      "label": "01 / THE COUNCIL",
+      "polygon": [
+        [-618, -20],
+        [317, -20],
+        [317, -376],
+        [-618, -376]
+      ],
+      "fill": "dark",
+      "floor_y": -290,
+      "walk": [-359, 63],
+      "children": [
+        { "type": "shape", "id": "glow", "pos": [-148, -170], "z": 0, "shape": "ellipse", "size": [460, 340], "color": "#f2b859", "alpha": 0.22 },
+        { "type": "shape", "id": "floor_line", "pos": [-148, -290], "z": 0.5, "shape": "rect", "size": [530, 2], "color": "ink", "alpha": 0.6 },
+        { "type": "sprite", "id": "table", "pos": [-148, -245], "z": 1, "size": [180, 90], "frames": ["table:0"], "mode": "hold" },
+        { "type": "sprite", "id": "candle", "pos": [-148, -178], "z": 2, "size": [40, 80], "frames": ["candle:0", "candle:1", "candle:2"] },
+        { "type": "sprite", "id": "elder", "pos": [-243, -234], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "sprite", "id": "scout", "pos": [-53, -234], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
+        { "type": "balloon", "id": "b_me_1", "pos": [-148, 238], "size": [445, 140], "kind": "thought", "line": "me.1", "clip": false }
+      ]
+    },
+    {
+      "id": "elder_closeup",
+      "label": "02 / THE ELDER",
+      "polygon": [
+        [-570, 1160],
+        [-90, 1160],
+        [-90, 520],
+        [-570, 520]
+      ],
+      "fill": "dark",
+      "children": [
+        { "type": "sprite", "id": "elder_big", "pos": [-341, 681], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "balloon", "id": "b_elder_1", "pos": [-330, 1050], "size": [374, 140], "tail": [51, -262], "kind": "speech", "line": "elder.1", "clip": false },
+        { "type": "balloon", "id": "b_elder_2", "pos": [-308, 899], "size": [374, 140], "tail": [55, -157], "kind": "speech", "line": "elder.2", "clip": false }
+      ]
+    },
+    {
+      "id": "scout_closeup",
+      "label": "03 / THE SCOUT",
+      "polygon": [
+        [92, 1160],
+        [572, 1160],
+        [572, 520],
+        [92, 520]
+      ],
+      "fill": "dark",
+      "children": [
+        { "type": "sprite", "id": "scout_big", "pos": [332, 690], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
+        { "type": "balloon", "id": "b_scout_1", "pos": [332, 1050], "size": [374, 140], "tail": [-70, -320], "kind": "speech", "line": "scout.1", "clip": false },
+        { "type": "balloon", "id": "b_scout_2", "pos": [332, 895], "size": [374, 140], "tail": [-70, -165], "kind": "speech", "line": "scout.2", "clip": false }
+      ]
+    },
+    {
+      "id": "door",
+      "label": "04 / THE DOOR",
+      "polygon": [
+        [475, 360],
+        [1045, 360],
+        [1045, -400],
+        [475, -400]
+      ],
+      "fill": "dark",
+      "floor_y": -278,
+      "walk": [549, 971],
+      "children": [
+        { "type": "text", "id": "tbc", "pos": [760, -58], "z": 1, "text": "TO BE CONTINUED", "size": 22, "color": "paper" }
+      ]
+    }
+  ],
+  "player": {
+    "cut": "council",
+    "x": -203,
+    "size": [142, 142],
+    "frames": { "idle": "mouse:0", "walk": ["walk:0", "walk:1"], "jump": "mouse:3" },
+    "clip": true
+  },
+  "flow": [
+    {
+      "on": "z",
+      "steps": [
+        { "focus": "elder_closeup" },
+        { "say": "b_elder_1" },
+        { "say": "b_elder_2" },
+        { "focus": "council" },
+        { "say": "b_me_1" },
+        { "focus": "scout_closeup" },
+        { "say": "b_scout_1" },
+        { "say": "b_scout_2" },
+        { "return": true }
+      ]
+    },
+    {
+      "on": "right_edge",
+      "when": "flow_done",
+      "steps": [
+        { "focus": "door" },
+        { "player": { "cut": "door", "x": 559 } }
+      ]
+    }
+  ]
+}

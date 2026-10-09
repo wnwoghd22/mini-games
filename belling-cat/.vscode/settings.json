@@ -1,0 +1,8 @@
+{
+  "workbench.editorAssociations": {
+    "*.scene.json": "bellingCat.sceneEditor"
+  },
+  "json.schemas": [
+    { "fileMatch": ["*.scene.json"], "url": "./schema/scene.schema.json" }
+  ]
+}
