@@ -1627,6 +1627,7 @@ function renderFlowBar() {
           items.push(button("detach", () => { delete trigger.target; delete trigger.range; commit(); renderFlowBar(); }));
         }
       }
+      items.push(el("label", { class: "muted", title: "run this flow a single time (default: repeats; shown balloons are kept)" }, checkbox(trigger.once === true, (v) => { if (v) trigger.once = true; else delete trigger.once; commit(); }), " once"));
     }
   } else {
     items.push(el("span", { class: "muted" }, " click a node to select a flow, or + entry to start one"));

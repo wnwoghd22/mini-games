@@ -84,6 +84,11 @@ impl BalloonKind {
     }
 }
 
+/// The scene-file id of a spawned balloon, so a repeated `say` can find it instead of
+/// spawning it again.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct BalloonId(pub String);
+
 #[derive(Component, Debug)]
 pub struct SpeechBalloon {
     pub full: String,

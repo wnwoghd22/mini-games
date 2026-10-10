@@ -101,7 +101,7 @@
   "target": "candle",              // z/near: 붙어 있는 자식(또는 컷) id. 생략하면 어디서나
   "range": 80,                     // z/near: 플레이어와 target 스프라이트 **가장자리 사이 틈**의 한계 (같은 컷)
   "when": "flow_done" | "always",  // 생략 시 always. flow_done = 어떤 트리거든 return 스텝을 지난 뒤
-  "once": true,                    // 생략 시 true. false면 조건이 맞을 때마다 다시 실행
+  "once": false,                   // 생략 시 false = 조건이 맞을 때마다 다시 실행. true면 한 번만
   "steps": [ Step, ... ]
 }
 ```
@@ -121,6 +121,8 @@
 | `{ "return": true }` | `player.cut`으로 카메라 복귀 후 탐색으로 돌아가고 `flow_done`을 켠다 |
 
 스텝 목록이 끝나면(마지막이 `return`이 아니어도) 탐색으로 돌아간다.
+
+**반복 실행**: 트리거는 기본적으로 조건이 맞을 때마다 다시 시작한다(`once: true`가 아니면). 두 번째 이후 실행에서 `say`가 가리키는 풍선이 이미 떠 있으면 다시 띄우거나 타이핑하지 않고 그대로 둔 채 다음 Z만 기다린다. `focus`/`path`/`wait`/`player`/`return`은 매번 그대로 실행된다.
 
 ## `*.dialogue.txt`
 

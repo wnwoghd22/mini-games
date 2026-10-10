@@ -159,7 +159,7 @@
         "target": { "$ref": "#/definitions/id", "description": "Child or cut id the trigger is attached to (z, near)." },
         "range": { "type": "number", "exclusiveMinimum": 0, "default": 80, "description": "Horizontal distance from the target within which z/near fire." },
         "when": { "enum": ["always", "flow_done"], "default": "always" },
-        "once": { "type": "boolean", "default": true },
+        "once": { "type": "boolean", "default": false, "description": "true: run a single time. Default: repeat whenever the condition holds (already shown balloons are kept, not re-typed)." },
         "steps": { "type": "array", "items": { "$ref": "#/definitions/step" }, "minItems": 1 }
       }
     },

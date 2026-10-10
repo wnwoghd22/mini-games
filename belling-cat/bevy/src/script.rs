@@ -248,7 +248,7 @@ mod tests {
             target: None,
             range: None,
             when: None,
-            once: true,
+            once: false,
             steps,
         }
     }
@@ -407,7 +407,32 @@ mod tests {
             &mut out,
         );
         assert_eq!(s.phase, Phase::Exploring);
-        // Fired once: Z near the candle does nothing now.
+        // Triggers repeat by default: Z near the candle runs the whole flow again.
+        wait(&mut s, 0.2, base);
+        assert_eq!(press(&mut s, base), vec![Command::Focus("a".into())]);
+    }
+
+    #[test]
+    fn once_triggers_do_not_repeat() {
+        let mut s = script();
+        s.triggers[0].once = true;
+        let base = input("main", 0.0);
+        assert_eq!(press(&mut s, base), vec![Command::Focus("a".into())]);
+        // Run the flow through to the end: slide, two lines, return slide.
+        let mut out = Vec::new();
+        let done = ScriptInput {
+            slide_done: true,
+            line_finished: true,
+            ..base
+        };
+        s.tick(0.01, done, &mut out);
+        wait(&mut s, 0.2, base);
+        press(&mut s, done);
+        wait(&mut s, 0.2, base);
+        press(&mut s, done);
+        out.clear();
+        s.tick(0.01, done, &mut out);
+        assert_eq!(s.phase, Phase::Exploring);
         wait(&mut s, 0.2, base);
         assert!(press(&mut s, base).is_empty());
     }

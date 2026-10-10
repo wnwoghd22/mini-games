@@ -196,7 +196,8 @@ pub struct TriggerDef {
     pub range: Option<f32>,
     #[serde(default)]
     pub when: Option<When>,
-    #[serde(default = "default_true")]
+    /// Triggers repeat by default; `once: true` runs a trigger a single time.
+    #[serde(default)]
     pub once: bool,
     pub steps: Vec<StepDef>,
 }

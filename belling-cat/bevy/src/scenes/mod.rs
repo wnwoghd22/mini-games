@@ -8,7 +8,7 @@ pub mod loader;
 
 use crate::{
     art::Art,
-    balloon::{SpeechBalloon, spawn_balloon},
+    balloon::{BalloonId, SpeechBalloon, spawn_balloon},
     cut::{Cut, Focus, find_cut},
     dialogue::Dialogue,
     player::{Player, PlayerInput, PlayerSet, consume_input},
@@ -66,6 +66,7 @@ fn drive_script(
     dialogues: Res<Assets<Dialogue>>,
     cuts: Query<&Cut>,
     mut balloons: Query<&mut SpeechBalloon>,
+    shown: Query<(Entity, &BalloonId)>,
     mut player: Query<(&mut Player, &mut Transform)>,
 ) {
     let (Some(art), Some(script), Some(handles)) = (art, script.as_mut(), handles) else {
@@ -127,6 +128,12 @@ fn drive_script(
                 }
             }
             Command::Speak(id) => {
+                // A balloon that is already on the page (a repeated trigger) stays as it is:
+                // no respawn, no typing. The script just waits for the next Z.
+                if let Some((entity, _)) = shown.iter().find(|(_, b)| b.0 == id) {
+                    active.0 = Some(entity);
+                    continue;
+                }
                 let Some(ChildDef::Balloon(def)) = scene
                     .cuts
                     .iter()
@@ -151,7 +158,7 @@ fn drive_script(
                     def,
                     &text,
                     false,
-                    SceneEntity,
+                    (SceneEntity, BalloonId(id)),
                 );
                 active.0 = Some(entity);
             }
