@@ -11,7 +11,7 @@ cargo run
 
 The Anime Ace BB font is already installed locally at `assets/fonts/AnimeAceBB.ttf`. A fresh clone needs its own copy of the regular TTF at that path. Obtain it from [the author's Anime Ace BB listing](https://www.dafont.com/anime-ace-bb.font); use the regular `animeace2_reg.ttf` from that package, renamed to `AnimeAceBB.ttf`. The game exits with a useful message if the native font file is missing.
 
-The scene to play is the `SCENE_PATH` constant in `src/main.rs`. The file format is documented in `../FORMAT.md`.
+The scene to play is the `SCENE_PATH` constant in `src/main.rs`; a first command-line argument overrides it (relative to `assets/`), e.g. `cargo run -- scenes/other.scene.json`. `assets/scenes/*.scratch.json` is ignored by Git, handy for throwaway test scenes. The file format is documented in `../FORMAT.md`.
 
 ## Play
 

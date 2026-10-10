@@ -57,6 +57,15 @@ impl Cut {
     }
 }
 
+/// Marks every entity a cut spawned (frame, fill, children) with the cut's id, so the cut can
+/// be hidden and revealed as a whole.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct InCut(pub String);
+
+/// On a [`Cut`] entity: not drawn yet. Removed the first time the camera focuses the cut.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct CutHidden;
+
 pub fn find_cut<'a>(cuts: impl IntoIterator<Item = &'a Cut>, id: &str) -> Option<&'a Cut> {
     cuts.into_iter().find(|c| c.id == id)
 }

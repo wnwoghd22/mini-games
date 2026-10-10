@@ -9,7 +9,7 @@ pub mod loader;
 use crate::{
     art::Art,
     balloon::{BalloonId, SpeechBalloon, spawn_balloon},
-    cut::{Cut, Focus, find_cut},
+    cut::{Cut, CutHidden, Focus, find_cut},
     dialogue::Dialogue,
     player::{Player, PlayerInput, PlayerSet, consume_input},
     scene_file::{ChildDef, SceneFile},
@@ -64,7 +64,7 @@ fn drive_script(
     handles: Option<Res<SceneHandles>>,
     scenes: Res<Assets<SceneFile>>,
     dialogues: Res<Assets<Dialogue>>,
-    cuts: Query<&Cut>,
+    cuts: Query<(Entity, &Cut)>,
     mut balloons: Query<&mut SpeechBalloon>,
     shown: Query<(Entity, &BalloonId)>,
     mut player: Query<(&mut Player, &mut Transform)>,
@@ -111,13 +111,17 @@ fn drive_script(
     for command in out {
         info!("flow: {command:?}");
         match command {
-            Command::Focus(id) => match find_cut(cuts.iter(), &id) {
-                Some(cut) => focus.go(cut),
+            Command::Focus(id) => match cuts.iter().find(|(_, c)| c.id == id) {
+                Some((entity, cut)) => {
+                    // A hidden cut appears the first time the camera turns to it, and stays.
+                    commands.entity(entity).remove::<CutHidden>();
+                    focus.go(cut);
+                }
                 None => warn!("flow asked for unknown cut {id:?}"),
             },
             Command::Path(frames) => focus.go_path(&frames),
             Command::MovePlayer { cut, x } => {
-                let Some(cut) = find_cut(cuts.iter(), &cut) else {
+                let Some(cut) = find_cut(cuts.iter().map(|(_, c)| c), &cut) else {
                     warn!("flow moves the player to unknown cut {cut:?}");
                     continue;
                 };

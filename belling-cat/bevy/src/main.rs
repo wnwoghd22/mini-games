@@ -64,10 +64,20 @@ fn main() {
             PlayerPlugin,
             SceneDriverPlugin,
             InkPlugin,
-            SceneLoaderPlugin { path: SCENE_PATH },
+            SceneLoaderPlugin { path: scene_path() },
         ))
         .add_systems(Update, screenshot_on_f12)
         .run();
+}
+
+/// `belling-cat-comic.exe scenes/other.scene.json` plays another scene (relative to `assets/`);
+/// without an argument the default scene above is used.
+fn scene_path() -> &'static str {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(arg) = std::env::args().nth(1) {
+        return Box::leak(arg.into_boxed_str());
+    }
+    SCENE_PATH
 }
 
 /// F12 saves the current frame to `verification/` (ignored by Git) for visual checks.

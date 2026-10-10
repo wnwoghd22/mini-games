@@ -31,11 +31,18 @@ pub struct CutDef {
     pub floor_y: Option<f32>,
     #[serde(default)]
     pub walk: Option<[f32; 2]>,
+    /// `"hidden"`: nothing of the cut is drawn until the camera first focuses it.
+    #[serde(default)]
+    pub initially: Option<String>,
     #[serde(default)]
     pub children: Vec<ChildDef>,
 }
 
 impl CutDef {
+    pub fn hidden(&self) -> bool {
+        self.initially.as_deref() == Some("hidden")
+    }
+
     pub fn points(&self) -> Vec<Vec2> {
         self.polygon.iter().map(|p| Vec2::new(p[0], p[1])).collect()
     }

@@ -4,9 +4,9 @@ use super::{ActiveBalloon, RestartScene, SceneEntity};
 use crate::{
     art::{Art, DARK_PAPER, INK, Ready, art_ready},
     balloon::spawn_balloon,
-    cut::{Cut, Focus},
+    cut::{Cut, CutHidden, Focus, InCut},
     dialogue::Dialogue,
-    dissolve::{CrossDissolvable, CrossDissolveTick, SampledMotion, spawn_dissolvable},
+    dissolve::{CrossDissolvable, CrossDissolveTick, DissolveLayer, SampledMotion, spawn_dissolvable},
     ink::text,
     player::{DEFAULT_SIZE, Player, Walker},
     polygon::polygon_mesh,
@@ -50,6 +50,7 @@ impl Plugin for SceneLoaderPlugin {
                     watch_scene_assets,
                     restart,
                     spawn_scene.run_if(art_ready).run_if(|s: Res<LoadedScene>| !s.spawned),
+                    apply_cut_visibility,
                 )
                     .chain(),
             );
@@ -162,11 +163,13 @@ fn spawn_scene(
             .iter()
             .map(|p| *p + (*p - center).normalize_or_zero() * 4.0)
             .collect();
+        let in_cut = InCut(def.id.clone());
         commands.spawn((
             Mesh2d(meshes.add(polygon_mesh(&frame_points))),
             MeshMaterial2d(materials.add(INK)),
             Transform::from_xyz(0.0, 0.0, -2.0),
             SceneEntity,
+            in_cut.clone(),
         ));
         let fill = parse_color(def.fill.as_deref().unwrap_or("dark"), DARK_PAPER);
         commands.spawn((
@@ -174,6 +177,7 @@ fn spawn_scene(
             MeshMaterial2d(materials.add(fill)),
             Transform::from_xyz(0.0, 0.0, -1.0),
             SceneEntity,
+            in_cut.clone(),
         ));
         // `label` is for the editor only; the play view shows no panel titles.
 
@@ -186,9 +190,13 @@ fn spawn_scene(
                     half_width: child.half_width(),
                 },
             );
-            spawn_child(&mut commands, &art, &images, &mut meshes, &mut materials, child, dialogue);
+            spawn_child(&mut commands, &art, &images, &mut meshes, &mut materials, child, dialogue, &in_cut);
         }
-        commands.spawn((cut.clone(), SceneEntity));
+        let mut cut_entity = commands.spawn((cut.clone(), SceneEntity));
+        // The player's home cut is on screen from the start, hidden or not.
+        if def.hidden() && def.id != scene.player.cut {
+            cut_entity.insert(CutHidden);
+        }
         cuts.push(cut);
     }
 
@@ -225,6 +233,34 @@ fn spawn_scene(
     info!("scene {:?} spawned: {} cuts, {} triggers", handles.path, cuts.len(), scene.flow.len());
 }
 
+/// Shows or hides everything tagged with a cut according to the cut's [`CutHidden`] marker.
+/// Dissolve layers are not tagged (they are separate entities) and follow their owner's tag;
+/// the owner entity itself stays `Hidden`, as the layers do the drawing.
+fn apply_cut_visibility(
+    hidden: Query<&Cut, With<CutHidden>>,
+    mut members: Query<(&InCut, &mut Visibility), Without<CrossDissolvable>>,
+    mut layers: Query<(&DissolveLayer, &mut Visibility), Without<InCut>>,
+    owners: Query<&InCut, With<CrossDissolvable>>,
+) {
+    let hidden: Vec<&str> = hidden.iter().map(|c| c.id.as_str()).collect();
+    let wanted = |tag: &InCut| {
+        if hidden.contains(&tag.0.as_str()) {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        }
+    };
+    for (tag, mut visibility) in &mut members {
+        visibility.set_if_neq(wanted(tag));
+    }
+    for (layer, mut visibility) in &mut layers {
+        if let Ok(tag) = owners.get(layer.owner) {
+            visibility.set_if_neq(wanted(tag));
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn spawn_child(
     commands: &mut Commands,
     art: &Art,
@@ -233,9 +269,11 @@ fn spawn_child(
     materials: &mut Assets<ColorMaterial>,
     child: &ChildDef,
     dialogue: Option<&Dialogue>,
+    in_cut: &InCut,
 ) {
     let pos = child.pos();
     let z = child.z();
+    let tag = in_cut.clone();
     match child {
         ChildDef::Sprite(def) => {
             let frames = art.frames(&def.frames, images);
@@ -253,7 +291,7 @@ fn spawn_child(
             if let Some(tint) = &def.tint {
                 d = d.with_tint(parse_color(tint, Color::WHITE));
             }
-            spawn_dissolvable(commands, SceneEntity, d, Transform::from_translation(pos.extend(z)));
+            spawn_dissolvable(commands, (SceneEntity, tag), d, Transform::from_translation(pos.extend(z)));
         }
         ChildDef::Balloon(def) => {
             if def.initially.as_deref() == Some("shown") {
@@ -261,7 +299,7 @@ fn spawn_child(
                     .and_then(|d| d.text(&def.line))
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("[missing: {}]", def.line));
-                spawn_balloon(commands, art, meshes, materials, def, &body, true, SceneEntity);
+                spawn_balloon(commands, art, meshes, materials, def, &body, true, (SceneEntity, tag));
             }
         }
         ChildDef::Text(def) => {
@@ -269,6 +307,7 @@ fn spawn_child(
             let mut e = commands.entity(id);
             e.insert((
                 SceneEntity,
+                tag,
                 TextColor(parse_color(def.color.as_deref().unwrap_or("ink"), INK)),
                 Transform::from_translation(pos.extend(z)),
             ));
@@ -294,6 +333,7 @@ fn spawn_child(
                 })),
                 Transform::from_translation(pos.extend(z)),
                 SceneEntity,
+                tag,
             ));
         }
     }

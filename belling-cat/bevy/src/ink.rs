@@ -3,7 +3,7 @@
 use crate::{
     art::{Art, INK, Ready},
     balloon::{SpeechBalloon, draw_balloon_ink},
-    cut::{Cut, Focus, FollowCamera},
+    cut::{Cut, CutHidden, Focus, FollowCamera},
     script::{Phase, ScriptState},
 };
 use bevy::prelude::*;
@@ -60,7 +60,7 @@ fn spawn_page_text(mut commands: Commands, art: Res<Art>) {
 }
 
 /// Two slightly offset, slightly wobbly contours along each cut polygon.
-fn draw_cut_outlines(mut gizmos: Gizmos, cuts: Query<&Cut>) {
+fn draw_cut_outlines(mut gizmos: Gizmos, cuts: Query<&Cut, Without<CutHidden>>) {
     for cut in &cuts {
         let n = cut.polygon.len();
         for pass in 0..2 {

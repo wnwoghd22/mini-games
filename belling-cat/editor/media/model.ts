@@ -49,6 +49,8 @@ export interface Cut {
   fill?: string;
   floor_y?: number;
   walk?: Vec2;
+  /** "hidden": not drawn until a flow step first focuses the cut. */
+  initially?: "hidden" | "shown";
   children?: Child[];
 }
 

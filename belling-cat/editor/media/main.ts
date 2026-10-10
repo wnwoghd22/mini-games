@@ -392,7 +392,15 @@ function startPreview(trigger: number) {
 function initiallyShown(): string[] {
   const ids: string[] = [];
   for (const c of scene.cuts) for (const ch of c.children ?? []) if (ch.type === "balloon" && ch.initially === "shown") ids.push(ch.id);
+  // Cuts are keyed "cut:<id>"; the player's home cut is always on screen.
+  for (const c of scene.cuts) if (c.initially !== "hidden" || c.id === scene.player.cut) ids.push("cut:" + c.id);
   return ids;
+}
+
+/** True while a hidden cut has not been focused yet (in preview) or is merely marked hidden (editing). */
+function cutHiddenNow(cut: Cut): boolean {
+  if (preview) return !preview.shown.has("cut:" + cut.id);
+  return cut.initially === "hidden";
 }
 
 function stopPreview() {
@@ -420,6 +428,7 @@ function nextStep() {
   renderFlow();
   if ("focus" in step) {
     const cut = cutById(step.focus);
+    p.shown.add("cut:" + step.focus);
     if (cut) p.anim = { from: { ...p.cam }, to: cutCamera(cut), t: 0, dur: SLIDE_SECONDS, ease: "smooth" };
     else nextStep();
   } else if ("say" in step) {
@@ -560,6 +569,15 @@ function polyPath(points: Vec2[]) {
 }
 
 function drawCut(cut: Cut, selected: boolean) {
+  const hiddenNow = cutHiddenNow(cut);
+  if (hiddenNow && preview) return; // not on the page yet, exactly like the runtime
+  ctx.save();
+  if (hiddenNow) ctx.globalAlpha = 0.35;
+  drawCutBody(cut, selected);
+  ctx.restore();
+}
+
+function drawCutBody(cut: Cut, selected: boolean) {
   const pts = cut.polygon;
   polyPath(pts);
   ctx.fillStyle = selected ? COLORS.cutFillSel : COLORS.cutFill;
@@ -578,7 +596,7 @@ function drawCut(cut: Cut, selected: boolean) {
   const b = bbox(pts);
   const labelAt = toScreen([b.min[0] + 8, b.max[1] - 8]);
   ctx.fillStyle = COLORS.outline;
-  ctx.fillText(`${cut.id}${cut.label ? "  ·  " + cut.label : ""}`, labelAt[0], labelAt[1] + 10 * devicePixelRatio);
+  ctx.fillText(`${cut.id}${cut.label ? "  ·  " + cut.label : ""}${cut.initially === "hidden" ? "  (hidden until focus)" : ""}`, labelAt[0], labelAt[1] + 10 * devicePixelRatio);
 
   // Children in z order; clipped children are drawn inside the polygon only.
   const children = [...(cut.children ?? [])].map((c, i) => ({ c, i })).sort((a, b) => (a.c.z ?? 1) - (b.c.z ?? 1));
@@ -1751,6 +1769,7 @@ function renderProps() {
     row("id", textInput(cut.id, (v) => { renameCut(cut, v); commit(); })),
     row("label", textInput(cut.label, (v) => { if (v) cut.label = v; else delete cut.label; commit(); })),
     row("fill", selectInput(cut.fill ?? "dark", [{ value: "dark" }, { value: "paper" }], (v) => { cut.fill = v; commit(); })),
+    row("initially", selectInput(cut.initially ?? "shown", [{ value: "shown" }, { value: "hidden" }], (v) => { if (v === "hidden") cut.initially = "hidden"; else delete cut.initially; commit(); }), el("span", { class: "muted" }, "hidden = appears on first focus")),
     row("floor", floorToggle, hasFloor ? numberInput(cut.floor_y, (v) => { cut.floor_y = v; commit(); }) : el("span", { class: "muted" }, "player cannot enter")),
     ...(hasFloor
       ? [row("walk", numberInput(cut.walk?.[0] ?? b.min[0], (v) => { cut.walk = [v, cut.walk?.[1] ?? b.max[0]]; commit(); }), numberInput(cut.walk?.[1] ?? b.max[0], (v) => { cut.walk = [cut.walk?.[0] ?? b.min[0], v]; commit(); }))]

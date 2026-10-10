@@ -38,7 +38,8 @@
         { "type": "sprite", "id": "elder_big", "pos": [-635, 74], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
         { "type": "balloon", "id": "b_elder_1", "pos": [-403, 215], "size": [265, 83], "tail": [-198, -190], "kind": "speech", "line": "elder.1", "clip": false },
         { "type": "balloon", "id": "b_elder_2", "pos": [-297, 58], "size": [262, 117], "tail": [-252, 72], "kind": "speech", "line": "elder.2", "clip": false }
-      ]
+      ],
+      "initially": "hidden"
     },
     {
       "id": "scout_closeup",
@@ -54,7 +55,8 @@
         { "type": "sprite", "id": "scout_big", "pos": [-453, -866], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
         { "type": "balloon", "id": "b_scout_1", "pos": [-453, -506], "size": [374, 140], "tail": [-70, -320], "kind": "speech", "line": "scout.1", "clip": false },
         { "type": "balloon", "id": "b_scout_2", "pos": [-453, -661], "size": [374, 140], "tail": [-70, -165], "kind": "speech", "line": "scout.2", "clip": false }
-      ]
+      ],
+      "initially": "hidden"
     },
     {
       "id": "door",
@@ -84,7 +86,8 @@
       "children": [
         { "type": "balloon", "id": "balloon", "pos": [-116, 153], "z": 5, "size": [243, 94], "tail": [182, 21], "kind": "speech", "line": "", "clip": false },
         { "type": "balloon", "id": "balloon_2", "pos": [255, 69], "z": 5, "size": [320, 130], "tail": [-61, 90], "kind": "thought", "line": "", "clip": false }
-      ]
+      ],
+      "initially": "hidden"
     }
   ],
   "player": {

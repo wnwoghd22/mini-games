@@ -47,6 +47,7 @@
         "fill": { "$ref": "#/definitions/color", "default": "dark" },
         "floor_y": { "type": "number", "description": "Ground the player stands on. Omit for cuts the player cannot enter." },
         "walk": { "$ref": "#/definitions/vec2", "description": "[min_x, max_x] the player may walk between." },
+        "initially": { "enum": ["hidden", "shown"], "default": "shown", "description": "hidden: the cut, its outline and children are not drawn until a flow step first focuses it (then it stays)." },
         "children": { "type": "array", "items": { "$ref": "#/definitions/child" }, "default": [] }
       },
       "dependencies": { "walk": ["floor_y"] }
