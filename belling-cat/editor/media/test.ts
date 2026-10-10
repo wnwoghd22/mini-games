@@ -79,3 +79,44 @@ test("alignment snapping picks the nearest candidate within the threshold", () =
   assert.deepEqual(constrainAxis([0, 0], [30, 10]), [30, 0]);
   assert.deepEqual(constrainAxis([0, 0], [5, -10]), [0, -10]);
 });
+
+import { layoutFlow, insertStep, moveStep, triggerAnchor } from "./flow";
+import type { Scene } from "./model";
+
+function flowScene(): Scene {
+  return {
+    version: 1,
+    cuts: [
+      { id: "a", polygon: [[-100, 100], [100, 100], [100, -100], [-100, -100]], floor_y: -80, walk: [-80, 80],
+        children: [{ type: "sprite", id: "lamp", pos: [50, 0], size: [20, 20], frames: ["mouse:0"] }, { type: "balloon", id: "b1", pos: [0, 60], size: [80, 40], line: "x" }] },
+      { id: "b", polygon: [[200, 100], [400, 100], [400, -100], [200, -100]], children: [] },
+    ],
+    player: { cut: "a", x: -50, frames: { idle: "mouse:0", walk: ["walk:0"], jump: "mouse:3" } },
+    flow: [{ on: "z", target: "lamp", steps: [{ focus: "b" }, { wait: 0.5 }, { say: "b1" }, { return: true }] }],
+  };
+}
+
+test("flow layout anchors nodes to their targets and floats wait between neighbours", () => {
+  const scene = flowScene();
+  const nodes = layoutFlow(scene, scene.flow[0]);
+  assert.deepEqual(nodes[0].pos, [50, 0]); // entry at the lamp
+  assert.deepEqual(nodes[1].pos, [300, 0]); // focus b → cut centre
+  assert.ok(nodes[2].floating && nodes[2].index === 2); // wait placed between focus and say
+  assert.deepEqual(nodes[3].pos, [0, 60]); // say → balloon
+  assert.deepEqual(nodes[4].pos, [0, 0]); // return → home cut centre
+  assert.deepEqual(triggerAnchor(scene, { on: "right_edge", steps: [] }), [80, -40]);
+});
+
+test("insertStep and moveStep keep 1-based node indices consistent", () => {
+  const t = flowScene().flow[0];
+  assert.equal(insertStep(t, { wait: 1 }, 0), 1);
+  assert.deepEqual(t.steps[0], { wait: 1 });
+  // Move node 1 (wait 1) to sit before node 4 (say).
+  const idx = moveStep(t, 1, 4);
+  assert.equal(idx, 3);
+  assert.deepEqual(t.steps.map((s) => Object.keys(s)[0]), ["focus", "wait", "wait", "say", "return"]);
+  assert.deepEqual(t.steps[2], { wait: 1 });
+  // Move the last node to the front.
+  assert.equal(moveStep(t, 5, 1), 1);
+  assert.deepEqual(Object.keys(t.steps[0]), ["return"]);
+});

@@ -75,8 +75,12 @@ export type Step =
   | { player: { cut: string; x: number } }
   | { return: true };
 
+export type TriggerKind = "z" | "near" | "right_edge" | "left_edge" | "enter";
+
 export interface Trigger {
-  on: "z" | "right_edge" | "left_edge" | "enter";
+  on: TriggerKind;
+  target?: string;
+  range?: number;
   when?: "always" | "flow_done";
   once?: boolean;
   steps: Step[];

@@ -80,6 +80,37 @@
       const t = window.__editor.toScreen([6, -234]);
       await drag(c[0], c[1], t[0], t[1]);
     },
+    async flow_click() {
+      // Flow mode: select the entry node of flow 1, click the thought balloon (→ say inserted after
+      // the entry), click inside the door cut (→ focus), then drag node 2 onto node 1 (→ reorder).
+      const scene = await (await fetch("/scene/council.scene.json")).json();
+      const child = (id) => scene.cuts.flatMap((c) => c.children).find((c) => c.id === id);
+      window.__editor.setTool("flow");
+      window.__editor.selectNode(0, 0);
+      const b = window.__editor.toScreen(child("b_me_1").pos);
+      await click(b[0], b[1]);
+      const door = scene.cuts.find((c) => c.id === "door");
+      const d = window.__editor.toScreen([door.polygon[0][0] + 100, door.polygon[0][1] - 500]);
+      await click(d[0], d[1]);
+      const n2 = window.__editor.toScreen(window.__editor.flowNodePos(0, 2));
+      const n1 = window.__editor.toScreen(window.__editor.flowNodePos(0, 1));
+      await drag(n2[0], n2[1], n1[0], n1[1]);
+    },
+    async flow_entry() {
+      // + entry, then click the candle: a new trigger {on: z, target: candle} appears.
+      const scene = await (await fetch("/scene/council.scene.json")).json();
+      const candle = scene.cuts.flatMap((c) => c.children).find((c) => c.id === "candle");
+      window.__editor.setTool("flow");
+      [...document.querySelectorAll("#flowbar button")].find((b) => b.textContent === "+ entry").click();
+      await sleep(50);
+      const c = window.__editor.toScreen(candle.pos);
+      await click(c[0], c[1]);
+      // Then add a wait via the bar and Shift+click a camera keyframe in the elder close-up.
+      [...document.querySelectorAll("#flowbar button")].find((b) => b.textContent === "+ wait").click();
+      await sleep(50);
+      const k = window.__editor.toScreen([-330, 840]);
+      mouse("mousedown", k[0], k[1], { shiftKey: true }); await sleep(20); window.dispatchEvent(new MouseEvent("mouseup")); await sleep(50);
+    },
     async preview() {
       document.getElementById("btn-play").click();
       window.__editor.advancePreview(1.0); // slide to elder_closeup done; say b_elder_1 waiting

@@ -59,21 +59,23 @@ fn spawn_page_text(mut commands: Commands, art: Res<Art>) {
     ));
 }
 
+/// Two slightly offset, slightly wobbly contours along each cut polygon.
 fn draw_cut_outlines(mut gizmos: Gizmos, cuts: Query<&Cut>) {
     for cut in &cuts {
-        let x = cut.left();
-        let y = cut.bottom();
-        let (w, h) = (cut.size.x, cut.size.y);
-        gizmos.linestrip_2d(
-            [
-                Vec2::new(x - 5.0, y + 2.0),
-                Vec2::new(x - 3.0, y + h + 5.0),
-                Vec2::new(x + w + 5.0, y + h + 3.0),
-                Vec2::new(x + w + 3.0, y - 5.0),
-                Vec2::new(x - 5.0, y + 2.0),
-            ],
-            INK.with_alpha(0.55),
-        );
+        let n = cut.polygon.len();
+        for pass in 0..2 {
+            let offset = 3.0 + pass as f32 * 2.0;
+            let points: Vec<Vec2> = (0..=n)
+                .map(|i| {
+                    let p = cut.polygon[i % n];
+                    // Push each corner outward from the centre so the ink sits just outside the paper.
+                    let away = (p - cut.center()).normalize_or_zero();
+                    let wobble = ((i as f32 * 1.7 + pass as f32) * 3.1).sin() * 1.5;
+                    p + away * (offset + wobble)
+                })
+                .collect();
+            gizmos.linestrip_2d(points, INK.with_alpha(if pass == 0 { 0.55 } else { 0.3 }));
+        }
     }
 }
 
@@ -85,24 +87,21 @@ fn draw_balloons(mut gizmos: Gizmos, balloons: Query<(&SpeechBalloon, &Transform
 
 fn update_footer(
     ready: Res<Ready>,
-    script: Res<ScriptState>,
+    script: Option<Res<ScriptState>>,
     focus: Res<Focus>,
     mut footer: Single<&mut Text2d, With<Footer>>,
 ) {
     footer.0 = if !ready.0 {
-        "LOADING THE PAGE..."
+        "LOADING THE PAGE...".to_string()
     } else if focus.is_sliding() {
-        "BETWEEN THE PANELS..."
+        "BETWEEN THE PANELS...".to_string()
     } else {
-        match script.phase {
-            Phase::Exploring if script.left => "ARROWS / A D  MOVE    SPACE  JUMP    R  RESTART",
-            Phase::Exploring if script.meeting_done => {
-                "ARROWS / A D  MOVE    SPACE  JUMP    WALK RIGHT TO LEAVE    R  RESTART"
-            }
-            Phase::Exploring => "ARROWS / A D  MOVE    SPACE  JUMP    Z  LISTEN    R  RESTART",
-            Phase::Sliding(_) => "BETWEEN THE PANELS...",
-            Phase::Talking => "Z  REVEAL / NEXT    R  RESTART",
+        match script.as_ref().map(|s| s.phase) {
+            None => "LOADING THE SCENE...".to_string(),
+            Some(Phase::Exploring) => "ARROWS / A D  MOVE    SPACE  JUMP    Z  ACT    R  RELOAD".to_string(),
+            Some(Phase::Sliding(_)) => "BETWEEN THE PANELS...".to_string(),
+            Some(Phase::Talking) => "Z  REVEAL / NEXT    R  RELOAD".to_string(),
+            Some(Phase::Waiting(_)) => "...".to_string(),
         }
-    }
-    .into();
+    };
 }

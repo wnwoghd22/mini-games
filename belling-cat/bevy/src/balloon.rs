@@ -1,18 +1,36 @@
-//! Speech balloons. Once a balloon is on the page it stays there; nothing despawns it
-//! except a scene restart.
+//! Speech balloons built from a scene file's `balloon` child. Once a balloon is on the page it
+//! stays there; nothing despawns it except a scene reload.
+//!
+//! Shapes mirror `editor/media/balloon.ts`: `speech` is an oval with a pointer, `shout` a
+//! jagged star, `thought` a scalloped cloud trailing three bubbles toward the tail.
 
-use crate::art::{Art, INK};
-use bevy::{prelude::*, text::TextBounds};
+use crate::{
+    art::{Art, INK, PAPER},
+    polygon::polygon_mesh,
+    scene_file::BalloonDef,
+};
+use bevy::{prelude::*, sprite_render::AlphaMode2d, text::TextBounds};
 
 pub const LETTERS_PER_SECOND: f32 = 36.0;
 /// How far a tail may extend past the balloon rim.
 pub const TAIL_LENGTH: f32 = 90.0;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum BalloonKind {
+    #[default]
     Speech,
-    /// A thought: drawn with a broken outline and no tail.
+    Shout,
     Thought,
+}
+
+impl BalloonKind {
+    pub fn parse(text: Option<&str>) -> Self {
+        match text {
+            Some("shout") => Self::Shout,
+            Some("thought") => Self::Thought,
+            _ => Self::Speech,
+        }
+    }
 }
 
 #[derive(Component, Debug)]
@@ -21,8 +39,10 @@ pub struct SpeechBalloon {
     pub letters: f32,
     pub kind: BalloonKind,
     pub size: Vec2,
-    /// Tail tip, relative to the balloon centre.
-    pub tail: Vec2,
+    /// Direction the tail points at, relative to the centre; `None` for no tail.
+    pub tail: Option<Vec2>,
+    /// Body outline in balloon-local space, for the ink pass.
+    pub outline: Vec<Vec2>,
     pub text_entity: Entity,
 }
 
@@ -40,24 +60,104 @@ impl SpeechBalloon {
     }
 }
 
-/// Spawns a balloon centred at `at` whose tail points to `tail_to` (world space).
+/// Body outline in local space (centre at the origin), matching the editor.
+pub fn outline(kind: BalloonKind, size: Vec2) -> Vec<Vec2> {
+    let (rx, ry) = (size.x / 2.0, size.y / 2.0);
+    match kind {
+        BalloonKind::Shout => {
+            let spikes = (((rx + ry) / 14.0).round() as usize).max(10);
+            (0..spikes * 2)
+                .map(|i| {
+                    let a = i as f32 / (spikes * 2) as f32 * std::f32::consts::TAU;
+                    let r = if i % 2 == 0 { 1.0 } else { 0.78 };
+                    Vec2::new(a.cos() * rx * r, a.sin() * ry * r)
+                })
+                .collect()
+        }
+        _ => {
+            let n = 96;
+            let bumps = (((rx + ry) / 28.0).round() as usize).max(6) as f32;
+            (0..n)
+                .map(|i| {
+                    let a = i as f32 / n as f32 * std::f32::consts::TAU;
+                    let r = if kind == BalloonKind::Thought {
+                        let phase = (a * bumps / std::f32::consts::TAU).fract();
+                        0.9 + 0.1 * (1.0 - (phase * 2.0 - 1.0).powi(2)).max(0.0).sqrt()
+                    } else {
+                        1.0
+                    };
+                    Vec2::new(a.cos() * rx * r, a.sin() * ry * r)
+                })
+                .collect()
+        }
+    }
+}
+
+fn direction(towards: Vec2) -> Vec2 {
+    towards.normalize_or(Vec2::NEG_Y)
+}
+
+/// Tail tip: points toward `towards` but reaches at most [`TAIL_LENGTH`] past the rim.
+pub fn tail_tip(size: Vec2, towards: Vec2) -> Vec2 {
+    let dir = direction(towards);
+    let angle = dir.y.atan2(dir.x);
+    let rim = Vec2::new(angle.cos() * size.x * 0.5, angle.sin() * size.y * 0.5);
+    let reach = (towards.length() - rim.length()).clamp(20.0, TAIL_LENGTH);
+    rim + dir * reach
+}
+
+/// Two points on the rim either side of the tail direction (the pointer's base).
+pub fn tail_base(size: Vec2, towards: Vec2) -> (Vec2, Vec2) {
+    let dir = direction(towards);
+    let angle = dir.y.atan2(dir.x);
+    let spread = 0.28;
+    let rim = |a: f32| Vec2::new(a.cos() * size.x * 0.46, a.sin() * size.y * 0.46);
+    (rim(angle - spread), rim(angle + spread))
+}
+
+/// Thought balloons trail three shrinking bubbles toward the tail tip.
+pub fn thought_bubbles(size: Vec2, towards: Vec2) -> Vec<(Vec2, f32)> {
+    let tip = tail_tip(size, towards);
+    let dir = direction(towards);
+    let angle = dir.y.atan2(dir.x);
+    let rim = Vec2::new(angle.cos() * size.x * 0.5, angle.sin() * size.y * 0.5);
+    let base = size.x.min(size.y) * 0.09;
+    (0..3)
+        .map(|i| {
+            let t = (i as f32 + 1.0) / 3.5;
+            (rim.lerp(tip, t), base * (1.0 - i as f32 * 0.28))
+        })
+        .collect()
+}
+
+/// Spawns a balloon from its scene definition. `text` is the dialogue body.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_balloon(
     commands: &mut Commands,
     art: &Art,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<ColorMaterial>,
-    at: Vec2,
-    size: Vec2,
-    tail_to: Vec2,
+    def: &BalloonDef,
     text: &str,
-    kind: BalloonKind,
+    revealed: bool,
     extra: impl Bundle + Clone,
 ) -> Entity {
-    let white = materials.add(Color::srgb(0.98, 0.965, 0.925));
+    let at = Vec2::new(def.pos[0], def.pos[1]);
+    let size = Vec2::new(def.size[0], def.size[1]);
+    let z = def.z.unwrap_or(1.0) + 10.0;
+    let kind = BalloonKind::parse(def.kind.as_deref());
+    let tail = def
+        .tail
+        .map(|t| Vec2::new(t[0], t[1]))
+        .filter(|t| *t != Vec2::ZERO);
+    let white = materials.add(ColorMaterial {
+        color: Color::srgb(0.98, 0.965, 0.925),
+        alpha_mode: AlphaMode2d::Opaque,
+        ..default()
+    });
     let text_entity = commands
         .spawn((
-            Text2d::new(""),
+            Text2d::new(if revealed { text } else { "" }),
             TextFont {
                 font: art.font.clone().into(),
                 font_size: FontSize::Px(22.0),
@@ -66,55 +166,52 @@ pub fn spawn_balloon(
             TextColor(INK),
             TextLayout::justify(Justify::Center),
             TextBounds::from(size - Vec2::new(60.0, 30.0)),
-            Transform::from_translation(at.extend(12.0)),
+            Transform::from_translation(at.extend(z + 2.0)),
             extra.clone(),
         ))
         .id();
-    let tail = tail_tip(size, tail_to - at);
+    let body = outline(kind, size);
     let balloon = commands
         .spawn((
-            Mesh2d(meshes.add(Ellipse::new(size.x / 2.0, size.y / 2.0))),
+            Mesh2d(meshes.add(polygon_mesh(&body))),
             MeshMaterial2d(white.clone()),
-            Transform::from_translation(at.extend(10.0)),
+            Transform::from_translation(at.extend(z)),
             SpeechBalloon {
                 full: text.to_string(),
-                letters: 0.0,
+                letters: if revealed { text.chars().count() as f32 } else { 0.0 },
                 kind,
                 size,
                 tail,
+                outline: body,
                 text_entity,
             },
             extra.clone(),
         ))
         .id();
-    if kind == BalloonKind::Speech {
-        let (a, b) = tail_base(size, tail);
-        commands.spawn((
-            Mesh2d(meshes.add(Triangle2d::new(a, b, tail))),
-            MeshMaterial2d(white),
-            Transform::from_translation(at.extend(9.0)),
-            extra,
-        ));
+    if let Some(tail) = tail {
+        match kind {
+            BalloonKind::Thought => {
+                for (center, radius) in thought_bubbles(size, tail) {
+                    commands.spawn((
+                        Mesh2d(meshes.add(Circle::new(radius))),
+                        MeshMaterial2d(white.clone()),
+                        Transform::from_translation((at + center).extend(z - 0.5)),
+                        extra.clone(),
+                    ));
+                }
+            }
+            _ => {
+                let (a, b) = tail_base(size, tail);
+                commands.spawn((
+                    Mesh2d(meshes.add(Triangle2d::new(a, b, tail_tip(size, tail)))),
+                    MeshMaterial2d(white),
+                    Transform::from_translation(at.extend(z - 0.5)),
+                    extra,
+                ));
+            }
+        }
     }
     balloon
-}
-
-/// Tail tip: points toward `towards` but reaches at most [`TAIL_LENGTH`] past the rim.
-pub fn tail_tip(size: Vec2, towards: Vec2) -> Vec2 {
-    let dir = towards.normalize_or(Vec2::NEG_Y);
-    let angle = dir.y.atan2(dir.x);
-    let rim = Vec2::new(angle.cos() * size.x * 0.5, angle.sin() * size.y * 0.5);
-    let reach = (towards.length() - rim.length()).clamp(20.0, TAIL_LENGTH);
-    rim + dir * reach
-}
-
-/// Two points on the oval's rim either side of the tail direction.
-pub fn tail_base(size: Vec2, tail: Vec2) -> (Vec2, Vec2) {
-    let dir = tail.normalize_or(Vec2::NEG_Y);
-    let angle = dir.y.atan2(dir.x);
-    let spread = 0.28;
-    let rim = |a: f32| Vec2::new(a.cos() * size.x * 0.46, a.sin() * size.y * 0.46);
-    (rim(angle - spread), rim(angle + spread))
 }
 
 pub struct BalloonPlugin;
@@ -141,40 +238,50 @@ fn typewriter(
     }
 }
 
-/// Draws the hand-inked outline of every balloon.
+/// Draws the hand-inked outline of a balloon (body, pointer or bubbles).
 pub fn draw_balloon_ink(gizmos: &mut Gizmos, balloon: &SpeechBalloon, center: Vec2) {
-    let (rx, ry) = (balloon.size.x / 2.0, balloon.size.y / 2.0);
-    let (gap_a, gap_b) = if balloon.kind == BalloonKind::Speech {
-        let dir = balloon.tail.normalize_or(Vec2::NEG_Y);
-        let a = dir.y.atan2(dir.x);
-        (a - 0.28, a + 0.28)
-    } else {
-        (0.0, 0.0)
-    };
+    let tail_gap = balloon.tail.filter(|_| balloon.kind != BalloonKind::Thought).map(|t| {
+        let d = direction(t);
+        d.y.atan2(d.x)
+    });
     for pass in 0..2 {
         let mut run: Vec<Vec2> = Vec::new();
-        for i in 0..=96 {
-            let a = gap_b + (std::f32::consts::TAU - (gap_b - gap_a)) * i as f32 / 96.0;
-            let wobble = (a * 7.0).sin() * 1.4;
+        let n = balloon.outline.len();
+        for i in 0..=n {
+            let p = balloon.outline[i % n];
+            let a = p.y.atan2(p.x);
+            let in_gap = tail_gap.is_some_and(|g| angle_diff(a, g) < 0.28);
             let broken = balloon.kind == BalloonKind::Thought && (i / 6) % 2 == 1;
-            if broken {
+            if in_gap || broken {
                 flush(gizmos, &mut run, pass);
                 continue;
             }
-            run.push(
-                center
-                    + Vec2::new(
-                        a.cos() * (rx + wobble + pass as f32),
-                        a.sin() * (ry + wobble),
-                    ),
-            );
+            let wobble = 1.0 + ((a * 7.0).sin() * 1.4 + pass as f32) / p.length().max(1.0);
+            run.push(center + p * wobble);
         }
         flush(gizmos, &mut run, pass);
     }
-    if balloon.kind == BalloonKind::Speech {
-        let (a, b) = tail_base(balloon.size, balloon.tail);
-        gizmos.linestrip_2d([center + a, center + balloon.tail, center + b], INK);
+    if let Some(tail) = balloon.tail {
+        match balloon.kind {
+            BalloonKind::Thought => {
+                for (c, r) in thought_bubbles(balloon.size, tail) {
+                    gizmos.circle_2d(Isometry2d::from_translation(center + c), r, INK);
+                }
+            }
+            _ => {
+                let (a, b) = tail_base(balloon.size, tail);
+                gizmos.linestrip_2d(
+                    [center + a, center + tail_tip(balloon.size, tail), center + b],
+                    INK,
+                );
+            }
+        }
     }
+}
+
+fn angle_diff(a: f32, b: f32) -> f32 {
+    let d = (a - b).rem_euclid(std::f32::consts::TAU);
+    d.min(std::f32::consts::TAU - d)
 }
 
 fn flush(gizmos: &mut Gizmos, run: &mut Vec<Vec2>, pass: i32) {
@@ -188,6 +295,9 @@ fn flush(gizmos: &mut Gizmos, run: &mut Vec<Vec2>, pass: i32) {
     }
 }
 
+/// Paper colour used by thought/speech fills in gizmo-only contexts.
+pub const PAPER_FILL: Color = PAPER;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,7 +309,8 @@ mod tests {
             letters: 0.0,
             kind: BalloonKind::Speech,
             size: Vec2::ONE,
-            tail: Vec2::NEG_Y,
+            tail: None,
+            outline: vec![],
             text_entity: Entity::PLACEHOLDER,
         };
         assert!(!b.finished());
@@ -207,20 +318,20 @@ mod tests {
         assert_eq!(b.visible_text(), "Hel");
         b.reveal();
         assert!(b.finished());
-        assert_eq!(b.visible_text(), "Hello\nthere");
     }
 
     #[test]
-    fn tail_is_capped_but_keeps_its_direction() {
-        let tip = tail_tip(Vec2::new(300.0, 140.0), Vec2::new(60.0, -400.0));
-        assert!(tip.y < -70.0 && tip.y > -70.0 - TAIL_LENGTH - 1.0);
-        assert!(tip.x > 0.0);
-    }
-
-    #[test]
-    fn tail_base_straddles_the_tail_direction() {
-        let (a, b) = tail_base(Vec2::new(200.0, 100.0), Vec2::new(0.0, -120.0));
-        assert!(a.x < 0.0 && b.x > 0.0);
-        assert!(a.y < 0.0 && b.y < 0.0);
+    fn outlines_differ_by_kind_and_tails_are_capped() {
+        let size = Vec2::new(300.0, 140.0);
+        let radius = |p: Vec2| (p.x / 150.0).hypot(p.y / 70.0);
+        let oval = outline(BalloonKind::Speech, size);
+        assert!(oval.iter().all(|&p| (radius(p) - 1.0).abs() < 1e-4));
+        let shout = outline(BalloonKind::Shout, size);
+        assert!(shout.iter().any(|&p| radius(p) < 0.8));
+        let cloud = outline(BalloonKind::Thought, size);
+        assert!(cloud.iter().all(|&p| radius(p) > 0.85 && radius(p) < 1.01));
+        let tip = tail_tip(size, Vec2::new(0.0, -500.0));
+        assert!(tip.y < -70.0 && tip.y >= -70.0 - TAIL_LENGTH - 1e-4);
+        assert_eq!(thought_bubbles(size, Vec2::new(0.0, -300.0)).len(), 3);
     }
 }

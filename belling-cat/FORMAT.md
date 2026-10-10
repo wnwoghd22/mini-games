@@ -97,14 +97,17 @@
 
 ```jsonc
 {
-  "on": "z" | "right_edge" | "left_edge" | "enter",
+  "on": "z" | "near" | "right_edge" | "left_edge" | "enter",
+  "target": "candle",              // z/near: 붙어 있는 자식(또는 컷) id. 생략하면 어디서나
+  "range": 80,                     // z/near: target과 플레이어 x의 거리 한계 (같은 컷)
   "when": "flow_done" | "always",  // 생략 시 always. flow_done = 어떤 트리거든 return 스텝을 지난 뒤
   "once": true,                    // 생략 시 true. false면 조건이 맞을 때마다 다시 실행
   "steps": [ Step, ... ]
 }
 ```
 
-- `z`: 플레이어가 탐색 중 Z를 누르면 시작하고, 이후 **Z를 누를 때마다 한 스텝씩** 진행한다. 풍선이 타이핑 중이면 Z는 먼저 전체를 드러낸다.
+- `z`: 플레이어가 탐색 중 Z를 누르면 시작하고, 이후 **Z를 누를 때마다 한 스텝씩** 진행한다. `target`이 있으면 그 오브젝트 근처(`range`)에서만 시작한다. 풍선이 타이핑 중이면 Z는 먼저 전체를 드러낸다.
+- `near`: 플레이어가 `target`에 `range` 안으로 다가가면 Z 없이 자동으로 시작한다. 이후 진행은 `z`와 같다.
 - `right_edge` / `left_edge`: 플레이어가 현재 컷의 `walk` 끝에 닿은 채 그 방향으로 걷는 중.
 - `enter`: 씬 시작 직후.
 

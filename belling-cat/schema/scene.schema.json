@@ -154,7 +154,9 @@
       "required": ["on", "steps"],
       "additionalProperties": false,
       "properties": {
-        "on": { "enum": ["z", "right_edge", "left_edge", "enter"] },
+        "on": { "enum": ["z", "near", "right_edge", "left_edge", "enter"], "description": "z: Z pressed (near target if one is set); near: player approaches target; right_edge/left_edge: walking off the walk range; enter: scene start." },
+        "target": { "$ref": "#/definitions/id", "description": "Child or cut id the trigger is attached to (z, near)." },
+        "range": { "type": "number", "exclusiveMinimum": 0, "default": 80, "description": "Horizontal distance from the target within which z/near fire." },
         "when": { "enum": ["always", "flow_done"], "default": "always" },
         "once": { "type": "boolean", "default": true },
         "steps": { "type": "array", "items": { "$ref": "#/definitions/step" }, "minItems": 1 }

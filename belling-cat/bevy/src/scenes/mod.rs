@@ -1,28 +1,27 @@
-//! Concrete scenes and the driver that turns [`Script`] commands into camera moves and
-//! balloons.
+//! Turning a loaded `*.scene.json` into entities, driving its flow, and reloading it.
+//!
+//! `loader` spawns cuts, children and the player from the [`SceneFile`] asset and respawns
+//! them when the file changes on disk (hot reload) or when R is pressed. The driver below runs
+//! the [`Script`] each fixed step and applies its commands.
 
-pub mod meeting_room;
+pub mod loader;
 
 use crate::{
     art::Art,
     balloon::{SpeechBalloon, spawn_balloon},
     cut::{Cut, Focus, find_cut},
-    dissolve::CrossDissolveTick,
-    player::{FOOT_OFFSET, Player, PlayerInput, PlayerSet, Walker, consume_input},
+    dialogue::Dialogue,
+    player::{Player, PlayerInput, PlayerSet, consume_input},
+    scene_file::{ChildDef, SceneFile},
     script::{Command, ScriptInput, ScriptState},
 };
 use bevy::prelude::*;
 
-/// Everything a scene spawns; despawned on restart.
+pub use loader::{LoadedScene, SceneHandles};
+
+/// Everything a scene spawns; despawned on reload.
 #[derive(Component, Clone, Copy, Default)]
 pub struct SceneEntity;
-
-/// Where a character's mouth is, so balloons in that cut can point at it.
-#[derive(Component, Debug)]
-pub struct Speaker {
-    pub cut: crate::cut::CutId,
-    pub mouth: Vec2,
-}
 
 #[derive(Message, Default)]
 pub struct RestartScene;
@@ -62,19 +61,27 @@ fn drive_script(
     mut focus: ResMut<Focus>,
     mut script: Option<ResMut<ScriptState>>,
     mut active: ResMut<ActiveBalloon>,
+    handles: Option<Res<SceneHandles>>,
+    scenes: Res<Assets<SceneFile>>,
+    dialogues: Res<Assets<Dialogue>>,
     cuts: Query<&Cut>,
-    speakers: Query<&Speaker>,
     mut balloons: Query<&mut SpeechBalloon>,
     mut player: Query<(&mut Player, &mut Transform)>,
 ) {
-    let (Some(art), Some(script)) = (art, script.as_mut()) else {
+    let (Some(art), Some(script), Some(handles)) = (art, script.as_mut(), handles) else {
+        return;
+    };
+    let Some(scene) = scenes.get(&handles.scene) else {
         return;
     };
     let line_finished = active
         .0
         .and_then(|e| balloons.get(e).ok())
         .is_none_or(|b| b.finished());
-    let at_right_edge = player.single().map(|p| p.0.at_right_edge).unwrap_or(false);
+    let (player_cut, player_x, at_right, at_left) = player
+        .single()
+        .map(|(p, _)| (p.cut.clone(), p.walker.x, p.at_right_edge, p.at_left_edge))
+        .unwrap_or_default();
     let mut out = Vec::new();
     script.tick(
         time.delta_secs(),
@@ -82,52 +89,60 @@ fn drive_script(
             interact: input.interact,
             slide_done: !focus.is_sliding(),
             line_finished,
-            at_right_edge,
+            at_right_edge: at_right,
+            at_left_edge: at_left,
+            player_cut: &player_cut,
+            player_x,
         },
         &mut out,
     );
     for command in out {
+        info!("flow: {command:?}");
         match command {
-            Command::Focus(id) => {
-                let Some(cut) = find_cut(cuts.iter(), id) else {
-                    warn!("script asked for unknown cut {id:?}");
+            Command::Focus(id) => match find_cut(cuts.iter(), &id) {
+                Some(cut) => focus.go(cut),
+                None => warn!("flow asked for unknown cut {id:?}"),
+            },
+            Command::Path(frames) => focus.go_path(&frames),
+            Command::MovePlayer { cut, x } => {
+                let Some(cut) = find_cut(cuts.iter(), &cut) else {
+                    warn!("flow moves the player to unknown cut {cut:?}");
                     continue;
                 };
-                focus.go(cut);
-                if id == script.exit
-                    && let Ok((mut player, mut transform)) = player.single_mut()
-                {
-                    // Walking out of the right edge arrives at the left of the next cut.
-                    player.walker = Walker::standing_at(cut.walk_min + 10.0, cut.floor_y);
+                if let Ok((mut player, mut transform)) = player.single_mut() {
+                    player.place(cut, x);
                     transform.translation.x = player.walker.x;
-                    transform.translation.y = player.walker.y + FOOT_OFFSET;
+                    transform.translation.y = player.walker.y + player.foot_offset();
                 }
             }
-            Command::Speak(line) => {
-                let Some(cut) = find_cut(cuts.iter(), line.cut) else {
+            Command::Speak(id) => {
+                let Some(ChildDef::Balloon(def)) = scene
+                    .cuts
+                    .iter()
+                    .flat_map(|c| c.children.iter())
+                    .find(|c| c.id() == id)
+                else {
+                    warn!("flow says unknown balloon {id:?}");
                     continue;
                 };
-                let mouth = speakers
-                    .iter()
-                    .find(|s| s.cut == line.cut)
-                    .map(|s| s.mouth)
-                    .unwrap_or(cut.center);
-                let size = Vec2::new(cut.size.x * 0.78, 140.0);
-                let at = cut.center
-                    + Vec2::new(0.0, cut.size.y * 0.5 - 110.0 - line.slot as f32 * 155.0);
-                let id = spawn_balloon(
+                let text = handles
+                    .dialogue
+                    .as_ref()
+                    .and_then(|h| dialogues.get(h))
+                    .and_then(|d| d.text(&def.line))
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("[missing: {}]", def.line));
+                let entity = spawn_balloon(
                     &mut commands,
                     &art,
                     &mut meshes,
                     &mut materials,
-                    at,
-                    size,
-                    mouth,
-                    line.text,
-                    line.kind,
+                    def,
+                    &text,
+                    false,
                     SceneEntity,
                 );
-                active.0 = Some(id);
+                active.0 = Some(entity);
             }
             Command::RevealLine => {
                 if let Some(mut balloon) = active.0.and_then(|e| balloons.get_mut(e).ok()) {
@@ -136,18 +151,4 @@ fn drive_script(
             }
         }
     }
-}
-
-/// Removes everything a scene spawned and resets the shared clocks.
-pub fn clear_scene(
-    commands: &mut Commands,
-    entities: impl IntoIterator<Item = Entity>,
-    tick: &mut CrossDissolveTick,
-    active: &mut ActiveBalloon,
-) {
-    for entity in entities {
-        commands.entity(entity).despawn();
-    }
-    *tick = CrossDissolveTick::default();
-    active.0 = None;
 }

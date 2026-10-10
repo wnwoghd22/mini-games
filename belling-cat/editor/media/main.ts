@@ -1,19 +1,20 @@
 // Webview entry: canvas editor for *.scene.json (cuts, children, flow, camera paths, preview).
 
-import { type Scene, type Cut, type Vec2, type Step, type Trigger, type Keyframe, type Child, type BalloonChild, type SpriteChild, VIEW, FILL, SLIDE_SECONDS, stepKind, emptyScene } from "./model";
+import { type Scene, type Cut, type Vec2, type Step, type Trigger, type TriggerKind, type Keyframe, type Child, type BalloonChild, type SpriteChild, VIEW, FILL, SLIDE_SECONDS, stepKind, emptyScene } from "./model";
 import { triangulate, contains, bbox, boxCenter, boxSize, segmentDistance, dist } from "./polygon";
 import { formatScene } from "./format";
 import { parseDialogue } from "./dialogue";
 import { balloonOutline, tailTip, tailBase, thoughtBubbles, hasTail, type BalloonKind } from "./balloon";
 import { ATLASES, parseFrame, frameCount } from "./atlases";
 import { snapPoint, snapBox, constrainAxis } from "./snap";
+import { layoutFlow, insertStep, moveStep, removeStep, type FlowNode } from "./flow";
 
 declare function acquireVsCodeApi(): { postMessage(m: unknown): void; getState(): unknown; setState(s: unknown): void };
 const vscode = acquireVsCodeApi();
 
 // ---------- state ----------
 
-type Tool = "select" | "draw";
+type Tool = "select" | "draw" | "flow";
 interface Camera { x: number; y: number; zoom: number }
 interface Selection {
   cut: number;        // -1 none
@@ -22,6 +23,7 @@ interface Selection {
   trigger: number;    // -1 none
   step: number;       // -1 none
   keyframe: number;   // -1 none
+  entry: boolean;     // flow mode: the trigger's entry node (node 0) is selected
 }
 
 let scene: Scene = emptyScene();
@@ -32,7 +34,11 @@ let assetsBase = "";
 const atlasImages = new Map<string, HTMLImageElement | null>();
 
 let tool: Tool = "select";
-const sel: Selection = { cut: -1, vertex: -1, child: -1, trigger: -1, step: -1, keyframe: -1 };
+const sel: Selection = { cut: -1, vertex: -1, child: -1, trigger: -1, step: -1, keyframe: -1, entry: false };
+/** Flow mode: waiting for a click that places a new entry node. */
+let pendingEntry = false;
+/** Flow mode: a node being dragged (reorder, or re-target for the entry node). */
+let flowDrag: { trigger: number; node: number; start: Vec2; current: Vec2; moved: boolean } | null = null;
 const view = { x: 0, y: 200, scale: 0.45 };
 let drawing: Vec2[] = [];
 let mouseWorld: Vec2 = [0, 0];
@@ -65,6 +71,7 @@ const cutListEl = document.getElementById("cut-list")!;
 const propsEl = document.getElementById("props")!;
 const flowEl = document.getElementById("flow")!;
 const playBtn = document.getElementById("btn-play") as HTMLButtonElement;
+const flowBar = document.getElementById("flowbar")!;
 const stopBtn = document.getElementById("btn-stop") as HTMLButtonElement;
 
 // ---------- document sync ----------
@@ -192,7 +199,7 @@ function clampSelection() {
     if (sel.vertex >= scene.cuts[sel.cut].polygon.length) sel.vertex = -1;
     if (sel.child >= (scene.cuts[sel.cut].children ?? []).length) sel.child = -1;
   }
-  if (sel.trigger >= scene.flow.length) { sel.trigger = -1; sel.step = -1; }
+  if (sel.trigger >= scene.flow.length) { sel.trigger = -1; sel.step = -1; sel.entry = false; }
   if (sel.trigger >= 0 && sel.step >= scene.flow[sel.trigger].steps.length) sel.step = -1;
   const kfs = selectedPath();
   if (!kfs || sel.keyframe >= kfs.length) sel.keyframe = -1;
@@ -484,6 +491,8 @@ const COLORS = {
   player: "#ffffff",
   paper: "#faf6ec",
   ink: "#2a2622",
+  flow: "#ffb14a",
+  flowDim: "rgba(255,177,74,0.3)",
 };
 
 function render() {
@@ -504,9 +513,10 @@ function render() {
   scene.cuts.forEach((cut, i) => drawCut(cut, i === sel.cut));
   drawPlayer();
   const child = selectedChild();
-  if (child && !preview) drawChildHandles(child);
+  if (child && !preview && tool !== "flow") drawChildHandles(child);
   if (drawing.length) drawDrawing();
   if (!preview) drawSelectedPath();
+  drawFlowGraph();
   if (preview) drawPreview();
   if (drag) drawGuides();
 }
@@ -815,6 +825,20 @@ canvas.addEventListener("mousedown", (e) => {
   }
   if (e.button !== 0) return;
 
+  if (tool === "flow") {
+    // Keyframe handles of the selected path step still drag in flow mode.
+    const kfs = selectedPath();
+    if (kfs && !preview) {
+      for (let i = kfs.length - 1; i >= 0; i--) {
+        const f = kfs[i];
+        const corner: Vec2 = [f.x + (VIEW[0] * f.zoom) / 2, f.y - (VIEW[1] * f.zoom) / 2];
+        if (hitHandle(s, corner)) { sel.keyframe = i; drag = { kind: "keyframe", index: i, mode: "zoom", start: w, zoomStart: f.zoom }; return; }
+      }
+    }
+    flowMouseDown(s, w, e);
+    return;
+  }
+
   if (tool === "draw") {
     if (drawing.length >= 3 && hitHandle(s, drawing[0])) finishDrawing();
     else drawing.push(applyDrawSnap(w));
@@ -932,6 +956,12 @@ canvas.addEventListener("mousemove", (e) => {
   mouseWorld = w;
   setStatus(`${Math.round(w[0])}, ${Math.round(w[1])}${preview ? "   (preview)" : ""}`);
 
+  if (flowDrag) {
+    flowDrag.current = w;
+    if (dist(toScreen(flowDrag.start), s) > 6 * devicePixelRatio) flowDrag.moved = true;
+    render();
+    return;
+  }
   if (drag) {
     dirtyDuringDrag = true;
     switch (drag.kind) {
@@ -1034,6 +1064,7 @@ canvas.addEventListener("mousemove", (e) => {
 
 window.addEventListener("mouseup", () => {
   guides = { x: null, y: null };
+  if (flowDrag) { flowMouseUp(); return; }
   if (!drag) return;
   const wasEdit = drag.kind !== "pan" && dirtyDuringDrag;
   drag = null;
@@ -1081,9 +1112,19 @@ window.addEventListener("keydown", (e) => {
     commit();
     return;
   }
+  if (tool === "flow") {
+    if (e.key === "Delete" || e.key === "Backspace") { deleteFlowNode(); return; }
+    if (e.key === "Escape") {
+      if (pendingEntry) pendingEntry = false;
+      else { sel.entry = false; sel.step = -1; sel.keyframe = -1; }
+      renderFlow(); renderFlowBar(); render();
+      return;
+    }
+  }
   switch (e.key) {
     case "v": case "V": setTool("select"); break;
     case "p": case "P": setTool("draw"); break;
+    case "f": case "F": setTool(tool === "flow" ? "select" : "flow"); break;
     case "Enter": if (tool === "draw" && drawing.length >= 3) finishDrawing(); break;
     case "Escape":
       if (drawing.length) { drawing = []; render(); }
@@ -1140,6 +1181,10 @@ function finishDrawing() {
 function setTool(t: Tool) {
   tool = t;
   drawing = [];
+  pendingEntry = false;
+  flowDrag = null;
+  if (t === "flow" && sel.trigger < 0 && scene.flow.length) sel.trigger = 0;
+  renderFlowBar();
   document.querySelectorAll<HTMLButtonElement>("button.tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === t));
   canvas.style.cursor = t === "draw" ? "crosshair" : "default";
   render();
@@ -1213,6 +1258,319 @@ function renameChild(child: Child, newId: string) {
   for (const t of scene.flow) for (const s of t.steps) if ("say" in s && s.say === old) s.say = newId;
 }
 
+// ---------- flow mode ----------
+
+const FLOW_R = 13; // css px
+
+function flowNodes(ti: number): FlowNode[] {
+  return layoutFlow(scene, scene.flow[ti]);
+}
+
+/** 1-based step index of the selected node, 0 for the entry, -1 for none. */
+function selectedNodeIndex(): number {
+  if (sel.trigger < 0) return -1;
+  if (sel.entry) return 0;
+  return sel.step >= 0 ? sel.step + 1 : -1;
+}
+
+function selectNode(ti: number, node: number, keyframe = -1) {
+  sel.trigger = ti;
+  sel.entry = node === 0;
+  sel.step = node > 0 ? node - 1 : -1;
+  sel.keyframe = keyframe;
+  renderFlow();
+  renderFlowBar();
+  render();
+}
+
+/** Where new steps go: right after the selected node, else at the end. */
+function insertionIndex(): number {
+  const n = selectedNodeIndex();
+  if (sel.trigger < 0) return 0;
+  return n < 0 ? scene.flow[sel.trigger].steps.length : n;
+}
+
+function addFlowStep(step: Step) {
+  if (sel.trigger < 0) {
+    if (!scene.flow.length) return;
+    sel.trigger = 0;
+  }
+  const idx = insertStep(scene.flow[sel.trigger], step, insertionIndex());
+  sel.entry = false;
+  sel.step = idx - 1;
+  sel.keyframe = "path" in step ? step.path.length - 1 : -1;
+  commit();
+  renderFlowBar();
+}
+
+function childAt(w: Vec2): { cutIndex: number; childIndex: number; child: Child } | null {
+  for (let ci = scene.cuts.length - 1; ci >= 0; ci--) {
+    const cut = scene.cuts[ci];
+    const order = (cut.children ?? []).map((c, i) => ({ c, i })).sort((a, b) => (b.c.z ?? 1) - (a.c.z ?? 1));
+    for (const { c, i } of order) {
+      if (c.clip !== false && !contains(cut.polygon, w)) continue;
+      if (childContains(c, w)) return { cutIndex: ci, childIndex: i, child: c };
+    }
+  }
+  return null;
+}
+
+function cutIndexAt(w: Vec2): number {
+  for (let i = scene.cuts.length - 1; i >= 0; i--) if (contains(scene.cuts[i].polygon, w)) return i;
+  return -1;
+}
+
+function hitFlowNode(s: Vec2): { trigger: number; node: FlowNode } | null {
+  const order = [...scene.flow.keys()];
+  if (sel.trigger >= 0) order.sort((a, b) => (a === sel.trigger ? -1 : b === sel.trigger ? 1 : 0));
+  for (const ti of order) {
+    const nodes = flowNodes(ti);
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      if (dist(s, toScreen(nodes[i].pos)) <= (FLOW_R + 3) * devicePixelRatio) return { trigger: ti, node: nodes[i] };
+    }
+  }
+  return null;
+}
+
+function flowMouseDown(s: Vec2, w: Vec2, e: MouseEvent) {
+  if (preview) return;
+  if (pendingEntry) {
+    const hit = childAt(w);
+    const trigger: Trigger = hit ? { on: "z", target: hit.child.id, range: 80, steps: [] } : { on: "z", steps: [] };
+    scene.flow.push(trigger);
+    pendingEntry = false;
+    sel.trigger = scene.flow.length - 1;
+    sel.entry = true;
+    sel.step = -1;
+    commit();
+    renderFlowBar();
+    return;
+  }
+  const node = hitFlowNode(s);
+  if (node) {
+    selectNode(node.trigger, node.node.index, node.node.keyframe ?? -1);
+    flowDrag = { trigger: node.trigger, node: node.node.index, start: w, current: w, moved: false };
+    return;
+  }
+  if (!scene.flow.length) {
+    setStatus("No flow yet: use + entry, then click an object.");
+    return;
+  }
+  if (sel.trigger < 0) sel.trigger = 0;
+  const ci = cutIndexAt(w);
+  if (e.shiftKey) {
+    const zoom = ci >= 0 ? cutCamera(scene.cuts[ci]).zoom : 1;
+    const current = sel.step >= 0 ? scene.flow[sel.trigger].steps[sel.step] : undefined;
+    if (current && "path" in current) {
+      const last = current.path[current.path.length - 1];
+      current.path.push({ x: snap1(w[0]), y: snap1(w[1]), zoom: last ? last.zoom : Math.round(zoom * 100) / 100, t: last ? Math.round((last.t + 1) * 10) / 10 : 1 });
+      sel.keyframe = current.path.length - 1;
+      commit();
+    } else {
+      addFlowStep({ path: [{ x: snap1(w[0]), y: snap1(w[1]), zoom: Math.round(zoom * 100) / 100, t: 1 }] });
+    }
+    return;
+  }
+  if (e.altKey) {
+    if (ci >= 0 && scene.cuts[ci].floor_y !== undefined) addFlowStep({ player: { cut: scene.cuts[ci].id, x: snap1(w[0]) } });
+    else setStatus("Alt+click a cut with a floor to add a player move.");
+    return;
+  }
+  const hit = childAt(w);
+  if (hit && hit.child.type === "balloon") {
+    addFlowStep({ say: hit.child.id });
+    return;
+  }
+  if (ci >= 0) addFlowStep({ focus: scene.cuts[ci].id });
+}
+
+function flowMouseUp() {
+  if (!flowDrag) return;
+  const d = flowDrag;
+  flowDrag = null;
+  if (!d.moved) { render(); return; }
+  const s = toScreen(d.current);
+  const trigger = scene.flow[d.trigger];
+  if (d.node === 0) {
+    // Entry node dropped on an object: re-target it.
+    const hit = childAt(d.current);
+    if (hit) { trigger.target = hit.child.id; trigger.range ??= 80; commit(); }
+    else { delete trigger.target; commit(); }
+    renderFlowBar();
+    return;
+  }
+  const over = hitFlowNode(s);
+  if (over && over.trigger === d.trigger && over.node.index !== d.node) {
+    const before = over.node.index === 0 ? 1 : over.node.index;
+    const idx = moveStep(trigger, d.node, before);
+    sel.step = idx - 1;
+    sel.entry = false;
+    commit();
+  } else if (!over) {
+    // Dropped past the end of the chain: move to the end.
+    const nodes = flowNodes(d.trigger);
+    const last = nodes[nodes.length - 1];
+    if (last && dist(s, toScreen(last.pos)) > FLOW_R * 4 * devicePixelRatio && d.node !== trigger.steps.length) {
+      // Only when dropped near the last node's far side; otherwise ignore the drop.
+      const lastScreen = toScreen(last.pos);
+      if (dist(s, lastScreen) < 80 * devicePixelRatio) {
+        const idx = moveStep(trigger, d.node, trigger.steps.length + 1);
+        sel.step = idx - 1;
+        commit();
+      }
+    }
+  }
+  render();
+}
+
+function deleteFlowNode() {
+  if (sel.trigger < 0) return;
+  if (sel.entry) {
+    scene.flow.splice(sel.trigger, 1);
+    sel.trigger = scene.flow.length ? Math.min(sel.trigger, scene.flow.length - 1) : -1;
+    sel.entry = false;
+    sel.step = -1;
+  } else if (sel.step >= 0) {
+    const step = scene.flow[sel.trigger].steps[sel.step];
+    if ("path" in step && sel.keyframe >= 0 && step.path.length > 1) {
+      step.path.splice(sel.keyframe, 1);
+      sel.keyframe = Math.min(sel.keyframe, step.path.length - 1);
+    } else {
+      removeStep(scene.flow[sel.trigger], sel.step + 1);
+      sel.step = -1;
+      sel.keyframe = -1;
+    }
+  }
+  commit();
+  renderFlowBar();
+}
+
+function shiftFlowNode(delta: number) {
+  if (sel.trigger < 0 || sel.step < 0) return;
+  const trigger = scene.flow[sel.trigger];
+  const from = sel.step + 1;
+  const to = from + delta;
+  if (to < 1 || to > trigger.steps.length) return;
+  const idx = moveStep(trigger, from, delta > 0 ? to + 1 : to);
+  sel.step = idx - 1;
+  commit();
+}
+
+function drawArrow(a: Vec2, b: Vec2, color: string) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const ux = dx / len, uy = dy / len;
+  const r = FLOW_R * devicePixelRatio;
+  const start: Vec2 = [a[0] + ux * r, a[1] + uy * r];
+  const end: Vec2 = [b[0] - ux * (r + 2 * devicePixelRatio), b[1] - uy * (r + 2 * devicePixelRatio)];
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  line(start, end);
+  const h = 7 * devicePixelRatio;
+  ctx.beginPath();
+  ctx.moveTo(end[0], end[1]);
+  ctx.lineTo(end[0] - ux * h - uy * h * 0.5, end[1] - uy * h + ux * h * 0.5);
+  ctx.lineTo(end[0] - ux * h + uy * h * 0.5, end[1] - uy * h - ux * h * 0.5);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawFlowGraph() {
+  if (tool !== "flow") return;
+  const dpr = devicePixelRatio;
+  scene.flow.forEach((trigger, ti) => {
+    const active = ti === sel.trigger || sel.trigger < 0;
+    const color = active ? COLORS.flow : COLORS.flowDim;
+    const nodes = flowNodes(ti);
+    ctx.lineWidth = (active ? 1.5 : 1) * dpr;
+    for (let i = 1; i < nodes.length; i++) drawArrow(toScreen(nodes[i - 1].pos), toScreen(nodes[i].pos), color);
+    for (const n of nodes) {
+      const s = toScreen(n.pos);
+      const selected = ti === sel.trigger && ((n.index === 0 && sel.entry) || (n.index > 0 && sel.step === n.index - 1 && (n.keyframe === undefined || n.keyframe === sel.keyframe)));
+      const r = FLOW_R * dpr;
+      ctx.beginPath();
+      if (n.index === 0) {
+        ctx.moveTo(s[0], s[1] - r * 1.3);
+        ctx.lineTo(s[0] + r * 1.3, s[1]);
+        ctx.lineTo(s[0], s[1] + r * 1.3);
+        ctx.lineTo(s[0] - r * 1.3, s[1]);
+        ctx.closePath();
+      } else {
+        ctx.arc(s[0], s[1], r, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = selected ? COLORS.flow : "#2a2622";
+      ctx.fill();
+      ctx.strokeStyle = selected ? "#ffffff" : color;
+      ctx.lineWidth = (selected ? 2.5 : 1.5) * dpr;
+      ctx.stroke();
+      ctx.fillStyle = selected ? "#1a1714" : color;
+      ctx.font = `bold ${11 * dpr}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(n.keyframe !== undefined && n.keyframe > 0 ? `${n.index}.${n.keyframe + 1}` : String(n.index), s[0], s[1] + 4 * dpr);
+      ctx.textAlign = "left";
+      ctx.font = `${11 * dpr}px sans-serif`;
+      if (n.label && (active || n.index === 0)) {
+        ctx.fillStyle = color;
+        ctx.fillText(n.label, s[0] + r + 4 * dpr, s[1] - r);
+      }
+    }
+    ctx.lineWidth = 1 * dpr;
+  });
+  if (flowDrag && flowDrag.moved) {
+    const nodes = flowNodes(flowDrag.trigger);
+    const from = nodes.find((n) => n.index === flowDrag!.node);
+    if (from) {
+      ctx.setLineDash([4 * dpr, 4 * dpr]);
+      ctx.strokeStyle = "#ffffff";
+      line(toScreen(from.pos), toScreen(flowDrag.current));
+      ctx.setLineDash([]);
+      const s = toScreen(flowDrag.current);
+      ctx.beginPath();
+      ctx.arc(s[0], s[1], FLOW_R * dpr, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  if (pendingEntry) {
+    ctx.fillStyle = COLORS.flow;
+    ctx.font = `${13 * dpr}px sans-serif`;
+    ctx.fillText("Click an object (or empty space) to place the new entry point…", 12 * dpr, canvas.height - 12 * dpr);
+    ctx.font = `${11 * dpr}px sans-serif`;
+  }
+}
+
+function renderFlowBar() {
+  flowBar.style.display = tool === "flow" ? "flex" : "none";
+  if (tool !== "flow") return;
+  const trigger = sel.trigger >= 0 ? scene.flow[sel.trigger] : undefined;
+  const items: Node[] = [];
+  items.push(button(pendingEntry ? "click a target…" : "+ entry", () => { pendingEntry = !pendingEntry; renderFlowBar(); render(); }, pendingEntry ? "small active" : "small"));
+  if (trigger) {
+    items.push(el("span", { class: "muted" }, ` flow ${sel.trigger + 1}/${scene.flow.length}: `));
+    items.push(button("+ wait", () => addFlowStep({ wait: 0.5 })));
+    items.push(button("+ return", () => addFlowStep({ return: true })));
+    items.push(button("◀", () => shiftFlowNode(-1)));
+    items.push(button("▶", () => shiftFlowNode(1)));
+    items.push(button("delete", deleteFlowNode));
+    if (sel.entry) {
+      items.push(el("span", { class: "muted" }, " entry:"));
+      items.push(selectInput(trigger.on, ["z", "near", "right_edge", "left_edge", "enter"].map((v) => ({ value: v })), (v) => { trigger.on = v as TriggerKind; commit(); renderFlowBar(); }));
+      if (trigger.on === "z" || trigger.on === "near") {
+        items.push(el("span", { class: "muted" }, trigger.target ? ` @${trigger.target}` : " (anywhere — drag onto an object)"));
+        if (trigger.target) {
+          items.push(el("span", { class: "muted" }, " range"));
+          items.push(numInline(trigger.range ?? 80, (v) => { trigger.range = v; commit(); }, 10));
+          items.push(button("detach", () => { delete trigger.target; delete trigger.range; commit(); renderFlowBar(); }));
+        }
+      }
+    }
+  } else {
+    items.push(el("span", { class: "muted" }, " click a node to select a flow, or + entry to start one"));
+  }
+  items.push(el("span", { class: "muted hint" }, "  click balloon = say · click cut = focus · Shift+click = camera path · Alt+click floor = player · drag node onto node = reorder"));
+  flowBar.replaceChildren(...items);
+}
+
 // ---------- panels ----------
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
@@ -1274,6 +1632,7 @@ function renderPanels() {
   renderCutList();
   renderProps();
   renderFlow();
+  renderFlowBar();
 }
 
 function renderCutList() {
@@ -1462,8 +1821,9 @@ function renderFlow() {
   const cutOptions = scene.cuts.map((c) => ({ value: c.id }));
   const balloonOptions = balloonIds().map((b) => ({ value: b.id, label: `${b.id} (${b.cut})` }));
   const triggers = scene.flow.map((trigger, ti) => {
-    const header = el("header", {},
-      selectInput(trigger.on, ["z", "right_edge", "left_edge", "enter"].map((v) => ({ value: v })), (v) => { trigger.on = v as Trigger["on"]; commit(); }),
+    const header = el("header", { class: ti === sel.trigger && sel.entry ? "selected" : "" },
+      selectInput(trigger.on, ["z", "near", "right_edge", "left_edge", "enter"].map((v) => ({ value: v })), (v) => { trigger.on = v as TriggerKind; commit(); }),
+      el("span", { class: "muted" }, trigger.target ? `@${trigger.target}` : ""),
       selectInput(trigger.when ?? "always", [{ value: "always" }, { value: "flow_done" }], (v) => { if (v === "always") delete trigger.when; else trigger.when = "flow_done"; commit(); }),
       button("▶", () => { sel.trigger = ti; startPreview(ti); }),
       button("×", () => { scene.flow.splice(ti, 1); if (sel.trigger === ti) { sel.trigger = -1; sel.step = -1; } commit(); })
@@ -1471,7 +1831,7 @@ function renderFlow() {
     const steps = trigger.steps.map((step, si) => renderStep(trigger, step, ti, si, cutOptions, balloonOptions));
     const add = button("+ step", () => { trigger.steps.push(defaultStep("say")); sel.trigger = ti; sel.step = trigger.steps.length - 1; commit(); });
     const box = el("div", { class: "trigger" + (ti === sel.trigger ? " selected" : "") }, header, ...steps, el("div", { class: "step" }, add));
-    box.addEventListener("click", () => { if (sel.trigger !== ti) { sel.trigger = ti; sel.step = -1; sel.keyframe = -1; renderFlow(); render(); } });
+    box.addEventListener("click", () => { if (sel.trigger !== ti) { sel.trigger = ti; sel.step = -1; sel.keyframe = -1; sel.entry = false; renderFlow(); renderFlowBar(); render(); } });
     return box;
   });
   flowEl.replaceChildren(...triggers, button("+ trigger", () => { scene.flow.push({ on: "z", steps: [] }); sel.trigger = scene.flow.length - 1; commit(); }));
@@ -1508,7 +1868,7 @@ function renderStep(trigger: Trigger, step: Step, ti: number, si: number, cutOpt
   );
   rowEl.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (sel.trigger !== ti || sel.step !== si) { sel.trigger = ti; sel.step = si; sel.keyframe = -1; renderFlow(); render(); }
+    if (sel.trigger !== ti || sel.step !== si || sel.entry) { sel.trigger = ti; sel.step = si; sel.keyframe = -1; sel.entry = false; renderFlow(); renderFlowBar(); render(); }
   });
   return rowEl;
 }
@@ -1538,6 +1898,9 @@ document.getElementById("btn-text")!.addEventListener("click", () => vscode.post
     render();
   },
   select: (cutIndex: number, childIndex: number) => { selectCut(cutIndex); sel.child = childIndex; renderPanels(); render(); },
+  setTool,
+  selectNode,
+  flowNodePos: (ti: number, node: number) => flowNodes(ti).find((n) => n.index === node)?.pos,
 };
 
 vscode.postMessage({ type: "ready" });

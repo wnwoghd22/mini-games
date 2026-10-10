@@ -5,6 +5,12 @@ edition = "2024"
 
 [dependencies]
 bevy = { version = "=0.19.0", default-features = false, features = ["2d"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Hot reload of scene files while the editor saves them; not available on the web.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+bevy = { version = "=0.19.0", default-features = false, features = ["2d", "file_watcher"] }
 
 [[bin]]
 name = "belling-cat-comic"

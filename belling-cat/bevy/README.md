@@ -1,6 +1,6 @@
 # Belling the Cat — comic prototype
 
-A Bevy 0.19 prototype of a game told across pencil-drawn comic panels ("cuts"). The first scene is a dark council room: a candle on a table, two council mice beside it and the player on the left. All in-game text is English, in Anime Ace BB (the downloaded package identifies itself as **Anime Ace 2.0 BB**).
+A Bevy 0.19 prototype of a game told across pencil-drawn comic panels ("cuts"). The game is **data driven**: it loads `assets/scenes/council.scene.json` (polygon cuts, their children, the player and the Z-driven flow) and the dialogue file it names. Edit those files with the VS Code Cut Editor in `../editor`; while the native build is running it reloads the scene whenever the file is saved. All in-game text is English, in Anime Ace BB (the downloaded package identifies itself as **Anime Ace 2.0 BB**).
 
 From the repository root:
 
@@ -11,7 +11,7 @@ cargo run
 
 The Anime Ace BB font is already installed locally at `assets/fonts/AnimeAceBB.ttf`. A fresh clone needs its own copy of the regular TTF at that path. Obtain it from [the author's Anime Ace BB listing](https://www.dafont.com/anime-ace-bb.font); use the regular `animeace2_reg.ttf` from that package, renamed to `AnimeAceBB.ttf`. The game exits with a useful message if the native font file is missing.
 
-The original JavaScript version remains at `belling-cat/index.html` while this new concept is evaluated.
+The scene to play is the `SCENE_PATH` constant in `src/main.rs`. The file format is documented in `../FORMAT.md`.
 
 ## Play
 
@@ -19,31 +19,34 @@ The original JavaScript version remains at `belling-cat/index.html` while this n
 | --- | --- |
 | Left / Right or A / D | Walk within the current cut |
 | Space or Up | Jump |
-| Z in the council room | Listen: the camera slides to the elder's close-up |
-| Z while a line is appearing | Reveal the rest of the line |
-| Z after a line is complete | Next line / next cut; the last line returns to the room |
-| Walk off the right edge after the meeting | Slide to the door cut |
-| R | Restart the scene |
+| Z | Start a `z` trigger (near its target if it has one), reveal the current line, or go to the next step |
+| Walk off a walk-range edge | Starts `right_edge` / `left_edge` triggers |
+| R | Reload the scene file |
 | F12 (native only) | Save a screenshot to `verification/` |
 
-Movement is locked while the camera slides and while a balloon is active. Balloons stay on the page once shown, so returning to a close-up shows what was said there.
+Movement is locked while the camera slides and while a balloon is active. Balloons stay on the page once shown.
 
 ## Modules (`src/`)
 
 | Module | Role |
 | --- | --- |
-| `art` | Asset handles, loading, atlas cell rectangles, code-generated placeholder textures (candle, table) |
+| `scene_file` | serde model of `*.scene.json` and the asset loaders for scene and dialogue files |
+| `dialogue` | `*.dialogue.txt` parser (`[id] speaker` + body) |
+| `polygon` | Ear clipping, point-in-polygon, bounding box, polygon meshes |
+| `art` | Asset handles, the sprite-atlas table (`"atlas:index"` frames), code-generated placeholder textures (candle, table) |
 | `dissolve` | `CrossDissolveTick` resource + `FixedUpdate` `cross_dissolve` system + `CrossDissolvable` component |
-| `cut` | `Cut` panels on the page, `Focus` camera slide/zoom, `FollowCamera` page text |
-| `balloon` | `SpeechBalloon` spawn, typewriter, hand-inked outline |
-| `player` | Input, side-view walking/jumping, pose selection |
-| `script` | Engine-free scene progression (`Beat`s → `Command`s), unit-tested |
+| `cut` | Polygon `Cut` panels, `Focus` camera track (slides and free `path` keyframes), `FollowCamera` page text |
+| `balloon` | `SpeechBalloon` spawn from a balloon child (speech / shout / thought), typewriter, hand-inked outline |
+| `player` | Input, side-view walking/jumping within the current cut's floor and walk range, pose selection |
+| `script` | Engine-free flow: triggers (`z`, `near`, edges, `enter` with `target`/`range`/`when`/`once`) and steps, unit-tested |
 | `ink` | Gizmo outlines for cuts and balloons, title and footer hints |
-| `scenes` | Script driver, restart, and `scenes::meeting_room` (the first scene) |
+| `scenes` | `loader` spawns the scene file and hot-reloads it; the driver applies script commands |
+
+Not yet in the runtime (next steps): clipping children to their cut polygon (`clip`), and the editor's in-place dialogue editing.
 
 ## Pencil motion
 
-Every animated drawing — the candle flame, the council mice, the player — is a `CrossDissolvable` owning two sprite layers. One global `CrossDissolveTick` beats every 360 ms in `FixedUpdate`; on each beat every drawing swaps to its next frame, and right after the beat the old drawing fades out while the new one fades in over 180 ms. A pair showing the same drawing at the same place does not blend, so an idle pose holds steady. Because there is one tick, everything on the page changes on the same cadence. `Cycle` drawings loop their frames (candle, NPCs); the player uses `Hold` so its pose (idle / two walk strides / jump) is chosen by `player.rs`, and its `SampledMotion` marker keeps the drawings at the positions sampled on the last two beats while the physics underneath stays continuous.
+Every animated drawing — the candle flame, the council mice, the player — is a `CrossDissolvable` owning two sprite layers. One global `CrossDissolveTick` beats every 360 ms in `FixedUpdate`; on each beat every drawing swaps to its next frame, and right after the beat the old drawing fades out while the new one fades in over 180 ms. A pair showing the same drawing at the same place does not blend, so an idle pose holds steady. Because there is one tick, everything on the page changes on the same cadence. `cycle` sprites loop their frames; the player uses `hold` so its pose (idle / walk strides / jump) is chosen by `player.rs`, and its `SampledMotion` marker keeps the drawings at the positions sampled on the last two beats while the physics underneath stays continuous.
 
 Timing constants live in `src/dissolve.rs`; `SLIDE_SECONDS` in `src/cut.rs` controls the 900 ms camera slide.
 
@@ -65,7 +68,7 @@ cargo clippy --all-targets -- -D warnings
 
 `tools/shot.ps1` posts key presses to the running window (without stealing focus) and captures it, e.g. `powershell -File tools/shot.ps1 -keys "z,z,f12" -waitMs 2000 -out x.png`; F12 inside the game writes a real frame to `verification/`.
 
-Tests cover the cross-fade curve, frame cycling, camera slide easing, typewriter reveal, walking/jumping bounds, and the script's beat progression (slide locks, read delay, persistent balloons, leaving only after the meeting).
+Tests cover the cross-fade curve, frame cycling, camera slides and free paths, balloon shapes and typewriter, walking/jumping bounds, the dialogue parser, polygon triangulation, parsing the example scene, and the flow (target ranges, read delay, `when: flow_done`, `near`/`enter`, `wait`).
 
 ## Artwork and font
 

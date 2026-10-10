@@ -1,79 +1,81 @@
-//! Scene progression, independent of the engine.
+//! Scene flow, independent of the engine.
 //!
-//! A [`Script`] is a list of beats: focus a cut, speak a line in a cut, or return to the
-//! main cut. [`Script::tick`] consumes abstract input and emits [`Command`]s that the Bevy
-//! driver turns into camera slides and balloons. The driver lives in `scenes`.
+//! [`Script`] holds the triggers from the scene file. Each tick it consumes abstract input
+//! and emits [`Command`]s that the scene driver turns into camera moves, balloons and
+//! player moves. See FORMAT.md for the meaning of triggers and steps.
 
-use crate::{balloon::BalloonKind, cut::CutId};
-use bevy::prelude::*;
+use crate::scene_file::{KeyframeDef, StepDef, TriggerDef, TriggerOn, When};
+use bevy::{platform::collections::HashMap, prelude::*};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Line {
-    pub cut: CutId,
-    pub text: &'static str,
-    pub kind: BalloonKind,
-    /// Which balloon slot inside the cut (0 = first balloon shown there).
-    pub slot: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Beat {
-    Focus(CutId),
-    Line(Line),
-    Return,
-}
+pub const DEFAULT_RANGE: f32 = 80.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum After {
-    NextBeat,
+    NextStep,
     Explore,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Phase {
     Exploring,
     Sliding(After),
     Talking,
+    Waiting(f32),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ScriptInput {
+pub struct ScriptInput<'a> {
     pub interact: bool,
     pub slide_done: bool,
     pub line_finished: bool,
     pub at_right_edge: bool,
+    pub at_left_edge: bool,
+    pub player_cut: &'a str,
+    pub player_x: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Command {
-    Focus(CutId),
-    Speak(Line),
+    Focus(String),
+    Path(Vec<KeyframeDef>),
+    Speak(String),
     RevealLine,
+    MovePlayer { cut: String, x: f32 },
+}
+
+/// Where a trigger target sits: its cut and x, used for `range` checks.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TargetSpot {
+    pub cut: String,
+    pub x: f32,
 }
 
 #[derive(Debug, Clone)]
 pub struct Script {
-    beats: Vec<Beat>,
-    next: usize,
+    triggers: Vec<TriggerDef>,
+    fired: Vec<bool>,
+    targets: HashMap<String, TargetSpot>,
+    active: Option<(usize, usize)>,
     pub phase: Phase,
     read_delay: f32,
-    pub main: CutId,
-    pub exit: CutId,
-    pub meeting_done: bool,
-    pub left: bool,
+    pub flow_done: bool,
+    started: bool,
+    /// The cut the player is in after a `player` step in the same tick.
+    player_cut: Option<String>,
 }
 
 impl Script {
-    pub fn new(main: CutId, exit: CutId, beats: Vec<Beat>) -> Self {
+    pub fn new(triggers: Vec<TriggerDef>, targets: HashMap<String, TargetSpot>) -> Self {
         Self {
-            beats,
-            next: 0,
+            fired: vec![false; triggers.len()],
+            triggers,
+            targets,
+            active: None,
             phase: Phase::Exploring,
             read_delay: 0.0,
-            main,
-            exit,
-            meeting_done: false,
-            left: false,
+            flow_done: false,
+            started: false,
+            player_cut: None,
         }
     }
 
@@ -81,24 +83,64 @@ impl Script {
         self.phase == Phase::Exploring
     }
 
+    /// Index of the running trigger and the step about to run, for debugging and the footer.
+    pub fn active(&self) -> Option<(usize, usize)> {
+        self.active
+    }
+
+    fn within_range(&self, trigger: &TriggerDef, input: &ScriptInput) -> bool {
+        match &trigger.target {
+            None => true,
+            Some(id) => match self.targets.get(id) {
+                Some(spot) => {
+                    spot.cut == input.player_cut
+                        && (spot.x - input.player_x).abs() <= trigger.range.unwrap_or(DEFAULT_RANGE)
+                }
+                None => false,
+            },
+        }
+    }
+
+    fn ready(&self, index: usize, input: &ScriptInput) -> bool {
+        let trigger = &self.triggers[index];
+        if self.fired[index] && trigger.once {
+            return false;
+        }
+        if trigger.when == Some(When::FlowDone) && !self.flow_done {
+            return false;
+        }
+        match trigger.on {
+            TriggerOn::Z => input.interact && self.within_range(trigger, input),
+            TriggerOn::Near => self.within_range(trigger, input),
+            TriggerOn::RightEdge => input.at_right_edge,
+            TriggerOn::LeftEdge => input.at_left_edge,
+            TriggerOn::Enter => !self.started,
+        }
+    }
+
     pub fn tick(&mut self, dt: f32, input: ScriptInput, out: &mut Vec<Command>) {
         self.read_delay = (self.read_delay - dt).max(0.0);
+        self.player_cut = None;
         match self.phase {
             Phase::Exploring => {
-                if input.interact && !self.meeting_done && self.read_delay == 0.0 {
-                    self.run_next_beat(out);
-                } else if input.at_right_edge && self.meeting_done && !self.left {
-                    self.left = true;
-                    out.push(Command::Focus(self.exit));
-                    self.phase = Phase::Sliding(After::Explore);
+                if self.read_delay == 0.0 {
+                    let candidate = (0..self.triggers.len()).find(|&i| self.ready(i, &input));
+                    if let Some(i) = candidate {
+                        info!("flow: trigger {i} ({:?}) starts", self.triggers[i].on);
+                        self.fired[i] = true;
+                        self.active = Some((i, 0));
+                        self.run_next(&input, out);
+                    }
                 }
+                self.started = true;
             }
             Phase::Sliding(after) => {
                 if input.slide_done {
                     match after {
-                        After::NextBeat => self.run_next_beat(out),
+                        After::NextStep => self.run_next(&input, out),
                         After::Explore => {
                             self.phase = Phase::Exploring;
+                            self.active = None;
                             self.read_delay = 0.15;
                         }
                     }
@@ -107,33 +149,67 @@ impl Script {
             Phase::Talking => {
                 if input.interact && self.read_delay == 0.0 {
                     if input.line_finished {
-                        self.run_next_beat(out);
+                        self.run_next(&input, out);
                     } else {
                         out.push(Command::RevealLine);
                     }
                 }
             }
+            Phase::Waiting(remaining) => {
+                let left = remaining - dt;
+                if left <= 0.0 {
+                    self.run_next(&input, out);
+                } else {
+                    self.phase = Phase::Waiting(left);
+                }
+            }
         }
     }
 
-    fn run_next_beat(&mut self, out: &mut Vec<Command>) {
-        let beat = self.beats.get(self.next).copied().unwrap_or(Beat::Return);
-        self.next += 1;
-        match beat {
-            Beat::Focus(cut) => {
+    fn run_next(&mut self, input: &ScriptInput, out: &mut Vec<Command>) {
+        let Some((ti, si)) = self.active else {
+            self.phase = Phase::Exploring;
+            return;
+        };
+        let Some(step) = self.triggers[ti].steps.get(si).cloned() else {
+            // Steps exhausted without a return: back to exploring where the camera is.
+            self.phase = Phase::Exploring;
+            self.active = None;
+            self.read_delay = 0.15;
+            return;
+        };
+        self.active = Some((ti, si + 1));
+        match step {
+            StepDef::Focus(cut) => {
                 out.push(Command::Focus(cut));
-                self.phase = Phase::Sliding(After::NextBeat);
+                self.phase = Phase::Sliding(After::NextStep);
             }
-            Beat::Line(line) => {
-                out.push(Command::Speak(line));
+            StepDef::Path(frames) => {
+                out.push(Command::Path(frames));
+                self.phase = Phase::Sliding(After::NextStep);
+            }
+            StepDef::Say(balloon) => {
+                out.push(Command::Speak(balloon));
                 self.phase = Phase::Talking;
                 // An incoming Z press must not dismiss a freshly displayed balloon.
                 self.read_delay = 0.15;
             }
-            Beat::Return => {
-                out.push(Command::Focus(self.main));
+            StepDef::Wait(seconds) => {
+                self.phase = Phase::Waiting(seconds.max(0.0));
+            }
+            StepDef::Player(mv) => {
+                self.player_cut = Some(mv.cut.clone());
+                out.push(Command::MovePlayer { cut: mv.cut, x: mv.x });
+                self.run_next(input, out);
+            }
+            StepDef::Return(_) => {
+                let home = self
+                    .player_cut
+                    .clone()
+                    .unwrap_or_else(|| input.player_cut.to_string());
+                out.push(Command::Focus(home));
                 self.phase = Phase::Sliding(After::Explore);
-                self.meeting_done = true;
+                self.flow_done = true;
             }
         }
     }
@@ -145,156 +221,194 @@ pub struct ScriptState(pub Script);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scene_file::PlayerMove;
 
-    const MAIN: CutId = CutId("main");
-    const A: CutId = CutId("a");
-    const B: CutId = CutId("b");
-    const EXIT: CutId = CutId("exit");
-
-    fn line(cut: CutId, text: &'static str, slot: usize) -> Beat {
-        Beat::Line(Line {
-            cut,
-            text,
-            kind: BalloonKind::Speech,
-            slot,
-        })
+    fn trigger(on: TriggerOn, steps: Vec<StepDef>) -> TriggerDef {
+        TriggerDef {
+            on,
+            target: None,
+            range: None,
+            when: None,
+            once: true,
+            steps,
+        }
     }
 
     fn script() -> Script {
-        Script::new(
-            MAIN,
-            EXIT,
+        let mut targets = HashMap::new();
+        targets.insert(
+            "candle".to_string(),
+            TargetSpot {
+                cut: "main".into(),
+                x: 0.0,
+            },
+        );
+        let mut z = trigger(
+            TriggerOn::Z,
             vec![
-                Beat::Focus(A),
-                line(A, "one", 0),
-                line(A, "two", 1),
-                Beat::Focus(B),
-                line(B, "three", 0),
-                Beat::Return,
+                StepDef::Focus("a".into()),
+                StepDef::Say("b1".into()),
+                StepDef::Say("b2".into()),
+                StepDef::Return(true),
             ],
-        )
+        );
+        z.target = Some("candle".into());
+        z.range = Some(50.0);
+        let mut leave = trigger(
+            TriggerOn::RightEdge,
+            vec![
+                StepDef::Focus("exit".into()),
+                StepDef::Player(PlayerMove {
+                    cut: "exit".into(),
+                    x: 10.0,
+                }),
+            ],
+        );
+        leave.when = Some(When::FlowDone);
+        Script::new(vec![z, leave], targets)
     }
 
-    fn press(s: &mut Script, extra: ScriptInput) -> Vec<Command> {
+    fn input<'a>(cut: &'a str, x: f32) -> ScriptInput<'a> {
+        ScriptInput {
+            player_cut: cut,
+            player_x: x,
+            ..default()
+        }
+    }
+
+    fn press<'a>(s: &mut Script, base: ScriptInput<'a>) -> Vec<Command> {
         let mut out = Vec::new();
         s.tick(
             0.01,
             ScriptInput {
                 interact: true,
-                ..extra
+                ..base
             },
             &mut out,
         );
         out
     }
 
-    fn wait(s: &mut Script, seconds: f32) {
+    fn wait(s: &mut Script, seconds: f32, base: ScriptInput) {
         let mut out = Vec::new();
         for _ in 0..(seconds * 100.0).ceil() as usize {
-            s.tick(0.01, ScriptInput::default(), &mut out);
+            s.tick(0.01, base, &mut out);
         }
-        assert!(out.is_empty());
+        assert!(out.is_empty(), "unexpected commands while waiting: {out:?}");
     }
 
     #[test]
-    fn z_walks_through_focus_lines_and_return() {
+    fn z_only_fires_within_range_of_its_target() {
         let mut s = script();
-        assert_eq!(press(&mut s, default()), vec![Command::Focus(A)]);
-        assert_eq!(s.phase, Phase::Sliding(After::NextBeat));
-        // Input during the slide is ignored.
-        assert!(press(&mut s, default()).is_empty());
+        assert!(press(&mut s, input("main", 200.0)).is_empty());
+        assert!(press(&mut s, input("other", 0.0)).is_empty());
+        assert_eq!(
+            press(&mut s, input("main", 30.0)),
+            vec![Command::Focus("a".into())]
+        );
+        assert_eq!(s.phase, Phase::Sliding(After::NextStep));
+    }
+
+    #[test]
+    fn steps_run_in_order_and_return_sets_flow_done() {
+        let mut s = script();
+        let base = input("main", 0.0);
+        press(&mut s, base);
+        // Input during the slide is ignored; finishing the slide speaks the first line.
+        assert!(press(&mut s, base).is_empty());
         let mut out = Vec::new();
         s.tick(
             0.01,
             ScriptInput {
                 slide_done: true,
-                ..default()
+                ..base
             },
             &mut out,
         );
-        assert!(matches!(out[..], [Command::Speak(Line { cut: A, slot: 0, .. })]));
-        assert_eq!(s.phase, Phase::Talking);
-        // Z immediately after the balloon appears is swallowed by the read delay.
-        assert!(press(&mut s, default()).is_empty());
-        wait(&mut s, 0.2);
-        // Z while typing reveals; Z once finished advances.
-        assert_eq!(press(&mut s, default()), vec![Command::RevealLine]);
-        let out = press(
-            &mut s,
-            ScriptInput {
-                line_finished: true,
-                ..default()
-            },
-        );
-        assert!(matches!(out[..], [Command::Speak(Line { cut: A, slot: 1, .. })]));
-        wait(&mut s, 0.2);
-        let out = press(
-            &mut s,
-            ScriptInput {
-                line_finished: true,
-                ..default()
-            },
-        );
-        assert_eq!(out, vec![Command::Focus(B)]);
+        assert_eq!(out, vec![Command::Speak("b1".into())]);
+        // Z right after a balloon appears is swallowed; then it reveals, then advances.
+        assert!(press(&mut s, base).is_empty());
+        wait(&mut s, 0.2, base);
+        assert_eq!(press(&mut s, base), vec![Command::RevealLine]);
+        let finished = ScriptInput {
+            line_finished: true,
+            ..base
+        };
+        assert_eq!(press(&mut s, finished), vec![Command::Speak("b2".into())]);
+        wait(&mut s, 0.2, base);
+        assert_eq!(press(&mut s, finished), vec![Command::Focus("main".into())]);
+        assert!(s.flow_done);
         let mut out = Vec::new();
         s.tick(
             0.01,
             ScriptInput {
                 slide_done: true,
-                ..default()
-            },
-            &mut out,
-        );
-        assert!(matches!(out[..], [Command::Speak(Line { cut: B, .. })]));
-        wait(&mut s, 0.2);
-        let out = press(
-            &mut s,
-            ScriptInput {
-                line_finished: true,
-                ..default()
-            },
-        );
-        assert_eq!(out, vec![Command::Focus(MAIN)]);
-        assert!(s.meeting_done);
-        let mut out = Vec::new();
-        s.tick(
-            0.01,
-            ScriptInput {
-                slide_done: true,
-                ..default()
+                ..base
             },
             &mut out,
         );
         assert_eq!(s.phase, Phase::Exploring);
-        // The meeting does not restart.
-        wait(&mut s, 0.2);
-        assert!(press(&mut s, default()).is_empty());
+        // Fired once: Z near the candle does nothing now.
+        wait(&mut s, 0.2, base);
+        assert!(press(&mut s, base).is_empty());
     }
 
     #[test]
-    fn leaving_requires_the_meeting_to_be_over() {
+    fn edge_trigger_waits_for_flow_done_and_moves_the_player() {
         let mut s = script();
+        let edge = ScriptInput {
+            at_right_edge: true,
+            ..input("main", 100.0)
+        };
         let mut out = Vec::new();
-        s.tick(
-            0.01,
-            ScriptInput {
-                at_right_edge: true,
-                ..default()
-            },
-            &mut out,
-        );
+        s.tick(0.01, edge, &mut out);
         assert!(out.is_empty());
-        s.meeting_done = true;
+        s.flow_done = true;
+        s.tick(0.01, edge, &mut out);
+        assert_eq!(out, vec![Command::Focus("exit".into())]);
+        out.clear();
         s.tick(
             0.01,
             ScriptInput {
-                at_right_edge: true,
-                ..default()
+                slide_done: true,
+                ..edge
             },
             &mut out,
         );
-        assert_eq!(out, vec![Command::Focus(EXIT)]);
-        assert_eq!(s.phase, Phase::Sliding(After::Explore));
-        assert!(s.left);
+        assert_eq!(
+            out,
+            vec![Command::MovePlayer {
+                cut: "exit".into(),
+                x: 10.0
+            }]
+        );
+        assert_eq!(s.phase, Phase::Exploring);
+    }
+
+    #[test]
+    fn near_and_enter_start_without_a_key_and_wait_counts_down() {
+        let mut targets = HashMap::new();
+        targets.insert(
+            "door".to_string(),
+            TargetSpot {
+                cut: "main".into(),
+                x: 100.0,
+            },
+        );
+        let mut near = trigger(TriggerOn::Near, vec![StepDef::Wait(0.3), StepDef::Focus("x".into())]);
+        near.target = Some("door".into());
+        let enter = trigger(TriggerOn::Enter, vec![StepDef::Focus("intro".into())]);
+        let mut s = Script::new(vec![near, enter], targets);
+        let mut out = Vec::new();
+        s.tick(0.01, input("main", 0.0), &mut out);
+        assert_eq!(out, vec![Command::Focus("intro".into())]);
+        out.clear();
+        s.tick(0.01, ScriptInput { slide_done: true, ..input("main", 0.0) }, &mut out);
+        s.tick(0.2, input("main", 0.0), &mut out);
+        assert_eq!(s.phase, Phase::Exploring);
+        s.tick(0.01, input("main", 60.0), &mut out);
+        assert!(matches!(s.phase, Phase::Waiting(_)));
+        s.tick(0.5, input("main", 60.0), &mut out);
+        assert_eq!(out, vec![Command::Focus("x".into())]);
     }
 }

@@ -18,6 +18,7 @@
   <div id="toolbar">
     <button data-tool="select" class="tool active" title="V">Select</button>
     <button data-tool="draw" class="tool" title="P">Draw cut</button>
+    <button data-tool="flow" class="tool" title="F">Flow</button>
     <button id="btn-play" title="Play selected trigger (Space = next Z)">&#9654; Play</button>
     <button id="btn-stop" disabled>&#9632;</button>
     <span id="status"></span>
@@ -26,7 +27,7 @@
     <button id="btn-text">JSON</button>
   </div>
   <div id="main">
-    <canvas id="canvas" tabindex="0"></canvas>
+    <div id="canvas-wrap"><canvas id="canvas" tabindex="0"></canvas><div id="flowbar"></div></div>
     <aside id="side">
       <section id="cuts-panel"><h3>Cuts</h3><ul id="cut-list"></ul></section>
       <section id="props-panel"><h3>Cut</h3><div id="props"></div></section>

@@ -1,11 +1,13 @@
-//! Asset handles, loading, atlas cell rectangles and generated placeholder textures.
+//! Asset handles, loading, the sprite-atlas table and generated placeholder textures.
 //!
-//! Drawn art lives in `assets/art/`. Anything that has no drawing yet is rasterised in code
-//! here so a scene can be built before the artwork exists. To replace a placeholder, add the
-//! PNG described in `ART_DIRECTION.md` and point the matching `*_ART` constant at it.
+//! Scene files refer to sprite frames as `"atlas:index"`. The atlas table below names each
+//! atlas and says where it comes from: a PNG in `assets/art/` or an image rasterised here
+//! until the drawing exists. Keep it in sync with `editor/media/atlases.ts`.
 
+use crate::dissolve::Frame;
 use bevy::{
     asset::RenderAssetUsages,
+    platform::collections::HashMap,
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
@@ -18,18 +20,67 @@ pub const DARK_PAPER: Color = Color::srgb(0.16, 0.14, 0.12);
 pub const CANDLE_ART: Option<&str> = None;
 /// Optional drawn table: a single RGBA image.
 pub const TABLE_ART: Option<&str> = None;
-/// Optional drawn meeting room background: a single 3:4 image.
-pub const MEETING_ROOM_ART: Option<&str> = None;
+
+pub enum AtlasSource {
+    /// One image split into `cols` × `rows` equal cells.
+    Sheet {
+        image: Handle<Image>,
+        cols: usize,
+        rows: usize,
+    },
+    /// One image per frame (generated placeholders).
+    Separate(Vec<Handle<Image>>),
+}
 
 #[derive(Resource)]
 pub struct Art {
-    pub mouse: Handle<Image>,
-    pub walk: Handle<Image>,
     pub font: Handle<Font>,
-    /// Three candle drawings, flame leaning differently in each.
-    pub candle: Vec<Handle<Image>>,
-    pub table: Handle<Image>,
-    pub meeting_room: Option<Handle<Image>>,
+    pub atlases: HashMap<&'static str, AtlasSource>,
+}
+
+impl Art {
+    /// Resolves `"mouse:3"` into a drawable frame, once the images are loaded.
+    pub fn frame(&self, spec: &str, images: &Assets<Image>) -> Option<Frame> {
+        let (name, index) = spec.split_once(':')?;
+        let index: usize = index.parse().ok()?;
+        match self.atlases.get(name)? {
+            AtlasSource::Sheet { image, cols, rows } => {
+                let img = images.get(image)?;
+                if index >= cols * rows {
+                    return None;
+                }
+                Some(Frame {
+                    image: image.clone(),
+                    rect: Some(cell_rect(img, *cols, *rows, index)),
+                })
+            }
+            AtlasSource::Separate(handles) => Some(Frame {
+                image: handles.get(index)?.clone(),
+                rect: None,
+            }),
+        }
+    }
+
+    /// Frames for a list of specs; unknown specs are skipped with a warning.
+    pub fn frames(&self, specs: &[String], images: &Assets<Image>) -> Vec<Frame> {
+        specs
+            .iter()
+            .filter_map(|s| {
+                let f = self.frame(s, images);
+                if f.is_none() {
+                    warn!("unknown sprite frame {s:?}");
+                }
+                f
+            })
+            .collect()
+    }
+
+    fn handles(&self) -> impl Iterator<Item = &Handle<Image>> {
+        self.atlases.values().flat_map(|a| match a {
+            AtlasSource::Sheet { image, .. } => std::slice::from_ref(image).iter(),
+            AtlasSource::Separate(h) => h.iter(),
+        })
+    }
 }
 
 #[derive(Resource, Default)]
@@ -50,21 +101,48 @@ impl Plugin for ArtPlugin {
 }
 
 fn load_art(mut commands: Commands, server: Res<AssetServer>, mut images: ResMut<Assets<Image>>) {
-    let candle = match CANDLE_ART {
-        Some(path) => vec![server.load(path)],
-        None => placeholder_candle().into_iter().map(|i| images.add(i)).collect(),
-    };
-    let table = match TABLE_ART {
-        Some(path) => server.load(path),
-        None => images.add(placeholder_table()),
-    };
+    let mut atlases: HashMap<&'static str, AtlasSource> = HashMap::new();
+    atlases.insert(
+        "mouse",
+        AtlasSource::Sheet {
+            image: server.load("art/mouse-poses.png"),
+            cols: 2,
+            rows: 2,
+        },
+    );
+    atlases.insert(
+        "walk",
+        AtlasSource::Sheet {
+            image: server.load("art/mouse-walk-poses.png"),
+            cols: 2,
+            rows: 1,
+        },
+    );
+    atlases.insert(
+        "candle",
+        match CANDLE_ART {
+            Some(path) => AtlasSource::Sheet {
+                image: server.load(path),
+                cols: 3,
+                rows: 1,
+            },
+            None => AtlasSource::Separate(placeholder_candle().into_iter().map(|i| images.add(i)).collect()),
+        },
+    );
+    atlases.insert(
+        "table",
+        match TABLE_ART {
+            Some(path) => AtlasSource::Sheet {
+                image: server.load(path),
+                cols: 1,
+                rows: 1,
+            },
+            None => AtlasSource::Separate(vec![images.add(placeholder_table())]),
+        },
+    );
     commands.insert_resource(Art {
-        mouse: server.load("art/mouse-poses.png"),
-        walk: server.load("art/mouse-walk-poses.png"),
         font: server.load("fonts/AnimeAceBB.ttf"),
-        candle,
-        table,
-        meeting_room: MEETING_ROOM_ART.map(|p| server.load(p)),
+        atlases,
     });
 }
 
@@ -74,13 +152,7 @@ fn wait_for_art(
     fonts: Res<Assets<Font>>,
     mut ready: ResMut<Ready>,
 ) {
-    let loaded = images.contains(&art.mouse)
-        && images.contains(&art.walk)
-        && fonts.contains(&art.font)
-        && art.candle.iter().all(|h| images.contains(h))
-        && images.contains(&art.table)
-        && art.meeting_room.as_ref().is_none_or(|h| images.contains(h));
-    if loaded {
+    if fonts.contains(&art.font) && art.handles().all(|h| images.contains(h)) {
         ready.0 = true;
     }
 }
@@ -94,10 +166,6 @@ pub fn cell_rect(image: &Image, columns: usize, rows: usize, index: usize) -> Re
     let origin = Vec2::new((index % columns) as f32, (index / columns) as f32) * cell;
     Rect::from_corners(origin, origin + cell)
 }
-
-/// The mouse idle/jump atlas is 2×2; the walk strip is 2×1.
-pub const MOUSE_IDLE: usize = 0;
-pub const MOUSE_JUMP: usize = 3;
 
 fn raster(width: u32, height: u32, paint: impl Fn(f32, f32) -> Option<[u8; 4]>) -> Image {
     let mut data = vec![0u8; (width * height * 4) as usize];
@@ -151,7 +219,6 @@ pub fn placeholder_candle() -> Vec<Image> {
                 if (23.0..25.0).contains(&x) && (38.0..44.0).contains(&y) {
                     return Some(INK_PX);
                 }
-                // Candle body with an ink contour.
                 if (16.0..32.0).contains(&x) && (44.0..94.0).contains(&y) {
                     let edge = !(17.5..=30.5).contains(&x) || !(45.5..=92.5).contains(&y);
                     return Some(if edge { INK_PX } else { CREAM_PX });
@@ -187,10 +254,7 @@ mod tests {
     fn candle_poses_differ_only_in_the_flame() {
         let candle = placeholder_candle();
         assert_eq!(candle.len(), 3);
-        let body = |img: &Image| {
-            let data = img.data.as_ref().unwrap();
-            data[48 * 4 * 50..].to_vec()
-        };
+        let body = |img: &Image| img.data.as_ref().unwrap()[48 * 4 * 50..].to_vec();
         assert_eq!(body(&candle[0]), body(&candle[1]));
         assert_ne!(candle[0].data, candle[2].data);
     }

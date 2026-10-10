@@ -1,75 +1,91 @@
-//! Cuts: panels laid out on the page, and the camera that focuses one of them.
+//! Cuts: polygon panels laid out on the page, and the camera that focuses one of them.
 //!
-//! A [`Cut`] is a rectangle in world space. [`Focus`] names the cut the player should be
-//! looking at; the camera slides to its centre and zooms so the panel fills the view the way
-//! the main panel does. Text with [`FollowCamera`] stays at a fixed screen offset.
+//! A [`Cut`] is a simple polygon in world space. [`Focus`] drives the camera along a short
+//! track of keyframes: a slide to a cut's bounding box, or a free camera `path` from the
+//! scene file. Text with [`FollowCamera`] stays at a fixed screen offset.
 
+use crate::{
+    polygon,
+    scene_file::{Ease, KeyframeDef},
+};
 use bevy::{camera::ScalingMode, prelude::*};
 
 pub const VIEW: Vec2 = Vec2::new(1080.0, 940.0);
-/// Fraction of the view height the focused cut fills.
+/// Fraction of the view height the focused cut's bounding box fills.
 const FILL: f32 = 760.0 / 940.0;
 pub const SLIDE_SECONDS: f32 = 0.9;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct CutId(pub &'static str);
-
 #[derive(Component, Clone, Debug)]
 pub struct Cut {
-    pub id: CutId,
-    pub center: Vec2,
-    pub size: Vec2,
-    /// World y of the ground the player stands on inside this cut.
-    pub floor_y: f32,
-    /// World x range the player may walk within.
-    pub walk_min: f32,
-    pub walk_max: f32,
+    pub id: String,
+    pub polygon: Vec<Vec2>,
+    pub bbox: Rect,
+    /// World y of the ground the player stands on; `None` means the player cannot enter.
+    pub floor_y: Option<f32>,
+    /// World x range the player may walk within (defaults to the bounding box).
+    pub walk: Option<(f32, f32)>,
 }
 
 impl Cut {
-    pub fn new(id: CutId, center: Vec2, size: Vec2) -> Self {
+    pub fn new(id: impl Into<String>, polygon: Vec<Vec2>, floor_y: Option<f32>, walk: Option<(f32, f32)>) -> Self {
+        let bbox = polygon::bbox(&polygon);
         Self {
-            id,
-            center,
-            size,
-            floor_y: center.y - size.y * 0.34,
-            walk_min: center.x - size.x * 0.37,
-            walk_max: center.x + size.x * 0.37,
+            id: id.into(),
+            polygon,
+            bbox,
+            floor_y,
+            walk,
         }
+    }
+
+    pub fn center(&self) -> Vec2 {
+        self.bbox.center()
     }
 
     /// Camera zoom that fits this cut the way the main panel fits the default view.
     pub fn zoom(&self) -> f32 {
-        (self.size.x / VIEW.x).max(self.size.y / VIEW.y) / FILL
+        let size = self.bbox.size();
+        (size.x / VIEW.x).max(size.y / VIEW.y) / FILL
     }
 
-    pub fn left(&self) -> f32 {
-        self.center.x - self.size.x / 2.0
+    pub fn walk_range(&self) -> (f32, f32) {
+        self.walk.unwrap_or((self.bbox.min.x, self.bbox.max.x))
     }
-    pub fn bottom(&self) -> f32 {
-        self.center.y - self.size.y / 2.0
+
+    pub fn camera(&self) -> (Vec2, f32) {
+        (self.center(), self.zoom())
     }
 }
 
-pub fn find_cut<'a>(cuts: impl IntoIterator<Item = &'a Cut>, id: CutId) -> Option<&'a Cut> {
+pub fn find_cut<'a>(cuts: impl IntoIterator<Item = &'a Cut>, id: &str) -> Option<&'a Cut> {
     cuts.into_iter().find(|c| c.id == id)
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Key {
+    cam: (Vec2, f32),
+    t: f32,
+    ease: Ease,
 }
 
 #[derive(Resource, Debug)]
 pub struct Focus {
-    pub current: CutId,
-    from: (Vec2, f32),
-    to: (Vec2, f32),
+    /// Id of the cut the camera last slid to (free paths keep the previous id).
+    pub current: String,
+    track: Vec<Key>,
     elapsed: f32,
 }
 
 impl Default for Focus {
     fn default() -> Self {
         Self {
-            current: CutId(""),
-            from: (Vec2::ZERO, 1.0),
-            to: (Vec2::ZERO, 1.0),
-            elapsed: SLIDE_SECONDS,
+            current: String::new(),
+            track: vec![Key {
+                cam: (Vec2::ZERO, 1.0),
+                t: 0.0,
+                ease: Ease::Linear,
+            }],
+            elapsed: 0.0,
         }
     }
 }
@@ -77,39 +93,90 @@ impl Default for Focus {
 impl Focus {
     /// Jump to a cut without sliding.
     pub fn snap(&mut self, cut: &Cut) {
-        self.current = cut.id;
-        self.to = (cut.center, cut.zoom());
-        self.from = self.to;
-        self.elapsed = SLIDE_SECONDS;
+        self.current = cut.id.clone();
+        self.track = vec![Key {
+            cam: cut.camera(),
+            t: 0.0,
+            ease: Ease::Linear,
+        }];
+        self.elapsed = 0.0;
     }
 
-    /// Start a slide from wherever the camera is now.
+    /// Slide from wherever the camera is now to the cut.
     pub fn go(&mut self, cut: &Cut) {
         if cut.id == self.current && !self.is_sliding() {
             return;
         }
-        self.from = self.camera();
-        self.to = (cut.center, cut.zoom());
-        self.current = cut.id;
+        self.current = cut.id.clone();
+        let start = self.camera();
+        self.track = vec![
+            Key {
+                cam: start,
+                t: 0.0,
+                ease: Ease::Linear,
+            },
+            Key {
+                cam: cut.camera(),
+                t: SLIDE_SECONDS,
+                ease: Ease::Smooth,
+            },
+        ];
+        self.elapsed = 0.0;
+    }
+
+    /// Follow a free camera path starting from the current camera.
+    pub fn go_path(&mut self, frames: &[KeyframeDef]) {
+        let start = self.camera();
+        let mut track = vec![Key {
+            cam: start,
+            t: 0.0,
+            ease: Ease::Linear,
+        }];
+        let mut last_t = 0.0;
+        for f in frames {
+            let t = f.t.max(last_t);
+            track.push(Key {
+                cam: (Vec2::new(f.x, f.y), f.zoom.max(0.01)),
+                t,
+                ease: f.ease.unwrap_or_default(),
+            });
+            last_t = t;
+        }
+        self.track = track;
         self.elapsed = 0.0;
     }
 
     pub fn is_sliding(&self) -> bool {
-        self.elapsed < SLIDE_SECONDS
+        self.elapsed < self.end_time()
+    }
+
+    fn end_time(&self) -> f32 {
+        self.track.last().map(|k| k.t).unwrap_or(0.0)
     }
 
     pub fn advance(&mut self, dt: f32) {
-        self.elapsed = (self.elapsed + dt).min(SLIDE_SECONDS);
+        self.elapsed = (self.elapsed + dt).min(self.end_time().max(0.0));
     }
 
     /// Current camera centre and zoom.
     pub fn camera(&self) -> (Vec2, f32) {
-        let t = (self.elapsed / SLIDE_SECONDS).clamp(0.0, 1.0);
-        let eased = t * t * (3.0 - 2.0 * t);
-        (
-            self.from.0.lerp(self.to.0, eased),
-            self.from.1 + (self.to.1 - self.from.1) * eased,
-        )
+        let mut prev = self.track[0];
+        for key in &self.track[1..] {
+            if self.elapsed < key.t {
+                let span = (key.t - prev.t).max(1e-6);
+                let t = ((self.elapsed - prev.t) / span).clamp(0.0, 1.0);
+                let e = match key.ease {
+                    Ease::Linear => t,
+                    Ease::Smooth => t * t * (3.0 - 2.0 * t),
+                };
+                return (
+                    prev.cam.0.lerp(key.cam.0, e),
+                    prev.cam.1 + (key.cam.1 - prev.cam.1) * e,
+                );
+            }
+            prev = *key;
+        }
+        prev.cam
     }
 }
 
@@ -169,10 +236,25 @@ fn slide_camera(
 mod tests {
     use super::*;
 
+    fn rect(id: &str, center: Vec2, size: Vec2) -> Cut {
+        let h = size / 2.0;
+        Cut::new(
+            id,
+            vec![
+                center + Vec2::new(-h.x, h.y),
+                center + Vec2::new(h.x, h.y),
+                center + Vec2::new(h.x, -h.y),
+                center + Vec2::new(-h.x, -h.y),
+            ],
+            None,
+            None,
+        )
+    }
+
     #[test]
     fn slide_eases_between_cuts_and_reports_completion() {
-        let a = Cut::new(CutId("a"), Vec2::ZERO, Vec2::new(570.0, 760.0));
-        let b = Cut::new(CutId("b"), Vec2::new(400.0, 560.0), Vec2::splat(420.0));
+        let a = rect("a", Vec2::ZERO, Vec2::new(570.0, 760.0));
+        let b = rect("b", Vec2::new(400.0, 560.0), Vec2::splat(420.0));
         let mut f = Focus::default();
         f.snap(&a);
         assert!(!f.is_sliding());
@@ -185,13 +267,33 @@ mod tests {
         assert!(z < 1.0 && z > b.zoom());
         f.advance(SLIDE_SECONDS);
         assert!(!f.is_sliding());
-        assert_eq!(f.camera().0, b.center);
-        assert_eq!(f.current, CutId("b"));
+        assert_eq!(f.camera().0, b.center());
+        assert_eq!(f.current, "b");
     }
 
     #[test]
-    fn main_panel_has_unit_zoom() {
-        let a = Cut::new(CutId("a"), Vec2::ZERO, Vec2::new(570.0, 760.0));
-        assert!((a.zoom() - 1.0).abs() < 1e-6);
+    fn free_path_visits_keyframes_in_order() {
+        let a = rect("a", Vec2::ZERO, Vec2::new(570.0, 760.0));
+        let mut f = Focus::default();
+        f.snap(&a);
+        f.go_path(&[
+            KeyframeDef { x: 100.0, y: 0.0, zoom: 1.0, t: 1.0, ease: Some(Ease::Linear) },
+            KeyframeDef { x: 100.0, y: 200.0, zoom: 0.5, t: 3.0, ease: Some(Ease::Linear) },
+        ]);
+        f.advance(0.5);
+        assert_eq!(f.camera().0, Vec2::new(50.0, 0.0));
+        f.advance(1.5);
+        let (c, z) = f.camera();
+        assert_eq!(c, Vec2::new(100.0, 100.0));
+        assert!((z - 0.75).abs() < 1e-6);
+        f.advance(5.0);
+        assert!(!f.is_sliding());
+        assert_eq!(f.camera(), (Vec2::new(100.0, 200.0), 0.5));
+    }
+
+    #[test]
+    fn wide_panel_zooms_by_width() {
+        let wide = rect("w", Vec2::ZERO, Vec2::new(1400.0, 400.0));
+        assert!((wide.zoom() - 1400.0 / VIEW.x / FILL).abs() < 1e-6);
     }
 }

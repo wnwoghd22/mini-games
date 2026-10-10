@@ -7,70 +7,69 @@
       "id": "council",
       "label": "01 / THE COUNCIL",
       "polygon": [
-        [-618, -20],
-        [317, -20],
-        [317, -376],
-        [-618, -376]
+        [-635, -15],
+        [300, -15],
+        [300, -371],
+        [-635, -371]
       ],
       "fill": "dark",
-      "floor_y": -290,
-      "walk": [-359, 63],
+      "floor_y": -285,
+      "walk": [-376, 46],
       "children": [
-        { "type": "shape", "id": "glow", "pos": [-148, -170], "z": 0, "shape": "ellipse", "size": [460, 340], "color": "#f2b859", "alpha": 0.22 },
-        { "type": "shape", "id": "floor_line", "pos": [-148, -290], "z": 0.5, "shape": "rect", "size": [530, 2], "color": "ink", "alpha": 0.6 },
-        { "type": "sprite", "id": "table", "pos": [-148, -245], "z": 1, "size": [180, 90], "frames": ["table:0"], "mode": "hold" },
-        { "type": "sprite", "id": "candle", "pos": [-148, -178], "z": 2, "size": [40, 80], "frames": ["candle:0", "candle:1", "candle:2"] },
-        { "type": "sprite", "id": "elder", "pos": [-243, -234], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
-        { "type": "sprite", "id": "scout", "pos": [-53, -234], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
-        { "type": "balloon", "id": "b_me_1", "pos": [-148, 238], "size": [445, 140], "kind": "thought", "line": "me.1", "clip": false }
+        { "type": "shape", "id": "glow", "pos": [-151, -193], "z": 0, "shape": "ellipse", "size": [460, 340], "color": "#f2b859", "alpha": 0.22 },
+        { "type": "shape", "id": "floor_line", "pos": [-165, -285], "z": 0.5, "shape": "rect", "size": [530, 2], "color": "ink", "alpha": 0.6 },
+        { "type": "sprite", "id": "table", "pos": [-153, -238], "z": 1, "size": [180, 90], "frames": ["table:0"], "mode": "hold" },
+        { "type": "sprite", "id": "candle", "pos": [-147, -153], "z": 2, "size": [40, 80], "frames": ["candle:0", "candle:1", "candle:2"] },
+        { "type": "sprite", "id": "elder", "pos": [-288, -215], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "sprite", "id": "scout", "pos": [8, -224], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" }
       ]
     },
     {
       "id": "elder_closeup",
       "label": "02 / THE ELDER",
       "polygon": [
-        [-570, 1160],
-        [-90, 1160],
-        [-90, 520],
-        [-570, 520]
+        [-618, 680],
+        [-138, 680],
+        [-138, 40],
+        [-618, 40]
       ],
       "fill": "dark",
       "children": [
-        { "type": "sprite", "id": "elder_big", "pos": [-341, 681], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
-        { "type": "balloon", "id": "b_elder_1", "pos": [-330, 1050], "size": [374, 140], "tail": [51, -262], "kind": "speech", "line": "elder.1", "clip": false },
-        { "type": "balloon", "id": "b_elder_2", "pos": [-308, 899], "size": [374, 140], "tail": [55, -157], "kind": "speech", "line": "elder.2", "clip": false }
+        { "type": "sprite", "id": "elder_big", "pos": [-389, 201], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "balloon", "id": "b_elder_1", "pos": [-378, 570], "size": [374, 140], "tail": [51, -262], "kind": "speech", "line": "elder.1", "clip": false },
+        { "type": "balloon", "id": "b_elder_2", "pos": [-356, 419], "size": [374, 140], "tail": [55, -157], "kind": "speech", "line": "elder.2", "clip": false }
       ]
     },
     {
       "id": "scout_closeup",
       "label": "03 / THE SCOUT",
       "polygon": [
-        [92, 1160],
-        [572, 1160],
-        [572, 520],
-        [92, 520]
+        [-70, 680],
+        [410, 680],
+        [410, 40],
+        [-70, 40]
       ],
       "fill": "dark",
       "children": [
-        { "type": "sprite", "id": "scout_big", "pos": [332, 690], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
-        { "type": "balloon", "id": "b_scout_1", "pos": [332, 1050], "size": [374, 140], "tail": [-70, -320], "kind": "speech", "line": "scout.1", "clip": false },
-        { "type": "balloon", "id": "b_scout_2", "pos": [332, 895], "size": [374, 140], "tail": [-70, -165], "kind": "speech", "line": "scout.2", "clip": false }
+        { "type": "sprite", "id": "scout_big", "pos": [170, 210], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
+        { "type": "balloon", "id": "b_scout_1", "pos": [170, 570], "size": [374, 140], "tail": [-70, -320], "kind": "speech", "line": "scout.1", "clip": false },
+        { "type": "balloon", "id": "b_scout_2", "pos": [170, 415], "size": [374, 140], "tail": [-70, -165], "kind": "speech", "line": "scout.2", "clip": false }
       ]
     },
     {
       "id": "door",
       "label": "04 / THE DOOR",
       "polygon": [
-        [475, 360],
-        [1045, 360],
-        [1045, -400],
-        [475, -400]
+        [738, 332],
+        [1308, 332],
+        [1308, -428],
+        [738, -428]
       ],
       "fill": "dark",
-      "floor_y": -278,
-      "walk": [549, 971],
+      "floor_y": -306,
+      "walk": [812, 1234],
       "children": [
-        { "type": "text", "id": "tbc", "pos": [760, -58], "z": 1, "text": "TO BE CONTINUED", "size": 22, "color": "paper" }
+        { "type": "text", "id": "tbc", "pos": [1023, -86], "z": 1, "text": "TO BE CONTINUED", "size": 22, "color": "paper" }
       ]
     }
   ],
@@ -84,17 +83,23 @@
   "flow": [
     {
       "on": "z",
+      "range": 120,
       "steps": [
-        { "focus": "elder_closeup" },
         { "say": "b_elder_1" },
+        { "focus": "council" },
+        { "focus": "council" },
+        { "focus": "council" },
+        { "focus": "council" },
+        { "focus": "council" },
+        { "focus": "elder_closeup" },
         { "say": "b_elder_2" },
         { "focus": "council" },
-        { "say": "b_me_1" },
         { "focus": "scout_closeup" },
         { "say": "b_scout_1" },
         { "say": "b_scout_2" },
         { "return": true }
-      ]
+      ],
+      "target": "elder"
     },
     {
       "on": "right_edge",

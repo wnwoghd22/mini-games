@@ -5,9 +5,13 @@ use belling_cat_comic::{
     dissolve::DissolvePlugin,
     ink::InkPlugin,
     player::PlayerPlugin,
-    scenes::{SceneDriverPlugin, meeting_room::MeetingRoomPlugin},
+    scene_file::SceneFilePlugin,
+    scenes::{SceneDriverPlugin, loader::SceneLoaderPlugin},
 };
 use bevy::{asset::AssetMetaCheck, prelude::*, window::WindowResolution};
+
+/// The scene to play, relative to `assets/`. Edit it with the VS Code Cut Editor.
+const SCENE_PATH: &str = "scenes/council.scene.json";
 
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
@@ -32,6 +36,9 @@ fn main() {
             let path = "assets";
             path.into()
         },
+        // Reload the scene when the editor saves it (native only).
+        #[cfg(not(target_arch = "wasm32"))]
+        watch_for_changes_override: Some(true),
         ..default()
     };
 
@@ -50,13 +57,14 @@ fn main() {
         .insert_resource(ClearColor(PAPER))
         .add_plugins((
             ArtPlugin,
+            SceneFilePlugin,
             DissolvePlugin,
             CutPlugin,
             BalloonPlugin,
             PlayerPlugin,
             SceneDriverPlugin,
             InkPlugin,
-            MeetingRoomPlugin,
+            SceneLoaderPlugin { path: SCENE_PATH },
         ))
         .add_systems(Update, screenshot_on_f12)
         .run();
