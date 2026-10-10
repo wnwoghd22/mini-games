@@ -14,13 +14,13 @@
       ],
       "fill": "dark",
       "floor_y": -285,
-      "walk": [-376, 46],
+      "walk": [-608, 297],
       "children": [
         { "type": "shape", "id": "glow", "pos": [-151, -193], "z": 0, "shape": "ellipse", "size": [460, 340], "color": "#f2b859", "alpha": 0.22 },
         { "type": "shape", "id": "floor_line", "pos": [-165, -285], "z": 0.5, "shape": "rect", "size": [530, 2], "color": "ink", "alpha": 0.6 },
         { "type": "sprite", "id": "table", "pos": [-153, -238], "z": 1, "size": [180, 90], "frames": ["table:0"], "mode": "hold" },
         { "type": "sprite", "id": "candle", "pos": [-147, -153], "z": 2, "size": [40, 80], "frames": ["candle:0", "candle:1", "candle:2"] },
-        { "type": "sprite", "id": "elder", "pos": [-288, -215], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "sprite", "id": "elder", "pos": [-310, -224], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
         { "type": "sprite", "id": "scout", "pos": [8, -224], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" }
       ]
     },
@@ -82,14 +82,14 @@
       ],
       "fill": "dark",
       "children": [
-        { "type": "balloon", "id": "balloon", "pos": [-98, 230], "z": 5, "size": [320, 130], "tail": [175, -84], "kind": "speech", "line": "", "clip": false },
+        { "type": "balloon", "id": "balloon", "pos": [-116, 153], "z": 5, "size": [243, 94], "tail": [182, 21], "kind": "speech", "line": "", "clip": false },
         { "type": "balloon", "id": "balloon_2", "pos": [255, 69], "z": 5, "size": [320, 130], "tail": [-61, 90], "kind": "thought", "line": "", "clip": false }
       ]
     }
   ],
   "player": {
     "cut": "council",
-    "x": -203,
+    "x": -510,
     "size": [142, 142],
     "frames": { "idle": "mouse:0", "walk": ["walk:0", "walk:1"], "jump": "mouse:3" },
     "clip": true

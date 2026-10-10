@@ -24,6 +24,7 @@ interface Selection {
   step: number;       // -1 none
   keyframe: number;   // -1 none
   entry: boolean;     // flow mode: the trigger's entry node (node 0) is selected
+  player: boolean;    // the player start marker is selected
 }
 
 let scene: Scene = emptyScene();
@@ -34,7 +35,7 @@ let assetsBase = "";
 const atlasImages = new Map<string, HTMLImageElement | null>();
 
 let tool: Tool = "select";
-const sel: Selection = { cut: -1, vertex: -1, child: -1, trigger: -1, step: -1, keyframe: -1, entry: false };
+const sel: Selection = { cut: -1, vertex: -1, child: -1, trigger: -1, step: -1, keyframe: -1, entry: false, player: false };
 /** Flow mode: waiting for a click that places a new entry node. */
 let pendingEntry = false;
 /** Flow mode: a node being dragged (reorder, or re-target for the entry node). */
@@ -58,6 +59,7 @@ type Drag =
   | { kind: "child"; start: Vec2; origin: Vec2 }
   | { kind: "resize"; corner: Vec2; opposite: Vec2 }
   | { kind: "tail" }
+  | { kind: "player"; start: Vec2; originX: number }
   | null;
 let drag: Drag = null;
 let dirtyDuringDrag = false;
@@ -229,6 +231,21 @@ function childContains(child: Child, p: Vec2): boolean {
     return (dx * dx) / ((w / 2) * (w / 2)) + (dy * dy) / ((h / 2) * (h / 2)) <= 1;
   }
   return Math.abs(dx) <= w / 2 && Math.abs(dy) <= h / 2;
+}
+
+/** World rectangle of the player start marker (centre, size), or null if its cut has no floor. */
+function playerBox(): { center: Vec2; size: Vec2; cutIndex: number } | null {
+  const cutIndex = scene.cuts.findIndex((c) => c.id === scene.player.cut);
+  const cut = scene.cuts[cutIndex];
+  if (!cut || cut.floor_y === undefined) return null;
+  const size = scene.player.size ?? [142, 142];
+  return { center: [scene.player.x, cut.floor_y + size[1] / 2], size, cutIndex };
+}
+
+function playerContains(p: Vec2): boolean {
+  const b = playerBox();
+  if (!b) return false;
+  return Math.abs(p[0] - b.center[0]) <= b.size[0] / 2 && Math.abs(p[1] - b.center[1]) <= b.size[1] / 2;
 }
 
 function corners(child: Child): Vec2[] {
@@ -720,11 +737,13 @@ function drawPlayer() {
   const drawn = drawFrame(scene.player.frames.idle, center, [w, h], false);
   const s = toScreen(center);
   ctx.strokeStyle = COLORS.player;
+  ctx.lineWidth = (sel.player && !preview ? 2.5 : 1) * devicePixelRatio;
   if (!drawn || !preview) {
-    ctx.setLineDash(drawn ? [2 * devicePixelRatio, 4 * devicePixelRatio] : []);
+    ctx.setLineDash(drawn && !sel.player ? [2 * devicePixelRatio, 4 * devicePixelRatio] : []);
     ctx.strokeRect(s[0] - (w / 2) * view.scale, s[1] - (h / 2) * view.scale, w * view.scale, h * view.scale);
     ctx.setLineDash([]);
   }
+  ctx.lineWidth = 1 * devicePixelRatio;
   ctx.fillStyle = COLORS.player;
   if (!preview) ctx.fillText("player", s[0] - (w / 2) * view.scale + 3 * devicePixelRatio, s[1] - (h / 2) * view.scale - 3 * devicePixelRatio);
 }
@@ -809,7 +828,7 @@ function hitHandle(s: Vec2, p: Vec2): boolean {
 }
 
 function selectCut(i: number) {
-  if (sel.cut !== i) sel.child = -1;
+  if (sel.cut !== i) { sel.child = -1; sel.player = false; }
   sel.cut = i;
   sel.vertex = -1;
 }
@@ -885,7 +904,7 @@ canvas.addEventListener("mousedown", (e) => {
   }
 
   // Selected cut's handles (only when no child is selected, to keep clicks unambiguous).
-  if (sel.cut >= 0 && sel.child < 0) {
+  if (sel.cut >= 0 && sel.child < 0 && !sel.player) {
     const cut = scene.cuts[sel.cut];
     for (let i = 0; i < cut.polygon.length; i++) {
       if (hitHandle(s, cut.polygon[i])) {
@@ -912,6 +931,18 @@ canvas.addEventListener("mousedown", (e) => {
     }
   }
 
+  // The player start marker is an object like any other.
+  if (playerContains(w)) {
+    const box = playerBox()!;
+    selectCut(box.cutIndex);
+    sel.child = -1;
+    sel.player = true;
+    drag = { kind: "player", start: w, originX: scene.player.x };
+    renderPanels();
+    render();
+    return;
+  }
+
   // Children (topmost z first, across all cuts, topmost cut first).
   for (let ci = scene.cuts.length - 1; ci >= 0; ci--) {
     const cut = scene.cuts[ci];
@@ -921,6 +952,7 @@ canvas.addEventListener("mousedown", (e) => {
       if (childContains(c, w)) {
         selectCut(ci);
         sel.child = i;
+        sel.player = false;
         drag = { kind: "child", start: w, origin: [...c.pos] as Vec2 };
         renderPanels();
         render();
@@ -934,6 +966,7 @@ canvas.addEventListener("mousedown", (e) => {
     if (contains(scene.cuts[i].polygon, w)) {
       selectCut(i);
       sel.child = -1;
+      sel.player = false;
       drag = { kind: "cut", cut: i, start: w, origin: structuredClone(scene.cuts[i]) };
       renderPanels();
       render();
@@ -943,6 +976,7 @@ canvas.addEventListener("mousedown", (e) => {
   sel.cut = -1;
   sel.vertex = -1;
   sel.child = -1;
+  sel.player = false;
   drag = { kind: "pan", start: s, viewStart: [view.x, view.y] };
   renderPanels();
   render();
@@ -1040,6 +1074,24 @@ canvas.addEventListener("mousemove", (e) => {
         if (child.type === "balloon") child.tail = [snap1(w[0] - child.pos[0]), snap1(w[1] - child.pos[1])];
         break;
       }
+      case "player": {
+        // Dropping onto another cut with a floor moves the start there; otherwise slide along x.
+        const over = cutIndexAt(w);
+        if (over >= 0 && scene.cuts[over].floor_y !== undefined && scene.cuts[over].id !== scene.player.cut) {
+          scene.player.cut = scene.cuts[over].id;
+          selectCut(over);
+          sel.player = true;
+        }
+        const box = playerBox();
+        if (!box) break;
+        let target: Vec2 = [drag.originX + w[0] - drag.start[0], box.center[1]];
+        if (shiftHeld) target = [drag.originX, box.center[1]];
+        const cands = childCandidates(box.cutIndex, -1);
+        const r = altHeld ? { point: target, guideX: null, guideY: null } : snapBox(target, box.size, cands.xs, [], snapThreshold());
+        guides = { x: r.guideX, y: null };
+        scene.player.x = snap1(r.point[0]);
+        break;
+      }
     }
     render();
     return;
@@ -1103,6 +1155,12 @@ window.addEventListener("keydown", (e) => {
     } else if (e.key === "Escape") stopPreview();
     return;
   }
+  if (sel.player && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    scene.player.x += (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 10 : 1);
+    e.preventDefault();
+    commit();
+    return;
+  }
   const child = selectedChild();
   if (child && e.key.startsWith("Arrow")) {
     const step = e.shiftKey ? 10 : 1;
@@ -1128,7 +1186,7 @@ window.addEventListener("keydown", (e) => {
     case "Enter": if (tool === "draw" && drawing.length >= 3) finishDrawing(); break;
     case "Escape":
       if (drawing.length) { drawing = []; render(); }
-      else if (sel.child >= 0) { sel.child = -1; renderPanels(); render(); }
+      else if (sel.child >= 0 || sel.player) { sel.child = -1; sel.player = false; renderPanels(); render(); }
       else { sel.vertex = -1; sel.keyframe = -1; render(); renderFlow(); }
       break;
     case "Delete": case "Backspace":
@@ -1660,6 +1718,10 @@ function renderProps() {
     renderChildProps(child);
     return;
   }
+  if (sel.player) {
+    renderPlayerProps();
+    return;
+  }
   const cut = scene.cuts[sel.cut];
   const b = bbox(cut.polygon);
   const hasFloor = cut.floor_y !== undefined;
@@ -1689,8 +1751,27 @@ function renderProps() {
     row("bbox", el("span", { class: "muted" }, `${Math.round(boxSize(b)[0])} × ${Math.round(boxSize(b)[1])}  zoom ${cutCamera(cut).zoom.toFixed(2)}`)),
     el("div", { class: "row" }, button("Delete cut", () => { scene.cuts.splice(sel.cut, 1); sel.cut = -1; sel.child = -1; commit(); })),
     el("div", { class: "row" }, el("label", {}, "add"), button("sprite", () => addChild("sprite")), button("balloon", () => addChild("balloon")), button("text", () => addChild("text")), button("shape", () => addChild("shape"))),
+    ...(scene.player.cut === cut.id ? [el("div", { class: "row" }, el("label", {}, "player"), button(`starts here (x ${scene.player.x})`, () => { sel.player = true; renderProps(); render(); }))] : []),
     el("div", { class: "muted" }, `children (${(cut.children ?? []).length}) — click to select`),
     children
+  );
+}
+
+function renderPlayerProps() {
+  const p = scene.player;
+  const floorCuts = scene.cuts.filter((c) => c.floor_y !== undefined).map((c) => ({ value: c.id }));
+  const size = p.size ?? [142, 142];
+  const back = button(`← ${p.cut}`, () => { sel.player = false; renderProps(); render(); });
+  propsEl.replaceChildren(
+    el("div", { class: "row" }, back, el("span", { class: "muted" }, " player start")),
+    row("cut", selectInput(p.cut, floorCuts, (v) => { p.cut = v; sel.cut = scene.cuts.findIndex((c) => c.id === v); commit(); })),
+    row("x", numberInput(p.x, (v) => { p.x = v; commit(); })),
+    row("size", numberInput(size[0], (v) => { p.size = [v, size[1]]; commit(); }), numberInput(size[1], (v) => { p.size = [size[0], v]; commit(); })),
+    row("idle", textInput(p.frames.idle, (v) => { p.frames.idle = v; commit(); })),
+    row("walk", textInput(p.frames.walk.join(", "), (v) => { const f = v.split(",").map((s) => s.trim()).filter(Boolean); if (f.length) p.frames.walk = f; commit(); })),
+    row("jump", textInput(p.frames.jump, (v) => { p.frames.jump = v; commit(); })),
+    row("clip", checkbox(p.clip !== false, (v) => { if (v) delete p.clip; else p.clip = false; commit(); })),
+    el("div", { class: "muted" }, "Drag along the floor to move; drop on another cut with a floor to start there. Arrows nudge (Shift = 10).")
   );
 }
 
@@ -1898,6 +1979,7 @@ document.getElementById("btn-text")!.addEventListener("click", () => vscode.post
     render();
   },
   select: (cutIndex: number, childIndex: number) => { selectCut(cutIndex); sel.child = childIndex; renderPanels(); render(); },
+  playerCenter: () => playerBox()?.center,
   setTool,
   selectNode,
   flowNodePos: (ti: number, node: number) => flowNodes(ti).find((n) => n.index === node)?.pos,

@@ -32,6 +32,9 @@ pub struct ScriptInput<'a> {
     pub at_left_edge: bool,
     pub player_cut: &'a str,
     pub player_x: f32,
+    pub player_facing_left: bool,
+    /// Half the player's sprite width, for edge-to-edge distances.
+    pub player_half_width: f32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,11 +46,17 @@ pub enum Command {
     MovePlayer { cut: String, x: f32 },
 }
 
-/// Where a trigger target sits: its cut and x, used for `range` checks.
+/// Where a trigger target sits: its cut, centre x and half width, used for `range` checks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TargetSpot {
     pub cut: String,
     pub x: f32,
+    pub half_width: f32,
+}
+
+/// Horizontal gap between two sprites' edges (0 when they overlap).
+pub fn edge_gap(player_x: f32, player_half: f32, target_x: f32, target_half: f32) -> f32 {
+    ((target_x - player_x).abs() - player_half - target_half).max(0.0)
 }
 
 #[derive(Debug, Clone)]
@@ -88,17 +97,27 @@ impl Script {
         self.active
     }
 
-    fn within_range(&self, trigger: &TriggerDef, input: &ScriptInput) -> bool {
-        match &trigger.target {
-            None => true,
-            Some(id) => match self.targets.get(id) {
-                Some(spot) => {
-                    spot.cut == input.player_cut
-                        && (spot.x - input.player_x).abs() <= trigger.range.unwrap_or(DEFAULT_RANGE)
-                }
-                None => false,
-            },
+    /// True when the target is close enough: same cut, edge gap within `range`, and (for
+    /// `require_facing`) in front of the player unless the two already overlap.
+    fn within_range(&self, trigger: &TriggerDef, input: &ScriptInput, require_facing: bool) -> bool {
+        let Some(id) = &trigger.target else {
+            return true;
+        };
+        let Some(spot) = self.targets.get(id) else {
+            return false;
+        };
+        if spot.cut != input.player_cut {
+            return false;
         }
+        let gap = edge_gap(input.player_x, input.player_half_width, spot.x, spot.half_width);
+        if gap > trigger.range.unwrap_or(DEFAULT_RANGE) {
+            return false;
+        }
+        if require_facing && gap > 0.0 {
+            let target_is_left = spot.x < input.player_x;
+            return target_is_left == input.player_facing_left;
+        }
+        true
     }
 
     fn ready(&self, index: usize, input: &ScriptInput) -> bool {
@@ -110,8 +129,8 @@ impl Script {
             return false;
         }
         match trigger.on {
-            TriggerOn::Z => input.interact && self.within_range(trigger, input),
-            TriggerOn::Near => self.within_range(trigger, input),
+            TriggerOn::Z => input.interact && self.within_range(trigger, input, true),
+            TriggerOn::Near => self.within_range(trigger, input, false),
             TriggerOn::RightEdge => input.at_right_edge,
             TriggerOn::LeftEdge => input.at_left_edge,
             TriggerOn::Enter => !self.started,
@@ -241,6 +260,7 @@ mod tests {
             TargetSpot {
                 cut: "main".into(),
                 x: 0.0,
+                half_width: 20.0,
             },
         );
         let mut z = trigger(
@@ -272,6 +292,7 @@ mod tests {
         ScriptInput {
             player_cut: cut,
             player_x: x,
+            player_half_width: 70.0,
             ..default()
         }
     }
@@ -298,15 +319,53 @@ mod tests {
     }
 
     #[test]
-    fn z_only_fires_within_range_of_its_target() {
+    fn z_fires_when_facing_a_target_within_the_edge_gap() {
+        // Player half width 70, candle half width 20, range 50: fires when the gap <= 50.
         let mut s = script();
+        // Too far: gap = 200 - 90 = 110.
         assert!(press(&mut s, input("main", 200.0)).is_empty());
+        // Other cut.
         assert!(press(&mut s, input("other", 0.0)).is_empty());
+        // Close enough (gap 40) but facing away from the candle, which is to the left.
+        assert!(
+            press(
+                &mut s,
+                ScriptInput {
+                    player_facing_left: false,
+                    ..input("main", 130.0)
+                }
+            )
+            .is_empty()
+        );
+        // Same spot, facing the candle: fires before the sprites touch.
         assert_eq!(
-            press(&mut s, input("main", 30.0)),
+            press(
+                &mut s,
+                ScriptInput {
+                    player_facing_left: true,
+                    ..input("main", 130.0)
+                }
+            ),
             vec![Command::Focus("a".into())]
         );
         assert_eq!(s.phase, Phase::Sliding(After::NextStep));
+    }
+
+    #[test]
+    fn overlapping_target_fires_regardless_of_facing() {
+        let mut s = script();
+        assert_eq!(
+            press(
+                &mut s,
+                ScriptInput {
+                    player_facing_left: false,
+                    ..input("main", -30.0)
+                }
+            ),
+            vec![Command::Focus("a".into())]
+        );
+        assert_eq!(edge_gap(0.0, 70.0, 50.0, 20.0), 0.0);
+        assert_eq!(edge_gap(0.0, 70.0, 150.0, 20.0), 60.0);
     }
 
     #[test]
@@ -392,7 +451,8 @@ mod tests {
             "door".to_string(),
             TargetSpot {
                 cut: "main".into(),
-                x: 100.0,
+                x: 200.0,
+                half_width: 10.0,
             },
         );
         let mut near = trigger(TriggerOn::Near, vec![StepDef::Wait(0.3), StepDef::Focus("x".into())]);
@@ -406,6 +466,7 @@ mod tests {
         s.tick(0.01, ScriptInput { slide_done: true, ..input("main", 0.0) }, &mut out);
         s.tick(0.2, input("main", 0.0), &mut out);
         assert_eq!(s.phase, Phase::Exploring);
+        // Gap = 200 - 60 - 70 - 10 = 60 <= 80: the near trigger starts without a key.
         s.tick(0.01, input("main", 60.0), &mut out);
         assert!(matches!(s.phase, Phase::Waiting(_)));
         s.tick(0.5, input("main", 60.0), &mut out);

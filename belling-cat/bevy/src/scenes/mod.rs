@@ -78,9 +78,18 @@ fn drive_script(
         .0
         .and_then(|e| balloons.get(e).ok())
         .is_none_or(|b| b.finished());
-    let (player_cut, player_x, at_right, at_left) = player
+    let (player_cut, player_x, at_right, at_left, facing_left, half_width) = player
         .single()
-        .map(|(p, _)| (p.cut.clone(), p.walker.x, p.at_right_edge, p.at_left_edge))
+        .map(|(p, _)| {
+            (
+                p.cut.clone(),
+                p.walker.x,
+                p.at_right_edge,
+                p.at_left_edge,
+                p.walker.facing_left,
+                p.size.x / 2.0,
+            )
+        })
         .unwrap_or_default();
     let mut out = Vec::new();
     script.tick(
@@ -93,6 +102,8 @@ fn drive_script(
             at_left_edge: at_left,
             player_cut: &player_cut,
             player_x,
+            player_facing_left: facing_left,
+            player_half_width: half_width,
         },
         &mut out,
     );

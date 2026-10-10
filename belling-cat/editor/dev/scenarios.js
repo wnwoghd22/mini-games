@@ -111,6 +111,13 @@
       const k = window.__editor.toScreen([-330, 840]);
       mouse("mousedown", k[0], k[1], { shiftKey: true }); await sleep(20); window.dispatchEvent(new MouseEvent("mouseup")); await sleep(50);
     },
+    async player_move() {
+      // Drag the player start marker 80 world units to the right; x must change, y stays on the floor.
+      const c = window.__editor.playerCenter();
+      const a = window.__editor.toScreen(c);
+      const b = window.__editor.toScreen([c[0] + 80, c[1] + 30]);
+      await drag(a[0], a[1], b[0], b[1]);
+    },
     async preview() {
       document.getElementById("btn-play").click();
       window.__editor.advancePreview(1.0); // slide to elder_closeup done; say b_elder_1 waiting

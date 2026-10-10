@@ -2,7 +2,7 @@
 
 use super::{ActiveBalloon, RestartScene, SceneEntity};
 use crate::{
-    art::{Art, DARK_PAPER, INK, PAPER, Ready, art_ready},
+    art::{Art, DARK_PAPER, INK, Ready, art_ready},
     balloon::spawn_balloon,
     cut::{Cut, Focus},
     dialogue::Dialogue,
@@ -148,7 +148,14 @@ fn spawn_scene(
         );
         let center = cut.center();
         let size = cut.bbox.size();
-        targets.insert(def.id.clone(), TargetSpot { cut: def.id.clone(), x: center.x });
+        targets.insert(
+            def.id.clone(),
+            TargetSpot {
+                cut: def.id.clone(),
+                x: center.x,
+                half_width: size.x / 2.0,
+            },
+        );
 
         // Ink frame behind, paper in front; the wobbly contour is drawn by gizmos.
         let frame_points: Vec<Vec2> = points
@@ -168,25 +175,19 @@ fn spawn_scene(
             Transform::from_xyz(0.0, 0.0, -1.0),
             SceneEntity,
         ));
-        if let Some(label) = &def.label {
-            let label_at = Vec2::new(cut.bbox.min.x + 100.0, cut.bbox.max.y - 26.0);
-            commands.spawn((
-                Sprite::from_color(PAPER, Vec2::new(172.0, 34.0)),
-                Transform::from_translation(label_at.extend(1.0)),
-                SceneEntity,
-            ));
-            let id = text(&mut commands, &art, label, 13.0, label_at);
-            commands.entity(id).insert(SceneEntity);
-        }
+        // `label` is for the editor only; the play view shows no panel titles.
 
         for child in &def.children {
             targets.insert(
                 child.id().to_string(),
-                TargetSpot { cut: def.id.clone(), x: child.pos().x },
+                TargetSpot {
+                    cut: def.id.clone(),
+                    x: child.pos().x,
+                    half_width: child.half_width(),
+                },
             );
             spawn_child(&mut commands, &art, &images, &mut meshes, &mut materials, child, dialogue);
         }
-        let _ = size;
         commands.spawn((cut.clone(), SceneEntity));
         cuts.push(cut);
     }
