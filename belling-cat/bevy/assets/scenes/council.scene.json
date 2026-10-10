@@ -28,32 +28,32 @@
       "id": "elder_closeup",
       "label": "02 / THE ELDER",
       "polygon": [
-        [-618, 680],
-        [-138, 680],
-        [-138, 40],
-        [-618, 40]
+        [-635, 206],
+        [-240, 206],
+        [-139, 27],
+        [-635, 27]
       ],
       "fill": "dark",
       "children": [
-        { "type": "sprite", "id": "elder_big", "pos": [-389, 201], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
-        { "type": "balloon", "id": "b_elder_1", "pos": [-378, 570], "size": [374, 140], "tail": [51, -262], "kind": "speech", "line": "elder.1", "clip": false },
-        { "type": "balloon", "id": "b_elder_2", "pos": [-356, 419], "size": [374, 140], "tail": [55, -157], "kind": "speech", "line": "elder.2", "clip": false }
+        { "type": "sprite", "id": "elder_big", "pos": [-635, 74], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "balloon", "id": "b_elder_1", "pos": [-403, 215], "size": [265, 83], "tail": [-198, -190], "kind": "speech", "line": "elder.1", "clip": false },
+        { "type": "balloon", "id": "b_elder_2", "pos": [-297, 58], "size": [262, 117], "tail": [-252, 72], "kind": "speech", "line": "elder.2", "clip": false }
       ]
     },
     {
       "id": "scout_closeup",
       "label": "03 / THE SCOUT",
       "polygon": [
-        [-70, 680],
-        [410, 680],
-        [410, 40],
-        [-70, 40]
+        [-693, -396],
+        [-213, -396],
+        [-213, -1036],
+        [-693, -1036]
       ],
       "fill": "dark",
       "children": [
-        { "type": "sprite", "id": "scout_big", "pos": [170, 210], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
-        { "type": "balloon", "id": "b_scout_1", "pos": [170, 570], "size": [374, 140], "tail": [-70, -320], "kind": "speech", "line": "scout.1", "clip": false },
-        { "type": "balloon", "id": "b_scout_2", "pos": [170, 415], "size": [374, 140], "tail": [-70, -165], "kind": "speech", "line": "scout.2", "clip": false }
+        { "type": "sprite", "id": "scout_big", "pos": [-453, -866], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" },
+        { "type": "balloon", "id": "b_scout_1", "pos": [-453, -506], "size": [374, 140], "tail": [-70, -320], "kind": "speech", "line": "scout.1", "clip": false },
+        { "type": "balloon", "id": "b_scout_2", "pos": [-453, -661], "size": [374, 140], "tail": [-70, -165], "kind": "speech", "line": "scout.2", "clip": false }
       ]
     },
     {
@@ -71,6 +71,20 @@
       "children": [
         { "type": "text", "id": "tbc", "pos": [1023, -86], "z": 1, "text": "TO BE CONTINUED", "size": 22, "color": "paper" }
       ]
+    },
+    {
+      "id": "cut_5",
+      "polygon": [
+        [-200, 206],
+        [-109, 27],
+        [300, 27],
+        [300, 206]
+      ],
+      "fill": "dark",
+      "children": [
+        { "type": "balloon", "id": "balloon", "pos": [-98, 230], "z": 5, "size": [320, 130], "tail": [175, -84], "kind": "speech", "line": "", "clip": false },
+        { "type": "balloon", "id": "balloon_2", "pos": [255, 69], "z": 5, "size": [320, 130], "tail": [-61, 90], "kind": "thought", "line": "", "clip": false }
+      ]
     }
   ],
   "player": {
@@ -83,31 +97,19 @@
   "flow": [
     {
       "on": "z",
-      "range": 120,
       "steps": [
+        { "focus": "elder_closeup" },
         { "say": "b_elder_1" },
-        { "focus": "council" },
-        { "focus": "council" },
-        { "focus": "council" },
-        { "focus": "council" },
-        { "focus": "council" },
+        { "focus": "cut_5" },
+        { "say": "balloon" },
         { "focus": "elder_closeup" },
         { "say": "b_elder_2" },
-        { "focus": "council" },
-        { "focus": "scout_closeup" },
-        { "say": "b_scout_1" },
-        { "say": "b_scout_2" },
-        { "return": true }
+        { "focus": "cut_5" },
+        { "say": "balloon_2" },
+        { "focus": "council" }
       ],
-      "target": "elder"
-    },
-    {
-      "on": "right_edge",
-      "when": "flow_done",
-      "steps": [
-        { "focus": "door" },
-        { "player": { "cut": "door", "x": 559 } }
-      ]
+      "target": "elder",
+      "range": 80
     }
   ]
 }
