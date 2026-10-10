@@ -64,7 +64,7 @@
 | type | 추가 필드 |
 | --- | --- |
 | `sprite` | `size: [w,h]`, `frames: ["atlas:index", ...]`(1개 이상), `mode: "cycle" \| "hold"`(기본 cycle), `flip: bool`, `tint: "#rrggbb"` |
-| `balloon` | `size: [w,h]`(타원 전체 크기), `tail: [dx,dy]`(꼬리가 향하는 점, 풍선 중심 기준; 길이는 런타임이 제한), `kind: "speech"(타원) \| "shout"(뾰족한 강조) \| "thought"(구름, 꼬리는 작은 거품 3개)`, `line: "elder.1"`(대사 id), `initially: "hidden" \| "shown"`(기본 hidden; hidden이면 flow의 `say`로 띄운다) |
+| `balloon` | `size: [w,h]`(타원 전체 크기), `tail: [dx,dy]`(꼬리가 향하는 점, 풍선 중심 기준; 길이는 런타임이 제한), `kind: "speech"(타원) \| "shout"(뾰족한 강조) \| "thought"(구름, 꼬리는 작은 거품 3개)`, `line: "elder.1"`(대사 id), `font: 13`(글자 px, 기본 13 = 컷 라벨 크기; 본문이 풍선에 안 들어가면 8까지 자동 축소), `initially: "hidden" \| "shown"`(기본 hidden; hidden이면 flow의 `say`로 띄운다) |
 | `text` | `text: "..."`, `size: 22`(px), `color: "ink" \| "paper" \| "#rrggbb"`, `box: [w,h]`(선택, 줄바꿈 영역) |
 | `shape` | `shape: "ellipse" \| "rect"`, `size: [w,h]`, `color: "#rrggbb"`, `alpha: 0.0~1.0` (배경 장식: 촛불 글로우, 바닥선 등) |
 
@@ -139,3 +139,4 @@ Good luck, little one.
 - 헤더 다음 줄부터 **빈 줄 전까지**가 본문. 줄바꿈은 그대로 풍선에 들어간다.
 - 같은 id가 두 번 나오면 뒤의 것이 이긴다(파서가 경고).
 - 런타임은 풍선의 `line`으로 본문을 찾고, 없으면 `[missing: id]`를 표시한다.
+- 에디터의 풍선 패널에서 본문을 고치면 이 파일의 해당 `[id]` 블록이 갱신된다(없는 id면 파일 끝에 새 블록 추가, speaker는 id의 점 앞부분).

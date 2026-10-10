@@ -48,6 +48,18 @@ Not yet in the runtime (next steps): clipping children to their cut polygon (`cl
 
 Every animated drawing — the candle flame, the council mice, the player — is a `CrossDissolvable` owning two sprite layers. One global `CrossDissolveTick` beats every 360 ms in `FixedUpdate`; on each beat every drawing swaps to its next frame, and right after the beat the old drawing fades out while the new one fades in over 180 ms. A pair showing the same drawing at the same place does not blend, so an idle pose holds steady. Because there is one tick, everything on the page changes on the same cadence. `cycle` sprites loop their frames; the player uses `hold` so its pose (idle / walk strides / jump) is chosen by `player.rs`, and its `SampledMotion` marker keeps the drawings at the positions sampled on the last two beats while the physics underneath stays continuous.
 
+### How the player's position is sampled during a cross-dissolve
+
+The player entity itself moves continuously: `move_player` in `src/player.rs` runs every `FixedUpdate`, integrates `Walker` (x from the arrow keys at `WALK_SPEED`, y from jump/gravity) and writes the result to the entity's `Transform` each step. That entity has no sprite of its own.
+
+What you see are two separate layer entities (`DissolveLayer { owner, outgoing }`) created by `spawn_dissolvable` in `src/dissolve.rs`. The owner carries the `SampledMotion` marker, which changes how `cross_dissolve` treats those layers:
+
+1. `cross_dissolve` advances the global `CrossDissolveTick` (`clock += dt`, a *beat* every `POSE_SECONDS` = 0.36 s).
+2. **On a beat only**, for each owner: the outgoing layer copies the incoming layer's image, rect, flip and transform (so the previous drawing stays exactly where it was), then the incoming layer takes the next frame (`DissolveMode::Hold(frame)` for the player, chosen by `pose_frame` from idle/walk/jump) and, because the owner is `SampledMotion`, copies the owner's current `Transform` as its new position. Owners without `SampledMotion` have their layers follow the owner every step instead.
+3. Between beats the two layers only change alpha (`layer_alpha(clock, outgoing)`: a smooth cross-fade over `TRANSITION_SECONDS` = 0.18 s). A pair showing the same drawing at the same place is held at full alpha instead of fading.
+
+Consequences: the drawing is always at the position the physics had on the last beat, so it lags the true position by up to one beat (0.36 s × 170 = about 61 world units at walking speed), and a direction change is not visible until the next beat. The stride toggle (`Player::stride`) also advances once per beat, read from `tick.beat` in `move_player`. Anything that should react to a turn immediately has to either move the physics back to the drawn position or ask the dissolve for an off-beat sample; both would be done in `move_player` (it runs before `cross_dissolve` in `FixedUpdate` through `PlayerSet::Move`).
+
 Timing constants live in `src/dissolve.rs`; `SLIDE_SECONDS` in `src/cut.rs` controls the 900 ms camera slide.
 
 ## Browser preview

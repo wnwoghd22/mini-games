@@ -3,8 +3,8 @@
 import { type Scene, type Cut, type Vec2, type Step, type Trigger, type TriggerKind, type Keyframe, type Child, type BalloonChild, type SpriteChild, VIEW, FILL, SLIDE_SECONDS, stepKind, emptyScene } from "./model";
 import { triangulate, contains, bbox, boxCenter, boxSize, segmentDistance, dist } from "./polygon";
 import { formatScene } from "./format";
-import { parseDialogue } from "./dialogue";
-import { balloonOutline, tailTip, tailBase, thoughtBubbles, hasTail, type BalloonKind } from "./balloon";
+import { parseDialogue, updateDialogueBlock, defaultSpeaker } from "./dialogue";
+import { balloonOutline, tailTip, tailBase, thoughtBubbles, hasTail, fitFont, wrapLines, textBox, DEFAULT_FONT, type BalloonKind } from "./balloon";
 import { ATLASES, parseFrame, frameCount } from "./atlases";
 import { snapPoint, snapBox, constrainAxis } from "./snap";
 import { layoutFlow, insertStep, moveStep, removeStep, type FlowNode } from "./flow";
@@ -31,6 +31,8 @@ let scene: Scene = emptyScene();
 let parseError: string | null = null;
 let docVersion = 0;
 let dialogue = new Map<string, { speaker: string; text: string }>();
+/** Raw text of the dialogue file, edited in place by the balloon panel. */
+let dialogueSource = "";
 let assetsBase = "";
 const atlasImages = new Map<string, HTMLImageElement | null>();
 
@@ -89,6 +91,7 @@ window.addEventListener("message", (e) => {
     render();
     renderPanels();
   } else if (m.type === "dialogue") {
+    dialogueSource = m.text;
     dialogue = parseDialogue(m.text).lines;
     render();
     renderProps();
@@ -665,11 +668,14 @@ function drawChild(child: Child, selected: boolean) {
     if (!shown) { ctx.lineWidth = 1 * devicePixelRatio; return; }
     drawBalloon(child, color, !!preview);
     const text = dialogue.get(child.line)?.text ?? `[${child.line}]`;
-    const lines = text.split("\n");
+    const box = textBox(child.size);
+    const font = fitFont(text, child.font ?? DEFAULT_FONT, box);
+    const lines = wrapLines(text, font, box);
     ctx.fillStyle = preview ? COLORS.ink : color;
-    ctx.font = `${Math.max(9, 16 * view.scale) * devicePixelRatio}px sans-serif`;
+    ctx.font = `${Math.max(2, font * view.scale) * devicePixelRatio}px sans-serif`;
     ctx.textAlign = "center";
-    lines.forEach((l, i) => ctx.fillText(l, c[0], c[1] - ((lines.length - 1) / 2 - i) * 17 * view.scale * devicePixelRatio + 5 * devicePixelRatio));
+    const lineH = font * 1.3 * view.scale * devicePixelRatio;
+    lines.forEach((l, i) => ctx.fillText(l, c[0], c[1] - ((lines.length - 1) / 2 - i) * lineH + font * 0.35 * view.scale * devicePixelRatio));
     ctx.textAlign = "left";
     ctx.font = `${11 * devicePixelRatio}px sans-serif`;
     if (!preview) ctx.fillText(child.id, c[0] - (child.size[0] / 2) * view.scale, c[1] - (child.size[1] / 2) * view.scale - 3 * devicePixelRatio);
@@ -1862,16 +1868,37 @@ function drawThumb(thumb: HTMLCanvasElement, frame: string) {
 function balloonRows(child: BalloonChild): Node[] {
   const lineIds = [...dialogue.keys()].map((id) => ({ value: id, label: `${id} — ${(dialogue.get(id)?.text ?? "").split("\n")[0].slice(0, 28)}` }));
   const tailOn = hasTail(child.tail);
-  const text = dialogue.get(child.line)?.text;
+  const entry = dialogue.get(child.line);
+  // Body editor: writes straight into the dialogue file (block [line]); a new id appends a block.
+  const body = el("textarea", { class: "dialogue-edit", rows: "4", placeholder: child.line ? "(no text yet — type to create this line)" : "set a line id first" });
+  body.value = entry?.text ?? "";
+  body.disabled = !child.line || !scene.dialogue;
+  body.addEventListener("change", () => saveDialogueLine(child.line, body.value));
+  const idInput = textInput(child.line, (v) => { child.line = v.trim(); commit(); });
+  const fitted = entry ? fitFont(entry.text, child.font ?? DEFAULT_FONT, textBox(child.size)) : child.font ?? DEFAULT_FONT;
   return [
     row("kind", selectInput(child.kind ?? "speech", [{ value: "speech", label: "speech (oval)" }, { value: "shout", label: "shout (jagged)" }, { value: "thought", label: "thought (cloud)" }], (v) => { child.kind = v as BalloonKind; commit(); })),
-    row("line", lineIds.length ? selectInput(child.line, lineIds, (v) => { child.line = v; commit(); }) : textInput(child.line, (v) => { child.line = v; commit(); })),
-    el("div", { class: "muted dialogue" }, text ?? (child.line ? "(line not found in dialogue file)" : "(no line)")),
+    row("line", lineIds.length ? selectInput(child.line, [...lineIds, { value: "", label: "(new id…)" }], (v) => { if (v) { child.line = v; commit(); } else { idInput.value = ""; idInput.focus(); } }) : idInput),
+    ...(lineIds.length ? [row("new id", idInput)] : []),
+    row("text", body),
+    row("font", numberInput(child.font ?? DEFAULT_FONT, (v) => { if (v === DEFAULT_FONT) delete child.font; else child.font = v; commit(); }, 1),
+      el("span", { class: "muted" }, fitted < (child.font ?? DEFAULT_FONT) ? ` shrinks to ${fitted} to fit` : " fits")),
+    el("div", { class: "muted" }, scene.dialogue ? `edits save to ${scene.dialogue}` : "scene has no dialogue file (set \"dialogue\" in the JSON)"),
     row("tail", checkbox(tailOn, (v) => { if (v) child.tail = [60, -(child.size[1] / 2 + 80)]; else delete child.tail; commit(); }),
       ...(tailOn ? [numberInput(child.tail![0], (v) => { child.tail = [v, child.tail![1]]; commit(); }), numberInput(child.tail![1], (v) => { child.tail = [child.tail![0], v]; commit(); })] : [el("span", { class: "muted" }, "none")])),
     el("div", { class: "muted" }, tailOn ? "drag the orange handle to aim the tail" : ""),
     row("initially", selectInput(child.initially ?? "hidden", [{ value: "hidden" }, { value: "shown" }], (v) => { if (v === "hidden") delete child.initially; else child.initially = "shown"; commit(); })),
   ];
+}
+
+function saveDialogueLine(id: string, text: string) {
+  if (!id || !scene.dialogue) return;
+  const existing = dialogue.get(id);
+  dialogueSource = updateDialogueBlock(dialogueSource, id, text, existing ? undefined : defaultSpeaker(id));
+  dialogue = parseDialogue(dialogueSource).lines;
+  vscode.postMessage({ type: "saveDialogue", path: scene.dialogue, text: dialogueSource });
+  render();
+  renderProps();
 }
 
 function renameCut(cut: Cut, newId: string) {

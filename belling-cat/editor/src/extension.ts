@@ -22,7 +22,8 @@ type FromWebview =
   | { type: "edit"; text: string; version: number }
   | { type: "ready" }
   | { type: "openText" }
-  | { type: "loadDialogue"; path: string };
+  | { type: "loadDialogue"; path: string }
+  | { type: "saveDialogue"; path: string; text: string };
 
 class SceneEditorProvider implements vscode.CustomTextEditorProvider {
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -75,6 +76,20 @@ class SceneEditorProvider implements vscode.CustomTextEditorProvider {
         case "openText":
           await vscode.commands.executeCommand("vscode.openWith", document.uri, "default", vscode.ViewColumn.Beside);
           break;
+        case "saveDialogue": {
+          // Edit through the workspace so an open tab, Undo and git all see the change, then
+          // save so the running game's hot reload picks it up.
+          const uri = vscode.Uri.joinPath(document.uri, "..", message.path);
+          try {
+            const doc = await vscode.workspace.openTextDocument(uri);
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(uri, new vscode.Range(doc.positionAt(0), doc.positionAt(doc.getText().length)), message.text);
+            if (await vscode.workspace.applyEdit(edit)) await doc.save();
+          } catch {
+            await vscode.workspace.fs.writeFile(uri, Buffer.from(message.text, "utf8"));
+          }
+          break;
+        }
         case "loadDialogue": {
           const uri = vscode.Uri.joinPath(document.uri, "..", message.path);
           try {

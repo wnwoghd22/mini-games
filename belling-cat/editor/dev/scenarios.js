@@ -118,6 +118,16 @@
       const b = window.__editor.toScreen([c[0] + 80, c[1] + 30]);
       await drag(a[0], a[1], b[0], b[1]);
     },
+    async edit_dialogue() {
+      // Select the elder's first balloon and retype its line; the dialogue scratch file must update.
+      window.__editor.select(1, 1);
+      await sleep(300); // dialogue file arrives asynchronously
+      window.__editor.select(1, 1);
+      const ta = document.querySelector("#props textarea");
+      ta.value = "Edited in the editor.\nSecond line.";
+      ta.dispatchEvent(new Event("change"));
+      await sleep(200);
+    },
     async preview() {
       document.getElementById("btn-play").click();
       window.__editor.advancePreview(1.0); // slide to elder_closeup done; say b_elder_1 waiting

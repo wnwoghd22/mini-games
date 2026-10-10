@@ -14,6 +14,57 @@ use bevy::{prelude::*, sprite_render::AlphaMode2d, text::TextBounds};
 pub const LETTERS_PER_SECOND: f32 = 36.0;
 /// How far a tail may extend past the balloon rim.
 pub const TAIL_LENGTH: f32 = 90.0;
+/// Default text size: the same as the cut labels in the editor.
+pub const DEFAULT_FONT: f32 = 13.0;
+pub const MIN_FONT: f32 = 8.0;
+/// Fraction of the balloon's width/height the text box may use (inscribed in the oval).
+pub const TEXT_AREA: f32 = 0.7;
+
+/// Average glyph width and line height as fractions of the font size (Anime Ace, caps).
+const GLYPH_W: f32 = 0.62;
+const LINE_H: f32 = 1.3;
+
+/// The text box inside a balloon of `size`.
+pub fn text_box(size: Vec2) -> Vec2 {
+    size * TEXT_AREA
+}
+
+/// Largest font size (<= `preferred`, >= MIN_FONT) at which `text` fits `text_box` when
+/// wrapped by words; the estimate uses average glyph metrics, matching the editor preview.
+pub fn fit_font(text: &str, preferred: f32, text_box: Vec2) -> f32 {
+    let mut font = preferred.max(MIN_FONT);
+    loop {
+        if fits(text, font, text_box) || font <= MIN_FONT {
+            return font;
+        }
+        font = (font - 0.5).max(MIN_FONT);
+    }
+}
+
+fn fits(text: &str, font: f32, text_box: Vec2) -> bool {
+    let max_chars = (text_box.x / (font * GLYPH_W)).floor().max(1.0) as usize;
+    let mut lines = 0usize;
+    for paragraph in text.split('\n') {
+        // Greedy word wrap.
+        let mut width = 0usize;
+        let mut count = 1usize;
+        for word in paragraph.split_whitespace() {
+            let w = word.chars().count();
+            if w > max_chars {
+                return false;
+            }
+            let needed = if width == 0 { w } else { width + 1 + w };
+            if needed > max_chars {
+                count += 1;
+                width = w;
+            } else {
+                width = needed;
+            }
+        }
+        lines += count;
+    }
+    lines as f32 * font * LINE_H <= text_box.y
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum BalloonKind {
@@ -155,17 +206,19 @@ pub fn spawn_balloon(
         alpha_mode: AlphaMode2d::Opaque,
         ..default()
     });
+    let area = text_box(size);
+    let font_px = fit_font(text, def.font.unwrap_or(DEFAULT_FONT), area);
     let text_entity = commands
         .spawn((
             Text2d::new(if revealed { text } else { "" }),
             TextFont {
                 font: art.font.clone().into(),
-                font_size: FontSize::Px(22.0),
+                font_size: FontSize::Px(font_px),
                 ..default()
             },
             TextColor(INK),
             TextLayout::justify(Justify::Center),
-            TextBounds::from(size - Vec2::new(60.0, 30.0)),
+            TextBounds::from(area),
             Transform::from_translation(at.extend(z + 2.0)),
             extra.clone(),
         ))
@@ -318,6 +371,19 @@ mod tests {
         assert_eq!(b.visible_text(), "Hel");
         b.reveal();
         assert!(b.finished());
+    }
+
+    #[test]
+    fn long_lines_shrink_the_font_until_they_fit() {
+        let area = text_box(Vec2::new(300.0, 140.0)); // 210 × 98
+        assert_eq!(fit_font("Short.", 13.0, area), 13.0);
+        // Seven paragraphs need 7 × 13 × 1.3 = 118 px of height, more than the 98 available.
+        let long = "one\ntwo\nthree\nfour\nfive\nsix\nseven";
+        let f = fit_font(long, 13.0, area);
+        assert!((MIN_FONT..13.0).contains(&f), "got {f}");
+        assert!(7.0 * f * 1.3 <= area.y);
+        // Never below the minimum even for absurd input.
+        assert_eq!(fit_font(&"x".repeat(500), 13.0, Vec2::new(40.0, 20.0)), MIN_FONT);
     }
 
     #[test]

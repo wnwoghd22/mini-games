@@ -72,6 +72,47 @@ export function thoughtBubbles(size: Vec2, towards: Vec2): { center: Vec2; radiu
   return out;
 }
 
+export const DEFAULT_FONT = 13;
+export const MIN_FONT = 8;
+export const TEXT_AREA = 0.7;
+const GLYPH_W = 0.62;
+const LINE_H = 1.3;
+
+export function textBox(size: Vec2): Vec2 {
+  return [size[0] * TEXT_AREA, size[1] * TEXT_AREA];
+}
+
+/** Largest font (<= preferred, >= MIN_FONT) at which `text` fits the box when word-wrapped. */
+export function fitFont(text: string, preferred: number, box: Vec2): number {
+  let font = Math.max(preferred, MIN_FONT);
+  while (!fits(text, font, box) && font > MIN_FONT) font = Math.max(MIN_FONT, font - 0.5);
+  return font;
+}
+
+/** Word-wrapped lines at `font`, for the canvas preview. */
+export function wrapLines(text: string, font: number, box: Vec2): string[] {
+  const maxChars = Math.max(1, Math.floor(box[0] / (font * GLYPH_W)));
+  const out: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    let line = "";
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const next = line ? `${line} ${word}` : word;
+      if (next.length > maxChars && line) {
+        out.push(line);
+        line = word;
+      } else line = next;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+function fits(text: string, font: number, box: Vec2): boolean {
+  const maxChars = Math.max(1, Math.floor(box[0] / (font * GLYPH_W)));
+  for (const paragraph of text.split("\n")) for (const w of paragraph.split(/\s+/)) if (w.length > maxChars) return false;
+  return wrapLines(text, font, box).length * font * LINE_H <= box[1];
+}
+
 export function hasTail(tail: Vec2 | undefined): tail is Vec2 {
   return !!tail && (tail[0] !== 0 || tail[1] !== 0);
 }

@@ -8,7 +8,7 @@
 - [x] **2. 플레이어를 에디터에서 선택·이동** (2026-10-10, Cut Editor 0.4.1) — 플레이어는 자식이 아닌 별도 필드라 히트테스트에 빠져 있었음. 캔버스에서 클릭·드래그로 `player.x`를 바꾸고, 바닥 있는 다른 컷에 놓으면 `player.cut`이 바뀐다. 속성 패널에 cut/x/size/frames. (`editor/media/main.ts`)
 - [x] **3. Z 판정을 "바라보는 방향 + 가장자리 틈"으로** (2026-10-10, 테스트 통과; exe는 실행 중인 게임 종료 후 재빌드) — 플레이어가 보는 쪽에 대상이 있고 두 스프라이트 가장자리 사이 틈이 `range`(기본 80) 이하면 발동. `near`는 방향 무관, 틈 기준. (`bevy/src/script.rs`, `scenes/mod.rs`, `FORMAT.md`)
 - [ ] **4. 뒤로 돌 때 과이동** — 그림 위치가 비트(0.36s)마다 샘플링되어 방향 전환 직후 뒤쪽 위치로 보였다가 돌아오는 문제. 방향이 바뀌는 틱에 즉시 샘플링. (`bevy/src/dissolve.rs`, `player.rs`)
-- [ ] **5. 말풍선 글자 크기·자동 맞춤 + 대사 편집** — 기본 글자 크기 13(컷 라벨 크기), 풍선 안에 들어가도록 자동 축소. 포맷에 balloon `font` 추가. 에디터 풍선 패널에서 본문을 직접 편집하면 `*.dialogue.txt`에 기록. (`bevy/src/balloon.rs`, `schema`, `editor/media/main.ts`, `editor/src/extension.ts`)
+- [x] **5. 말풍선 글자 크기·자동 맞춤 + 대사 편집** (2026-10-10, Cut Editor 0.5.0; 런타임 exe는 실행 중인 게임 종료 후 재빌드) — 기본 글자 크기 13(컷 라벨 크기), 풍선 안에 들어가도록 자동 축소. 포맷에 balloon `font` 추가. 에디터 풍선 패널에서 본문을 직접 편집하면 `*.dialogue.txt`에 기록. (`bevy/src/balloon.rs`, `schema`, `editor/media/main.ts`, `editor/src/extension.ts`)
 - [ ] **5b. 반복 트리거** — Z 상호작용은 한 번 발생한 뒤에도 다시 발동. 두 번째부터는 이미 떠 있는 말풍선을 다시 띄우거나 타이핑하지 않고(그대로 둔 채 Z 대기만), focus/path/player 등은 그대로 실행. `once` 기본값을 반복 가능으로 바꾸고 FORMAT.md 갱신. (`bevy/src/script.rs`, `scenes/mod.rs`, `schema`)
 - [ ] **5c. 컷 초기 숨김** — 말풍선처럼 컷도 `initially: "hidden"`이면 최초 `focus` 전까지 배경·테두리·자식을 그리지 않음. 한 번 보이면 유지. 에디터에서는 반투명으로 표시하고 속성 토글 제공. (`schema`, `scenes/loader.rs`, `cut.rs`, `editor`)
 - [ ] **6. 런타임 clip 마스킹** — 에디터처럼 `clip: true` 자식을 컷 다각형 안에서만 그린다. 셰이더 마스크 머티리얼. 텍스트는 마스킹하지 않음. (`bevy/src/mask.rs`, `assets/shaders/mask.wgsl`, `dissolve.rs`, `balloon.rs`)

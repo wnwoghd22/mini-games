@@ -23,6 +23,7 @@ export interface BalloonChild extends ChildBase {
   tail?: Vec2;
   kind?: "speech" | "shout" | "thought";
   line: string;
+  font?: number;
   initially?: "hidden" | "shown";
 }
 export interface TextChild extends ChildBase {

@@ -131,6 +131,8 @@ pub struct BalloonDef {
     pub kind: Option<String>,
     pub line: String,
     #[serde(default)]
+    pub font: Option<f32>,
+    #[serde(default)]
     pub initially: Option<String>,
 }
 

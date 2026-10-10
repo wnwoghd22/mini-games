@@ -57,6 +57,10 @@
       } else if (m.type === "loadDialogue") {
         const text = await (await fetch(new URL(m.path, location.origin + scenePath))).text();
         window.postMessage({ type: "dialogue", text }, "*");
+      } else if (m.type === "saveDialogue") {
+        const target = new URL(m.path, location.origin + scenePath).pathname.replace(/\.dialogue\.txt$/, params.get("run") ? ".dialogue.scratch.txt" : ".dialogue.txt");
+        window.__lastDialogue = m.text;
+        await fetch(target, { method: "PUT", body: m.text });
       } else if (m.type === "openText") {
         window.open(scenePath, "_blank");
       }

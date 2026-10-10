@@ -42,3 +42,5 @@ button.small { padding: 1px 5px; font-size: 11px; }
 .frames .frame.used { outline: 2px solid var(--vscode-focusBorder); }
 .frames canvas { background: #2a2622; border-radius: 2px; }
 .dialogue { white-space: pre-wrap; padding: 2px 4px 4px 64px; font-style: italic; }
+
+.dialogue-edit { flex: 1; min-width: 0; resize: vertical; font: 12px var(--vscode-editor-font-family, monospace); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 3px 4px; }

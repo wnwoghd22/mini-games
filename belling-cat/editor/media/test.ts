@@ -120,3 +120,28 @@ test("insertStep and moveStep keep 1-based node indices consistent", () => {
   assert.equal(moveStep(t, 5, 1), 1);
   assert.deepEqual(Object.keys(t.steps[0]), ["return"]);
 });
+
+
+import { updateDialogueBlock } from "./dialogue";
+import { fitFont, textBox, wrapLines } from "./balloon";
+
+test("updateDialogueBlock edits one block in place and appends new ids", () => {
+  const src = "# c\n[elder.1] elder\nOld line.\nSecond.\n\n[me.1] me\nhm\n";
+  const edited = updateDialogueBlock(src, "elder.1", "New line.");
+  assert.equal(edited, "# c\n[elder.1] elder\nNew line.\n\n[me.1] me\nhm\n");
+  const appended = updateDialogueBlock(edited, "scout.3", "Hello\nthere");
+  assert.match(appended, /\n\[scout\.3\] scout\nHello\nthere\n$/);
+  assert.equal(parseDialogue(appended).lines.get("scout.3")?.text, "Hello\nthere");
+  assert.equal(parseDialogue(appended).lines.get("elder.1")?.text, "New line.");
+});
+
+test("balloon text shrinks to fit and wraps by words", () => {
+  const box = textBox([300, 140]);
+  assert.equal(fitFont("Short.", 13, box), 13);
+  // Seven paragraphs need 7 × 13 × 1.3 = 118 px of height, more than the 98 available.
+  const long = "one\ntwo\nthree\nfour\nfive\nsix\nseven";
+  const f = fitFont(long, 13, box);
+  assert.ok(f < 13 && f >= 8, `got ${f}`);
+  assert.ok(7 * f * 1.3 <= box[1]);
+  assert.ok(wrapLines(long, f, box).every((l) => l.length * f * 0.62 <= box[0] + 1e-6));
+});

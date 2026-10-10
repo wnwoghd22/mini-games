@@ -97,6 +97,7 @@
         "tail": { "$ref": "#/definitions/vec2", "description": "Point the tail aims at, relative to the balloon centre. Omitted or [0,0]: no tail." },
         "kind": { "enum": ["speech", "shout", "thought"], "default": "speech", "description": "speech: oval; shout: jagged; thought: cloud with trailing bubbles instead of a pointer." },
         "line": { "$ref": "#/definitions/lineId", "description": "Dialogue id in the *.dialogue.txt file." },
+        "font": { "type": "number", "exclusiveMinimum": 0, "default": 13, "description": "Text size in px (the cut label size). Shrunk automatically down to 8 when the line would not fit the balloon." },
         "initially": { "enum": ["hidden", "shown"], "default": "hidden" }
       }
     },

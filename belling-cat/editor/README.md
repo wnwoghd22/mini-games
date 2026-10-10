@@ -42,7 +42,8 @@ Without VS Code: `npm run dev` serves the same webview at `http://127.0.0.1:8139
 | Move / resize a child | Drag it; drag a corner handle to resize (text uses its optional `box`); arrow keys nudge by 1, Shift+arrows by 10 |
 | Add / remove children | **add: sprite / balloon / text / shape** buttons in the Cut panel; **Delete** (or the Delete key) removes, **Ctrl+D** duplicates. Deleting a balloon also drops the `say` steps that used it |
 | Sprite frames | Pick the atlas, then click cells in the thumbnail strip to add/remove frames (the order is the beat order); `flip`, `tint`, `mode` below |
-| Balloon | `kind` chooses speech (oval), shout (jagged) or thought (cloud with trailing bubbles); `line` picks a dialogue id and shows its text; tick **tail** and drag the orange handle to aim it (or type the vector) |
+| Balloon | `kind` chooses speech (oval), shout (jagged) or thought (cloud with trailing bubbles); `line` picks a dialogue id (or type a new one); tick **tail** and drag the orange handle to aim it (or type the vector) |
+| Dialogue text | The **text** box in the balloon panel edits the line's body. On change the `*.dialogue.txt` file next to the scene is updated in place (only that `[id]` block; a new id is appended with the speaker taken from the id's prefix) and saved, so a running game reloads it. `font` sets the text size (default 13); the panel says when the line will be shrunk to fit the balloon |
 | Preview | ▶ on a trigger (or **Play** for the selected one). The yellow rectangle is the camera; `say` steps show the balloon text and wait for **Space** (the Z key in game). ■ or Esc stops |
 
 Coordinates are integers in page space (y up). Sprites whose atlas has a PNG (see `media/atlases.ts`, mirrored from `bevy/src/art.rs`) are drawn with their first frame; code-generated atlases show as boxes. Editing balloon text in place (writing back to the dialogue file) is the next step.
