@@ -60,7 +60,7 @@
   "id": "candle",                  // 씬 안에서 유일 (flow에서 참조)
   "pos": [0, -166],                // 중심 (절대 좌표)
   "z": 2,                          // 그리기 순서. 생략 시 1. 컷 배경은 -1, 패널 외곽선은 -2
-  "clip": true                     // true면 컷 다각형 밖은 잘린다. false면 컷 밖으로 튀어나간다
+  "clip": true                     // true면 컷 다각형 밖은 잘린다(런타임: 셰이더 마스크, 꼭짓점 32개까지). false면 컷 밖으로 튀어나간다
 }
 ```
 
@@ -69,7 +69,7 @@
 | `sprite` | `size: [w,h]`, `frames: ["atlas:index", ...]`(1개 이상), `mode: "cycle" \| "hold"`(기본 cycle), `flip: bool`, `tint: "#rrggbb"` |
 | `balloon` | `size: [w,h]`(타원 전체 크기), `tail: [dx,dy]`(꼬리가 향하는 점, 풍선 중심 기준; 길이는 런타임이 제한), `kind: "speech"(타원) \| "shout"(뾰족한 강조) \| "thought"(구름, 꼬리는 작은 거품 3개)`, `line: "elder.1"`(대사 id), `font: 13`(글자 px, 기본 13 = 컷 라벨 크기; 본문이 풍선에 안 들어가면 8까지 자동 축소), `initially: "hidden" \| "shown"`(기본 hidden; hidden이면 flow의 `say`로 띄운다) |
 | `text` | `text: "..."`, `size: 22`(px), `color: "ink" \| "paper" \| "#rrggbb"`, `box: [w,h]`(선택, 줄바꿈 영역) |
-| `shape` | `shape: "ellipse" \| "rect"`, `size: [w,h]`, `color: "#rrggbb"`, `alpha: 0.0~1.0` (배경 장식: 촛불 글로우, 바닥선 등) |
+| `shape` | `shape: "ellipse" \| "rect" \| "vignette"`, `size: [w,h]`, `color: "#rrggbb"`, `alpha: 0.0~1.0` (배경 장식: 바닥선 등). `vignette`는 중심이 투명하고 `inner`(반지름 비율, 기본 0.45)부터 가장자리로 갈수록 `color`로 어두워지는 사각형. 런타임은 안쪽(밝은) 타원이 `inner×(1−pulse)`인 프로파일과 `inner×(1+pulse)`인 프로파일(`pulse` 기본 0.05; 바깥 반지름은 둘 다 1로 고정)을 한 머티리얼에 두고, 크로스디졸브 비트마다 둘의 alpha 값을 서로 섞어 전이한다. 중심과 바깥 영역은 두 프로파일이 같아 변하지 않고 **두 타원 사이 띠만** 밝기가 바뀐다(형태 이동·스냅·전체 밝기 맥동 없음, 사각형 크기 고정). 컷을 덮도록 `size`를 컷보다 조금 크게 두면 된다 |
 
 - `frames`의 `"atlas:index"`는 아틀라스 이름과 셀 번호(행 우선, 0부터). 아틀라스 테이블은 `bevy/src/art.rs`에 있다:
 

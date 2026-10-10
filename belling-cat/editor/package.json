@@ -2,7 +2,7 @@
   "name": "belling-cat-cut-editor",
   "displayName": "Belling the Cat — Cut Editor",
   "description": "2D editor for *.scene.json: polygon cuts, Z flow and camera paths.",
-  "version": "0.5.2",
+  "version": "0.5.7",
   "publisher": "belling-cat",
   "private": true,
   "engines": {

@@ -6,6 +6,7 @@
 //! - `polygon`    ear clipping, point tests and meshes for polygon cuts
 //! - `art`        asset handles, the sprite-atlas table, generated placeholder textures
 //! - `dissolve`   the shared-beat cross-dissolve animation (`CrossDissolveTick` + `CrossDissolvable`)
+//! - `mask`       the polygon-masked 2D material behind `clip: true`
 //! - `cut`        polygon panels on the page and the camera that focuses them
 //! - `balloon`    speech balloons that stay on the page once shown
 //! - `player`     input and side-view movement of the mouse
@@ -19,6 +20,7 @@ pub mod cut;
 pub mod dialogue;
 pub mod dissolve;
 pub mod ink;
+pub mod mask;
 pub mod player;
 pub mod polygon;
 pub mod scene_file;

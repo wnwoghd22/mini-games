@@ -6,14 +6,15 @@ use crate::{
     balloon::spawn_balloon,
     cut::{Cut, CutHidden, Focus, InCut},
     dialogue::Dialogue,
-    dissolve::{CrossDissolvable, CrossDissolveTick, DissolveLayer, SampledMotion, spawn_dissolvable},
+    dissolve::{BeatPulse, CrossDissolvable, CrossDissolveTick, DissolveLayer, SampledMotion, spawn_dissolvable},
     ink::text,
+    mask::MaskMaterial,
     player::{DEFAULT_SIZE, Player, Walker},
     polygon::polygon_mesh,
     scene_file::{ChildDef, SceneFile, parse_color},
     script::{Script, ScriptState, TargetSpot},
 };
-use bevy::{platform::collections::HashMap, prelude::*, sprite_render::AlphaMode2d};
+use bevy::{platform::collections::HashMap, prelude::*};
 
 /// Handles of the scene being played and its dialogue file.
 #[derive(Resource)]
@@ -102,6 +103,7 @@ fn spawn_scene(
     images: Res<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut masks: ResMut<Assets<MaskMaterial>>,
     mut focus: ResMut<Focus>,
     mut loaded: ResMut<LoadedScene>,
     mut handles: ResMut<SceneHandles>,
@@ -190,7 +192,7 @@ fn spawn_scene(
                     half_width: child.half_width(),
                 },
             );
-            spawn_child(&mut commands, &art, &images, &mut meshes, &mut materials, child, dialogue, &in_cut);
+            spawn_child(&mut commands, &art, &images, &mut meshes, &mut masks, child, dialogue, &in_cut, &points);
         }
         let mut cut_entity = commands.spawn((cut.clone(), SceneEntity));
         // The player's home cut is on screen from the start, hidden or not.
@@ -217,10 +219,13 @@ fn spawn_scene(
             let mut player = Player::new(Walker::standing_at(0.0, 0.0), &home.id, size, walk_frames);
             player.place(home, scene.player.x);
             let at = Vec2::new(player.walker.x, player.walker.y + player.foot_offset());
+            let mask = scene.player.clip.then(|| home.polygon.clone());
             spawn_dissolvable(
                 &mut commands,
+                &mut meshes,
+                &mut masks,
                 (SceneEntity, SampledMotion, player),
-                CrossDissolvable::hold(frames, size),
+                CrossDissolvable::hold(frames, size).with_mask(mask),
                 Transform::from_translation(at.extend(3.0)),
             );
             focus.snap(home);
@@ -266,14 +271,17 @@ fn spawn_child(
     art: &Art,
     images: &Assets<Image>,
     meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ColorMaterial>,
+    materials: &mut Assets<MaskMaterial>,
     child: &ChildDef,
     dialogue: Option<&Dialogue>,
     in_cut: &InCut,
+    polygon: &[Vec2],
 ) {
     let pos = child.pos();
     let z = child.z();
     let tag = in_cut.clone();
+    // `clip: true` (the default) keeps the child inside its cut, as in the editor.
+    let mask: Option<&[Vec2]> = child.clip().then_some(polygon);
     match child {
         ChildDef::Sprite(def) => {
             let frames = art.frames(&def.frames, images);
@@ -287,11 +295,11 @@ fn spawn_child(
             } else {
                 CrossDissolvable::cycle(frames, size)
             };
-            d = d.with_flip(def.flip);
+            d = d.with_flip(def.flip).with_mask(mask.map(<[Vec2]>::to_vec));
             if let Some(tint) = &def.tint {
                 d = d.with_tint(parse_color(tint, Color::WHITE));
             }
-            spawn_dissolvable(commands, (SceneEntity, tag), d, Transform::from_translation(pos.extend(z)));
+            spawn_dissolvable(commands, meshes, materials, (SceneEntity, tag), d, Transform::from_translation(pos.extend(z)));
         }
         ChildDef::Balloon(def) => {
             if def.initially.as_deref() == Some("shown") {
@@ -299,7 +307,7 @@ fn spawn_child(
                     .and_then(|d| d.text(&def.line))
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("[missing: {}]", def.line));
-                spawn_balloon(commands, art, meshes, materials, def, &body, true, (SceneEntity, tag));
+                spawn_balloon(commands, art, meshes, materials, def, &body, true, mask, (SceneEntity, tag));
             }
         }
         ChildDef::Text(def) => {
@@ -319,18 +327,34 @@ fn spawn_child(
             let size = Vec2::new(def.size[0], def.size[1]);
             let color = parse_color(def.color.as_deref().unwrap_or("ink"), INK)
                 .with_alpha(def.alpha.unwrap_or(1.0));
-            let mesh = if def.shape == "rect" {
-                meshes.add(Rectangle::new(size.x, size.y))
-            } else {
+            if def.shape == "vignette" {
+                // One quad whose material holds a small-ellipse and a large-ellipse profile;
+                // `BeatPulse` blends between them on every beat (see dissolve.rs).
+                let inner = def.inner.unwrap_or(0.45);
+                let amount = def.pulse.unwrap_or(0.05).clamp(0.0, 1.0);
+                // Only the inner (light) ellipse differs between the profiles; the outer radius
+                // where the darkening completes is the same, so the outermost area never changes.
+                let mut material = MaskMaterial::color(color, mask);
+                material.set_vignette(inner * (1.0 - amount), 1.0);
+                material.set_vignette_mix(inner * (1.0 + amount), 1.0, 0.0);
+                commands.spawn((
+                    Mesh2d(meshes.add(Rectangle::new(size.x, size.y))),
+                    MeshMaterial2d(materials.add(material)),
+                    Transform::from_translation(pos.extend(z)),
+                    SceneEntity,
+                    tag,
+                    BeatPulse,
+                ));
+                return;
+            }
+            let mesh = if def.shape == "ellipse" {
                 meshes.add(Ellipse::new(size.x / 2.0, size.y / 2.0))
+            } else {
+                meshes.add(Rectangle::new(size.x, size.y))
             };
             commands.spawn((
                 Mesh2d(mesh),
-                MeshMaterial2d(materials.add(ColorMaterial {
-                    color,
-                    alpha_mode: AlphaMode2d::Blend,
-                    ..default()
-                })),
+                MeshMaterial2d(materials.add(MaskMaterial::color(color, mask))),
                 Transform::from_translation(pos.extend(z)),
                 SceneEntity,
                 tag,

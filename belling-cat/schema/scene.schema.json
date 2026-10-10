@@ -124,10 +124,12 @@
       "properties": {
         "type": { "const": "shape" },
         "id": {}, "pos": {}, "z": {}, "clip": {},
-        "shape": { "enum": ["ellipse", "rect"] },
+        "shape": { "enum": ["ellipse", "rect", "vignette"], "description": "vignette: edges darken from `inner` outward (transparent centre); its alpha pulses by `pulse` on the cross-dissolve beat." },
         "size": { "$ref": "#/definitions/size" },
         "color": { "$ref": "#/definitions/color", "default": "ink" },
-        "alpha": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 }
+        "alpha": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 },
+        "inner": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.45, "description": "vignette only: radius ratio where the darkening starts (1 = the rect's edge ellipse)." },
+        "pulse": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.05, "description": "vignette only: the inner (light) ellipse is inner×(1−pulse) in one profile and inner×(1+pulse) in the other; each cross-dissolve beat blends the alpha from one profile to the other, so only the band between those two ellipses changes. The outer radius, quad size and overall brightness are fixed." }
       }
     },
     "player": {

@@ -92,6 +92,61 @@ pub fn contains(points: &[Vec2], p: Vec2) -> bool {
     inside
 }
 
+/// Parameter `t` along `a->b` where it crosses segment `c->d`, if they cross.
+fn segment_cross(a: Vec2, b: Vec2, c: Vec2, d: Vec2) -> Option<f32> {
+    let r = b - a;
+    let s = d - c;
+    let denom = r.perp_dot(s);
+    if denom.abs() < 1e-9 {
+        return None;
+    }
+    let qp = c - a;
+    let t = qp.perp_dot(s) / denom;
+    let u = qp.perp_dot(r) / denom;
+    ((0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u)).then_some(t)
+}
+
+/// The parts of an open polyline that lie inside `polygon`, as separate runs. Used to clip
+/// gizmo ink (balloon outlines) the same way the shader clips fills.
+pub fn clip_polyline(line: &[Vec2], polygon: &[Vec2]) -> Vec<Vec<Vec2>> {
+    let mut runs: Vec<Vec<Vec2>> = Vec::new();
+    let mut run: Vec<Vec2> = Vec::new();
+    let n = polygon.len();
+    for w in line.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let mut ts = vec![0.0];
+        for i in 0..n {
+            if let Some(t) = segment_cross(a, b, polygon[i], polygon[(i + 1) % n]) {
+                ts.push(t);
+            }
+        }
+        ts.push(1.0);
+        ts.sort_by(|x, y| x.total_cmp(y));
+        for pair in ts.windows(2) {
+            let (t0, t1) = (pair[0], pair[1]);
+            if t1 - t0 < 1e-6 {
+                continue;
+            }
+            let p0 = a.lerp(b, t0);
+            let p1 = a.lerp(b, t1);
+            if contains(polygon, a.lerp(b, (t0 + t1) / 2.0)) {
+                if run.is_empty() {
+                    run.push(p0);
+                }
+                run.push(p1);
+            } else if run.len() >= 2 {
+                runs.push(std::mem::take(&mut run));
+            } else {
+                run.clear();
+            }
+        }
+    }
+    if run.len() >= 2 {
+        runs.push(run);
+    }
+    runs
+}
+
 pub fn bbox(points: &[Vec2]) -> Rect {
     let mut r = Rect::from_corners(points[0], points[0]);
     for &p in points {
@@ -151,5 +206,20 @@ mod tests {
         assert!(contains(&l, Vec2::new(2.0, 8.0)));
         assert!(!contains(&l, Vec2::new(8.0, 8.0)));
         assert_eq!(bbox(&l), Rect::new(0.0, 0.0, 10.0, 10.0));
+    }
+
+    #[test]
+    fn clip_polyline_keeps_the_inside_runs() {
+        let square = [Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0), Vec2::new(10.0, 10.0), Vec2::new(0.0, 10.0)];
+        // A line crossing the square left to right: one run from x=0 to x=10.
+        let runs = clip_polyline(&[Vec2::new(-5.0, 5.0), Vec2::new(15.0, 5.0)], &square);
+        assert_eq!(runs.len(), 1);
+        assert!((runs[0][0] - Vec2::new(0.0, 5.0)).length() < 1e-4);
+        assert!((runs[0].last().unwrap() - Vec2::new(10.0, 5.0)).length() < 1e-4);
+        // A polyline that dips out and back in gives two runs.
+        let zig = [Vec2::new(2.0, 2.0), Vec2::new(2.0, 15.0), Vec2::new(8.0, 15.0), Vec2::new(8.0, 2.0)];
+        assert_eq!(clip_polyline(&zig, &square).len(), 2);
+        // Entirely outside: nothing.
+        assert!(clip_polyline(&[Vec2::new(20.0, 20.0), Vec2::new(30.0, 30.0)], &square).is_empty());
     }
 }

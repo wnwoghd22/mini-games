@@ -67,6 +67,16 @@ impl ChildDef {
         }
     }
 
+    /// Whether the child is drawn only inside its cut (`clip`, default true).
+    pub fn clip(&self) -> bool {
+        match self {
+            ChildDef::Sprite(c) => c.clip,
+            ChildDef::Balloon(c) => c.clip,
+            ChildDef::Text(c) => c.clip,
+            ChildDef::Shape(c) => c.clip,
+        }
+    }
+
     pub fn pos(&self) -> Vec2 {
         let p = match self {
             ChildDef::Sprite(c) => c.pos,
@@ -168,12 +178,20 @@ pub struct ShapeDef {
     pub z: Option<f32>,
     #[serde(default = "default_true")]
     pub clip: bool,
+    /// `ellipse`, `rect` or `vignette` (dark edges fading in from `inner`, pulsing on the beat).
     pub shape: String,
     pub size: [f32; 2],
     #[serde(default)]
     pub color: Option<String>,
     #[serde(default)]
     pub alpha: Option<f32>,
+    /// vignette only: radius ratio (0..1) where the darkening starts. Default 0.45.
+    #[serde(default)]
+    pub inner: Option<f32>,
+    /// vignette only: the inner (light) ellipse is `inner×(1∓pulse)` in the two profiles the
+    /// beat blends between; the outer radius stays 1. Default 0.05.
+    #[serde(default)]
+    pub pulse: Option<f32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

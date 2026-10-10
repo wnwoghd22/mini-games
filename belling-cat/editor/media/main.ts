@@ -1,6 +1,6 @@
 // Webview entry: canvas editor for *.scene.json (cuts, children, flow, camera paths, preview).
 
-import { type Scene, type Cut, type Vec2, type Step, type Trigger, type TriggerKind, type Keyframe, type Child, type BalloonChild, type SpriteChild, VIEW, FILL, SLIDE_SECONDS, stepKind, emptyScene } from "./model";
+import { type Scene, type Cut, type Vec2, type Step, type Trigger, type TriggerKind, type Keyframe, type Child, type BalloonChild, type SpriteChild, type ShapeChild, VIEW, FILL, SLIDE_SECONDS, stepKind, emptyScene } from "./model";
 import { triangulate, contains, bbox, boxCenter, boxSize, segmentDistance, dist } from "./polygon";
 import { formatScene } from "./format";
 import { parseDialogue, updateDialogueBlock, defaultSpeaker } from "./dialogue";
@@ -718,6 +718,27 @@ function drawChild(child: Child, selected: boolean) {
       ctx.beginPath();
       ctx.ellipse(c[0], c[1], (w / 2) * view.scale, (h / 2) * view.scale, 0, 0, Math.PI * 2);
       ctx.stroke();
+    } else if (child.shape === "vignette") {
+      // Transparent centre darkening toward the edges, like the runtime shader.
+      const sw = w * view.scale, sh = h * view.scale;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(c[0] - sw / 2, c[1] - sh / 2, sw, sh);
+      ctx.clip();
+      ctx.translate(c[0], c[1]);
+      ctx.scale(sw / 2, sh / 2);
+      const g = ctx.createRadialGradient(0, 0, Math.max(0, Math.min(1, child.inner ?? 0.45)), 0, 0, 1.45);
+      const rgb = child.color && child.color.startsWith("#") ? child.color : "#1b1a17";
+      const a = child.alpha ?? 1;
+      g.addColorStop(0, rgb + "00");
+      g.addColorStop(1 / 1.45, rgb + Math.round(a * 255).toString(16).padStart(2, "0"));
+      g.addColorStop(1, rgb + Math.round(a * 255).toString(16).padStart(2, "0"));
+      ctx.fillStyle = g;
+      ctx.setLineDash([]);
+      ctx.fillRect(-1, -1, 2, 2);
+      ctx.restore();
+      ctx.setLineDash([3 * devicePixelRatio, 3 * devicePixelRatio]);
+      ctx.strokeRect(c[0] - sw / 2, c[1] - sh / 2, sw, sh);
     } else {
       ctx.strokeRect(c[0] - (w / 2) * view.scale, c[1] - (h / 2) * view.scale, w * view.scale, h * view.scale);
     }
@@ -1825,9 +1846,20 @@ function renderChildProps(child: Child) {
     );
   } else {
     rows.push(
-      row("shape", selectInput(child.shape, [{ value: "ellipse" }, { value: "rect" }], (v) => { child.shape = v as "ellipse" | "rect"; commit(); })),
+      row("shape", selectInput(child.shape, [{ value: "ellipse" }, { value: "rect" }, { value: "vignette" }], (v) => {
+        const was = child.shape;
+        child.shape = v as ShapeChild["shape"];
+        // A vignette paints its *edges* with `color`; switching from a glow-style ellipse keeps a light colour
+        // that would look inverted (bright rim, dark centre), so start from a dark preset.
+        if (v === "vignette" && was !== "vignette") { child.color = "#120f0c"; child.alpha = 0.9; child.inner ??= 0.45; }
+        renderProps(); commit();
+      })),
       row("color", textInput(child.color ?? "ink", (v) => { child.color = v; commit(); })),
-      row("alpha", numberInput(child.alpha ?? 1, (v) => { child.alpha = v; commit(); }, 0.05))
+      row("alpha", numberInput(child.alpha ?? 1, (v) => { child.alpha = v; commit(); }, 0.05)),
+      ...(child.shape === "vignette"
+        ? [row("inner", numberInput(child.inner ?? 0.45, (v) => { child.inner = v; commit(); }, 0.05), el("span", { class: "muted" }, "where the dark edge starts (0–1)")),
+           row("pulse", numberInput(child.pulse ?? 0.05, (v) => { child.pulse = v; commit(); }, 0.01), el("span", { class: "muted" }, "inner ellipse ×(1−pulse) ↔ ×(1+pulse) fades each beat; outer edge, size and brightness fixed"))]
+        : [])
     );
   }
   rows.push(el("div", { class: "row" }, button("Duplicate (Ctrl+D)", duplicateChild), button("Delete", deleteChild)));

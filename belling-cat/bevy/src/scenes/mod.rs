@@ -11,6 +11,8 @@ use crate::{
     balloon::{BalloonId, SpeechBalloon, spawn_balloon},
     cut::{Cut, CutHidden, Focus, find_cut},
     dialogue::Dialogue,
+    dissolve::CrossDissolvable,
+    mask::MaskMaterial,
     player::{Player, PlayerInput, PlayerSet, consume_input},
     scene_file::{ChildDef, SceneFile},
     script::{Command, ScriptInput, ScriptState},
@@ -57,7 +59,7 @@ fn drive_script(
     input: Res<PlayerInput>,
     art: Option<Res<Art>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials: ResMut<Assets<MaskMaterial>>,
     mut focus: ResMut<Focus>,
     mut script: Option<ResMut<ScriptState>>,
     mut active: ResMut<ActiveBalloon>,
@@ -67,7 +69,7 @@ fn drive_script(
     cuts: Query<(Entity, &Cut)>,
     mut balloons: Query<&mut SpeechBalloon>,
     shown: Query<(Entity, &BalloonId)>,
-    mut player: Query<(&mut Player, &mut Transform)>,
+    mut player: Query<(&mut Player, &mut Transform, &mut CrossDissolvable)>,
 ) {
     let (Some(art), Some(script), Some(handles)) = (art, script.as_mut(), handles) else {
         return;
@@ -81,7 +83,7 @@ fn drive_script(
         .is_none_or(|b| b.finished());
     let (player_cut, player_x, at_right, at_left, facing_left, half_width) = player
         .single()
-        .map(|(p, _)| {
+        .map(|(p, _, _)| {
             (
                 p.cut.clone(),
                 p.walker.x,
@@ -125,10 +127,13 @@ fn drive_script(
                     warn!("flow moves the player to unknown cut {cut:?}");
                     continue;
                 };
-                if let Ok((mut player, mut transform)) = player.single_mut() {
+                if let Ok((mut player, mut transform, mut drawing)) = player.single_mut() {
                     player.place(cut, x);
                     transform.translation.x = player.walker.x;
                     transform.translation.y = player.walker.y + player.foot_offset();
+                    if drawing.mask.is_some() {
+                        drawing.mask = Some(cut.polygon.clone());
+                    }
                 }
             }
             Command::Speak(id) => {
@@ -138,15 +143,17 @@ fn drive_script(
                     active.0 = Some(entity);
                     continue;
                 }
-                let Some(ChildDef::Balloon(def)) = scene
+                let Some((cut_def, ChildDef::Balloon(def))) = scene
                     .cuts
                     .iter()
-                    .flat_map(|c| c.children.iter())
-                    .find(|c| c.id() == id)
+                    .flat_map(|c| c.children.iter().map(move |ch| (c, ch)))
+                    .find(|(_, c)| c.id() == id)
                 else {
                     warn!("flow says unknown balloon {id:?}");
                     continue;
                 };
+                let polygon = cut_def.points();
+                let mask: Option<&[Vec2]> = def.clip.then_some(polygon.as_slice());
                 let text = handles
                     .dialogue
                     .as_ref()
@@ -162,6 +169,7 @@ fn drive_script(
                     def,
                     &text,
                     false,
+                    mask,
                     (SceneEntity, BalloonId(id)),
                 );
                 active.0 = Some(entity);

@@ -35,10 +35,14 @@ export interface TextChild extends ChildBase {
 }
 export interface ShapeChild extends ChildBase {
   type: "shape";
-  shape: "ellipse" | "rect";
+  shape: "ellipse" | "rect" | "vignette";
   size: Vec2;
   color?: string;
   alpha?: number;
+  /** vignette: radius ratio where the darkening starts (default 0.45). */
+  inner?: number;
+  /** vignette: the inner ellipse is inner×(1∓pulse) in two profiles the beat blends between (default 0.05). */
+  pulse?: number;
 }
 export type Child = SpriteChild | BalloonChild | TextChild | ShapeChild;
 

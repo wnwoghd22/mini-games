@@ -4,6 +4,7 @@ use belling_cat_comic::{
     cut::{CutPlugin, VIEW},
     dissolve::DissolvePlugin,
     ink::InkPlugin,
+    mask::MaskPlugin,
     player::PlayerPlugin,
     scene_file::SceneFilePlugin,
     scenes::{SceneDriverPlugin, loader::SceneLoaderPlugin},
@@ -58,6 +59,7 @@ fn main() {
         .add_plugins((
             ArtPlugin,
             SceneFilePlugin,
+            MaskPlugin,
             DissolvePlugin,
             CutPlugin,
             BalloonPlugin,

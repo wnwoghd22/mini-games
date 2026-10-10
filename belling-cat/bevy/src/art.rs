@@ -49,15 +49,14 @@ impl Art {
                 if index >= cols * rows {
                     return None;
                 }
+                let px = cell_rect(img, *cols, *rows, index);
+                let size = Vec2::new(img.width() as f32, img.height() as f32);
                 Some(Frame {
                     image: image.clone(),
-                    rect: Some(cell_rect(img, *cols, *rows, index)),
+                    uv: Rect::from_corners(px.min / size, px.max / size),
                 })
             }
-            AtlasSource::Separate(handles) => Some(Frame {
-                image: handles.get(index)?.clone(),
-                rect: None,
-            }),
+            AtlasSource::Separate(handles) => Some(Frame::whole(handles.get(index)?.clone())),
         }
     }
 

@@ -11,8 +11,8 @@
 - [x] **5. 말풍선 글자 크기·자동 맞춤 + 대사 편집** (2026-10-10, Cut Editor 0.5.0; 런타임 exe는 실행 중인 게임 종료 후 재빌드) — 기본 글자 크기 13(컷 라벨 크기), 풍선 안에 들어가도록 자동 축소. 포맷에 balloon `font` 추가. 에디터 풍선 패널에서 본문을 직접 편집하면 `*.dialogue.txt`에 기록. (`bevy/src/balloon.rs`, `schema`, `editor/media/main.ts`, `editor/src/extension.ts`)
 - [x] **5b. 반복 트리거** (2026-10-10, Cut Editor 0.5.1; exe는 실행 중인 게임 종료 후 재빌드) — Z 상호작용은 한 번 발생한 뒤에도 다시 발동. 두 번째부터는 이미 떠 있는 말풍선을 다시 띄우거나 타이핑하지 않고(그대로 둔 채 Z 대기만), focus/path/player 등은 그대로 실행. `once` 기본값을 반복 가능으로 바꾸고 FORMAT.md 갱신. (`bevy/src/script.rs`, `scenes/mod.rs`, `schema`)
 - [x] **5c. 컷 초기 숨김** (2026-10-10, Cut Editor 0.5.2) — 말풍선처럼 컷도 `initially: "hidden"`이면 최초 `focus` 전까지 배경·테두리·자식을 그리지 않음. 한 번 보이면 유지. 에디터에서는 반투명으로 표시하고 속성 토글 제공. (`schema`, `scenes/loader.rs`, `cut.rs`, `editor`)
-- [ ] **6. 런타임 clip 마스킹** — 에디터처럼 `clip: true` 자식을 컷 다각형 안에서만 그린다. 셰이더 마스크 머티리얼. 텍스트는 마스킹하지 않음. (`bevy/src/mask.rs`, `assets/shaders/mask.wgsl`, `dissolve.rs`, `balloon.rs`)
-- [ ] **7. 글로우 → 비녯** — council의 glow 대신 대비가 강한 비녯. 크로스디졸브 비트에 맞춰 크기가 ±5% 맥동. 포맷 shape `vignette`. (`bevy/src/art.rs` 또는 `mask.rs`, `editor`)
+- [x] **6. 런타임 clip 마스킹** (2026-10-10; 폴리곤 최대 32점, 텍스트는 마스킹 안 함, 잉크 외곽선도 잘림) — 에디터처럼 `clip: true` 자식을 컷 다각형 안에서만 그린다. 셰이더 마스크 머티리얼. 텍스트는 마스킹하지 않음. (`bevy/src/mask.rs`, `assets/shaders/mask.wgsl`, `dissolve.rs`, `balloon.rs`)
+- [x] **7. 글로우 → 비녯** (2026-10-10, Cut Editor 0.5.6; 맥동은 패널 크기가 아니라 명암 타원 반지름 ±`pulse`(기본 5%) + 작은/큰 타원 프로파일의 alpha를 비트마다 섞어 두 타원 사이 띠만 전이, 전체 밝기 맥동 없음 — 사용자 결정) — council의 glow 대신 대비가 강한 비녯. 크로스디졸브 비트에 맞춰 크기가 ±5% 맥동. 포맷 shape `vignette`. (`bevy/src/art.rs` 또는 `mask.rs`, `editor`)
 
 ## 나중에
 

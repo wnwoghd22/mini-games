@@ -6,10 +6,11 @@
 
 use crate::{
     art::{Art, INK, PAPER},
-    polygon::polygon_mesh,
+    mask::MaskMaterial,
+    polygon::{clip_polyline, polygon_mesh},
     scene_file::BalloonDef,
 };
-use bevy::{prelude::*, sprite_render::AlphaMode2d, text::TextBounds};
+use bevy::{prelude::*, text::TextBounds};
 
 pub const LETTERS_PER_SECOND: f32 = 36.0;
 /// How far a tail may extend past the balloon rim.
@@ -100,6 +101,8 @@ pub struct SpeechBalloon {
     /// Body outline in balloon-local space, for the ink pass.
     pub outline: Vec<Vec2>,
     pub text_entity: Entity,
+    /// World-space polygon the balloon is clipped to (`clip: true`), also applied to the ink.
+    pub mask: Option<Vec<Vec2>>,
 }
 
 impl SpeechBalloon {
@@ -186,16 +189,18 @@ pub fn thought_bubbles(size: Vec2, towards: Vec2) -> Vec<(Vec2, f32)> {
         .collect()
 }
 
-/// Spawns a balloon from its scene definition. `text` is the dialogue body.
+/// Spawns a balloon from its scene definition. `text` is the dialogue body; `mask` is the
+/// polygon of the balloon's cut when the balloon is clipped (`clip: true`).
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_balloon(
     commands: &mut Commands,
     art: &Art,
     meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ColorMaterial>,
+    materials: &mut Assets<MaskMaterial>,
     def: &BalloonDef,
     text: &str,
     revealed: bool,
+    mask: Option<&[Vec2]>,
     extra: impl Bundle + Clone,
 ) -> Entity {
     let at = Vec2::new(def.pos[0], def.pos[1]);
@@ -206,11 +211,7 @@ pub fn spawn_balloon(
         .tail
         .map(|t| Vec2::new(t[0], t[1]))
         .filter(|t| *t != Vec2::ZERO);
-    let white = materials.add(ColorMaterial {
-        color: Color::srgb(0.98, 0.965, 0.925),
-        alpha_mode: AlphaMode2d::Opaque,
-        ..default()
-    });
+    let white = materials.add(MaskMaterial::color(Color::srgb(0.98, 0.965, 0.925), mask));
     let area = text_box(size);
     let font_px = fit_font(text, def.font.unwrap_or(DEFAULT_FONT), area);
     let text_entity = commands
@@ -242,6 +243,7 @@ pub fn spawn_balloon(
                 tail,
                 outline: body,
                 text_entity,
+                mask: mask.map(<[Vec2]>::to_vec),
             },
             extra.clone(),
         ))
@@ -311,29 +313,49 @@ pub fn draw_balloon_ink(gizmos: &mut Gizmos, balloon: &SpeechBalloon, center: Ve
             let in_gap = tail_gap.is_some_and(|g| angle_diff(a, g) < 0.28);
             let broken = balloon.kind == BalloonKind::Thought && (i / 6) % 2 == 1;
             if in_gap || broken {
-                flush(gizmos, &mut run, pass);
+                flush(gizmos, &mut run, pass, balloon.mask.as_deref());
                 continue;
             }
             let wobble = 1.0 + ((a * 7.0).sin() * 1.4 + pass as f32) / p.length().max(1.0);
             run.push(center + p * wobble);
         }
-        flush(gizmos, &mut run, pass);
+        flush(gizmos, &mut run, pass, balloon.mask.as_deref());
     }
     if let Some(tail) = balloon.tail {
         match balloon.kind {
             BalloonKind::Thought => {
                 for (c, r) in thought_bubbles(balloon.size, tail) {
-                    gizmos.circle_2d(Isometry2d::from_translation(center + c), r, INK);
+                    let ring: Vec<Vec2> = (0..=24)
+                        .map(|i| {
+                            let a = i as f32 / 24.0 * std::f32::consts::TAU;
+                            center + c + Vec2::new(a.cos(), a.sin()) * r
+                        })
+                        .collect();
+                    ink_strip(gizmos, ring, INK, balloon.mask.as_deref());
                 }
             }
             _ => {
                 let (a, b) = tail_base(balloon.size, tail);
-                gizmos.linestrip_2d(
-                    [center + a, center + tail_tip(balloon.size, tail), center + b],
+                ink_strip(
+                    gizmos,
+                    vec![center + a, center + tail_tip(balloon.size, tail), center + b],
                     INK,
+                    balloon.mask.as_deref(),
                 );
             }
         }
+    }
+}
+
+/// Draws a polyline, cut to `mask` when the balloon is clipped.
+fn ink_strip(gizmos: &mut Gizmos, points: Vec<Vec2>, color: Color, mask: Option<&[Vec2]>) {
+    match mask {
+        Some(polygon) => {
+            for run in clip_polyline(&points, polygon) {
+                gizmos.linestrip_2d(run, color);
+            }
+        }
+        None => gizmos.linestrip_2d(points, color),
     }
 }
 
@@ -342,12 +364,10 @@ fn angle_diff(a: f32, b: f32) -> f32 {
     d.min(std::f32::consts::TAU - d)
 }
 
-fn flush(gizmos: &mut Gizmos, run: &mut Vec<Vec2>, pass: i32) {
+fn flush(gizmos: &mut Gizmos, run: &mut Vec<Vec2>, pass: i32, mask: Option<&[Vec2]>) {
     if run.len() >= 2 {
-        gizmos.linestrip_2d(
-            run.drain(..),
-            INK.with_alpha(if pass == 0 { 1.0 } else { 0.4 }),
-        );
+        let points = std::mem::take(run);
+        ink_strip(gizmos, points, INK.with_alpha(if pass == 0 { 1.0 } else { 0.4 }), mask);
     } else {
         run.clear();
     }
@@ -370,6 +390,7 @@ mod tests {
             tail: None,
             outline: vec![],
             text_entity: Entity::PLACEHOLDER,
+            mask: None,
         };
         assert!(!b.finished());
         b.letters = 3.0;
