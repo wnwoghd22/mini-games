@@ -92,6 +92,26 @@ ssh -L 8189:127.0.0.1:8189 agent@172.30.1.99
   - `agent` 계정에서는 모델 캐시 등 홈 폴더가 `user`와 다르다. 일부 커스텀 노드가 처음 쓸 때 파일을 다시 받을 수 있다.
 - [ ] `scp`의 `F:/...` 경로 표기 — 미확인. 안 되면 `/F:/ComfyUI/...` 형태로 시도.
 
+## `agent` 계정으로 SSH에서 돌릴 때 (2026-10-12 실측)
+
+`comfy.cmd start`는 `agent`에서 쓸 수 없다. 대신 `F:\ComfyUI\scripts\start_fg.cmd`를 SSH 세션 안에서 전경으로 실행하고 그 세션을 열어 둔다(세션을 닫으면 서버도 끝난다). 기동은 약 15초.
+
+```sh
+# 세션 1: 서버 (열어 둔다). 로그는 F:\ComfyUI\user\comfyui-agent.log
+ssh agent@172.30.1.99 "F:\ComfyUI\scripts\start_fg.cmd"
+# 세션 2: 실행
+ssh agent@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd run F:\ComfyUI\scripts\workflows\mouse_ink.api.json"
+```
+
+`start_fg.cmd`가 `comfy.cmd start`와 다른 점과 그 이유:
+
+- `NUMBA_CACHE_DIR=F:\ComfyUI\user\numba-cache` — 코어 설치 폴더가 `agent`에게 읽기 전용이라, 이 값이 없으면 numba가 캐시 임시 파일 생성을 끝없이 재시도해 기동이 멈춘다(로그가 `No OpenGL_accelerate` 뒤에서 멈추고 CPU 한 코어만 씀).
+- `--database-url ...comfyui-agent.db` — 다른 ComfyUI(Desktop 앱)가 `comfyui.db`를 잡고 있으면 `ASSETS_STARTUP_FAILED: in_use`로 종료된다.
+- `--disable-all-custom-nodes --whitelist-custom-nodes gguf` — Qwen 워크플로에 필요한 커스텀 노드는 `LoaderGGUF`(`gguf` 팩)뿐. 다른 팩의 노드가 필요하면 화이트리스트에 폴더명을 추가한다.
+- WMI 분리 실행, `taskkill`, `tasklist`는 `agent`에서 거부된다. 프로세스 종료는 `powershell Stop-Process -Id <pid> -Force`.
+- `scp`는 `agent@172.30.1.99:F:/ComfyUI/...` 표기로 동작한다.
+- `mouse_ink.api.json`(Qwen Edit, 4스텝, 1024×1024) 첫 실행 540초. 입력은 투명 배경을 흰색으로 깐 `input/mouse-poses_white.png`.
+
 ## 알아둘 점
 
 - **F 드라이브는 HDD**라 느리다. 서버 기동과 모델 첫 로딩이 분 단위로 걸리고, F에 큰 파일을 쓰는 중에는 서버가 사실상 멈춘다.
