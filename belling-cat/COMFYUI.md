@@ -6,8 +6,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 호스트 | `user@172.30.1.99` (DESKTOP-D0GV75E, Windows 11, 같은 공유기 안에서만) |
-| 인증 | Windows 계정 비밀번호 (키 등록 안 함) |
+| 호스트 | `agent@172.30.1.99` (DESKTOP-D0GV75E, Windows 11, 같은 공유기 안에서만) |
+| 인증 | `agent` 계정의 기존 SSH 인증 그대로. `user` 계정은 암호가 없어 SSH 로그인 불가 |
+| 권한 | `agent`는 `F:\ComfyUI` 수정 가능, ComfyUI 코어(`...\ComfyUI-Installs\ComfyUI`)와 기반 Python(`...\uv\python\cpython-3.12.11-...`)은 읽기·실행만 |
 | SSH 기본 셸 | `cmd.exe` |
 | GPU | RTX 4060 Ti 8GB, RAM 32GB |
 | ComfyUI | `F:\ComfyUI` (venv·모델·입출력), torch 2.12.1+cu130 |
@@ -23,15 +24,15 @@
 
 ```sh
 # 서버 켜기 (이미 떠 있으면 그대로 알려줌). 콜드 스타트는 1~2분.
-ssh user@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd start"
+ssh agent@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd start"
 
 # 상태 / 로그 / 끄기
-ssh user@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd status"
-ssh user@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd log 60"
-ssh user@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd stop"
+ssh agent@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd status"
+ssh agent@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd log 60"
+ssh agent@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd stop"
 
 # 워크플로 실행: 끝날 때까지 기다렸다가 출력 파일 경로를 찍는다
-ssh user@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd run F:\ComfyUI\scripts\workflows\sdxl_txt2img.api.json"
+ssh agent@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd run F:\ComfyUI\scripts\workflows\sdxl_txt2img.api.json"
 ```
 
 `run`의 종료 코드: 0 성공, 1 실행 중 오류(노드·예외 메시지 출력), 2 워크플로 거부(없는 모델·잘못된 입력), 3 시간 초과(기본 3600초, `-TimeoutSec`로 변경), 4 서버 미응답.
@@ -43,19 +44,19 @@ ssh user@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd run F:\ComfyUI\scripts\workfl
 1. 워크플로를 **API 포맷** JSON으로 준비한다. ComfyUI 웹 UI에서 저장한 일반 워크플로(`nodes`/`links`가 있는 파일)는 거부된다. 웹 UI의 `Workflow > Export (API)`로 내보내거나, 아래 예제를 고쳐 쓴다.
 2. GPU PC로 올린다.
    ```sh
-   scp my.api.json user@172.30.1.99:F:/ComfyUI/scripts/workflows/
+   scp my.api.json agent@172.30.1.99:F:/ComfyUI/scripts/workflows/
    ```
 3. 입력 이미지가 필요하면 `F:/ComfyUI/input/`에 올리고 `LoadImage`의 `image`에 파일명만 적는다.
 4. 실행하고 결과를 받아온다.
    ```sh
-   ssh user@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd run F:\ComfyUI\scripts\workflows\my.api.json"
-   scp user@172.30.1.99:F:/ComfyUI/output/<찍힌 파일명>.png bevy/assets/art/
+   ssh agent@172.30.1.99 "F:\ComfyUI\scripts\comfy.cmd run F:\ComfyUI\scripts\workflows\my.api.json"
+   scp agent@172.30.1.99:F:/ComfyUI/output/<찍힌 파일명>.png bevy/assets/art/
    ```
 
 웹 UI로 직접 만지고 싶으면 포트 포워딩을 걸고 브라우저에서 `http://127.0.0.1:8189`를 연다.
 
 ```sh
-ssh -L 8189:127.0.0.1:8189 user@172.30.1.99
+ssh -L 8189:127.0.0.1:8189 agent@172.30.1.99
 ```
 
 포워딩이 걸린 동안에는 작업용 PC에서 `POST http://127.0.0.1:8189/prompt`, `GET /history/<prompt_id>`로 API를 직접 불러도 된다.
@@ -86,7 +87,9 @@ ssh -L 8189:127.0.0.1:8189 user@172.30.1.99
 - [x] `comfy start` / `status` — GPU PC 로컬 셸에서 확인
 - [x] `sdxl_txt2img.api.json` — 이미지 생성 확인. 첫 실행 198초(대부분 모델 로딩), 이후는 더 빠름
 - [x] `qwen_edit.api.json` — 1024×1024 출력 확인. 첫 실행 667초(모델 로딩 + 17GB 모델을 8GB VRAM에 부분 적재), 샘플링 자체는 4스텝에 약 40초
-- [ ] **SSH 경유 실행** — 비밀번호 인증이라 자동 확인을 못 했다. 작업용 PC에서 위 `start` → 접속 종료 → `status` 순서로 한 번 확인할 것. 특히 "접속을 끊어도 서버 유지"는 SSH로만 확인된다.
+- [ ] **SSH 경유 실행(`agent` 계정)** — 미확인. 위 검증은 전부 `user` 계정으로 한 것이다. 작업용 PC에서 `start` → 접속 종료 → `status` 순서로 한 번 확인할 것.
+  - `start`가 "Detached start was refused" 경고를 내면 `agent`에게 분리 실행이 허용되지 않은 것이다. 이때 서버는 그 SSH 세션이 열려 있는 동안만 산다.
+  - `agent` 계정에서는 모델 캐시 등 홈 폴더가 `user`와 다르다. 일부 커스텀 노드가 처음 쓸 때 파일을 다시 받을 수 있다.
 - [ ] `scp`의 `F:/...` 경로 표기 — 미확인. 안 되면 `/F:/ComfyUI/...` 형태로 시도.
 
 ## 알아둘 점
