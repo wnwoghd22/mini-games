@@ -16,8 +16,10 @@ pub const PAPER: Color = Color::srgb(0.91, 0.875, 0.80);
 pub const INK: Color = Color::srgb(0.12, 0.105, 0.09);
 pub const DARK_PAPER: Color = Color::srgb(0.16, 0.14, 0.12);
 
-/// Optional drawn candle strip: 3 equal cells side by side, RGBA, flame only differs.
-pub const CANDLE_ART: Option<&str> = None;
+/// Optional drawn candle strip: `CANDLE_CELLS` equal cells side by side, RGBA, flame only differs.
+/// Built by `tools/make_sprites.py`.
+pub const CANDLE_ART: Option<&str> = Some("art/candle.png");
+const CANDLE_CELLS: usize = 2;
 /// Optional drawn table: a single RGBA image.
 pub const TABLE_ART: Option<&str> = None;
 
@@ -117,12 +119,29 @@ fn load_art(mut commands: Commands, server: Res<AssetServer>, mut images: ResMut
             rows: 1,
         },
     );
+    // Built by tools/make_sprites.py. hero: 0-1 idle, 2-5 gallop, 6 crouch, 7 airborne.
+    atlases.insert(
+        "hero",
+        AtlasSource::Sheet {
+            image: server.load("art/hero.png"),
+            cols: 4,
+            rows: 2,
+        },
+    );
+    atlases.insert(
+        "elder",
+        AtlasSource::Sheet {
+            image: server.load("art/elder.png"),
+            cols: 1,
+            rows: 1,
+        },
+    );
     atlases.insert(
         "candle",
         match CANDLE_ART {
             Some(path) => AtlasSource::Sheet {
                 image: server.load(path),
-                cols: 3,
+                cols: CANDLE_CELLS,
                 rows: 1,
             },
             None => AtlasSource::Separate(placeholder_candle().into_iter().map(|i| images.add(i)).collect()),

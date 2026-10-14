@@ -11,7 +11,9 @@ export interface Atlas {
 export const ATLASES: Record<string, Atlas> = {
   mouse: { file: "art/mouse-poses.png", cols: 2, rows: 2 },
   walk: { file: "art/mouse-walk-poses.png", cols: 2, rows: 1 },
-  candle: { cols: 3, rows: 1 },
+  hero: { file: "art/hero.png", cols: 4, rows: 2 },
+  elder: { file: "art/elder.png", cols: 1, rows: 1 },
+  candle: { file: "art/candle.png", cols: 2, rows: 1 },
   table: { cols: 1, rows: 1 },
 };
 

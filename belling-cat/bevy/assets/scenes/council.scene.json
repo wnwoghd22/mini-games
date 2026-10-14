@@ -19,8 +19,8 @@
         { "type": "shape", "id": "glow", "pos": [-169, -193], "z": 0, "shape": "vignette", "size": [932, 356], "color": "#120f0c", "alpha": 0.67, "pulse": 0.1 },
         { "type": "shape", "id": "floor_line", "pos": [-165, -285], "z": 0.5, "shape": "rect", "size": [530, 2], "color": "ink", "alpha": 0.6 },
         { "type": "sprite", "id": "table", "pos": [-153, -238], "z": 1, "size": [180, 90], "frames": ["table:0"], "mode": "hold" },
-        { "type": "sprite", "id": "candle", "pos": [-147, -153], "z": 2, "size": [40, 80], "frames": ["candle:0", "candle:1", "candle:2"] },
-        { "type": "sprite", "id": "elder", "pos": [-310, -224], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "sprite", "id": "candle", "pos": [-147, -153], "z": 2, "size": [40, 80], "frames": ["candle:0", "candle:1"] },
+        { "type": "sprite", "id": "elder", "pos": [-310, -224], "z": 2, "size": [142, 142], "frames": ["elder:0"] },
         { "type": "sprite", "id": "scout", "pos": [8, -224], "z": 2, "size": [142, 142], "frames": ["mouse:0", "mouse:1"], "flip": true, "tint": "#9e9485" }
       ]
     },
@@ -35,7 +35,7 @@
       ],
       "fill": "dark",
       "children": [
-        { "type": "sprite", "id": "elder_big", "pos": [-635, 74], "z": 2, "size": [260, 260], "frames": ["mouse:0", "mouse:1"], "tint": "#9e9485" },
+        { "type": "sprite", "id": "elder_big", "pos": [-635, 74], "z": 2, "size": [260, 260], "frames": ["elder:0"] },
         { "type": "balloon", "id": "b_elder_1", "pos": [-403, 215], "size": [265, 83], "tail": [-198, -190], "kind": "speech", "line": "elder.1", "clip": false },
         { "type": "balloon", "id": "b_elder_2", "pos": [-297, 58], "size": [262, 117], "tail": [-252, 72], "kind": "speech", "line": "elder.2", "clip": false }
       ],
@@ -94,7 +94,7 @@
     "cut": "council",
     "x": -510,
     "size": [142, 142],
-    "frames": { "idle": "mouse:0", "walk": ["walk:0", "walk:1"], "jump": "mouse:3" },
+    "frames": { "idle": "hero:0", "walk": ["hero:2", "hero:3", "hero:4", "hero:5"], "jump": "hero:7" },
     "clip": true
   },
   "flow": [
