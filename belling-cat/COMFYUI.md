@@ -61,6 +61,8 @@ ssh -L 8189:127.0.0.1:8189 agent@172.30.1.99
 
 포워딩이 걸린 동안에는 작업용 PC에서 `POST http://127.0.0.1:8189/prompt`, `GET /history/<prompt_id>`로 API를 직접 불러도 된다.
 
+웹 UI의 워크플로 목록에 있는 `bc_mouse_sketch`가 생쥐 스케치 시작점이다: Nova Animal XL → LoRA A(스케치) → LoRA B(겹쳐 쓰기용, 강도 0이면 꺼짐) → 1024², 4장, 시드 고정. 자세별 태그와 LoRA 트리거는 캔버스의 Note 노드에 적혀 있고, 출력은 `output/bc_ui/`에 쌓인다.
+
 ## 들어 있는 모델
 
 `F:\ComfyUI\models` 아래. 이 외의 모델은 없다(예전 워크플로가 쓰던 dvine, Wan, IP-Adapter 등은 전부 없음).
@@ -74,6 +76,29 @@ ssh -L 8189:127.0.0.1:8189 agent@172.30.1.99
 | `Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors` | `loras` | Qwen 4스텝 LoRA |
 
 모델을 추가하려면 해당 폴더에 파일을 넣으면 된다(서버 재시작 불필요, 다음 실행 때 인식).
+
+### 생쥐 스케치용 (2026-10-13 추가)
+
+| 파일 | 폴더 | 용도 |
+|---|---|---|
+| `novaAnimalXL_ilV120.safetensors` | `checkpoints` | Nova Animal XL (Illustrious). 생쥐 스케치 기준 체크포인트 |
+| `illustriousPencilXL_v320.safetensors` | `checkpoints` | illustrious pencil-XL. 배경에 색이 끼고 선이 파랗게 나와 보류 |
+
+LoRA는 전부 `loras` 폴더. 트리거는 긍정 프롬프트 맨 앞에 둔다. "상업"은 Civitai 표기상 생성 이미지의 상업 이용 허용 여부.
+
+| 파일 | 계열 | 트리거 | 상업 | 첫인상 (Nova, 강도 1.0) |
+|---|---|---|---|---|
+| `rough_sketch_xl_v2.safetensors` | SDXL | `rough sketch` | O | 기준. 깔끔한 연필 선, 선 수는 적음 |
+| `hatching01_il.safetensors` | Illustrious | `monochrome, hatching` | O | 가장 가는 선, 흰 바탕. 서명 상자 같은 게 붙음 |
+| `pen_on_paper_il.safetensors` | Illustrious | `monochrome, greyscale, traditional media, sketch` | O | 부드러운 연필 음영, 풀 포기가 붙음 |
+| `chickenscratch_xl.safetensors` | SDXL | `chickenscratch, a chickenscratch style pencil drawing` | O | 짧은 선을 겹친 음영, 바탕이 회색 |
+| `fishie_sketch_il.safetensors` | Illustrious | `greyscale, sketch, graphite (medium)` | O | 털 결이 거친 흑연, 바탕이 어두운 회색 |
+| `naive_storybook_il.safetensors` | Illustrious | `ArsMJStyle, AzureSketch` | O | 판화풍 굵은 해칭, 땅이 그려짐 |
+| `storybook_animals_xl.safetensors` | SDXL | `digital storybook illustration, textured brushwork` | O | 부드러운 음영의 동화책풍 |
+| `Rough_Sketch_style-000008.safetensors` | Illustrious | 없음 | O | 굵은 잉크 외곽선, 근육질 체형 |
+| `Sketch_Art_-_Rough_lines_and_lineart.safetensors` | Illustrious | `skeart` (1.6 이상) | **X** | 가는 연필 해칭이 많음. 종이가 회색 |
+
+Civitai는 로그인이 필요한 파일에도 HTTP 200으로 HTML을 돌려준다. `curl -r 0-0`의 응답이 206인 것만 실제로 받아진다.
 
 ## 예제 워크플로
 
