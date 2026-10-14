@@ -106,7 +106,7 @@ def elder():
 def candle():
     """Candle + holder with the generated flame on its wick; frame 1 is the flame mirrored."""
     base = cutout(os.path.join(SRC, "bc4/candle_base_00001_.png"))
-    flames = cutout(os.path.join(SRC, "bc4/candle_flames_00001_.png"), fill=np.array([255, 226, 150.0]), single=False)
+    flames = cutout(os.path.join(SRC, "bc4/candle_flames_00001_.png"), single=False)
     flame = flames[:, : flames.shape[1] // 2]  # the left of the two flames
     fx0, fy0, fx1, fy1 = bbox(flame)
     flame = flame[fy0:fy1, fx0:fx1]
