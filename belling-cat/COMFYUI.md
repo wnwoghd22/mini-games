@@ -106,6 +106,42 @@ Civitai는 로그인이 필요한 파일에도 HTTP 200으로 HTML을 돌려준�
 
 - `sdxl_txt2img.api.json` — SDXL 1024×1024, 20스텝. 프롬프트는 노드 `6`(긍정)·`7`(부정)의 `text`, 시드는 노드 `3`의 `seed`, 파일명 접두어는 노드 `9`의 `filename_prefix`.
 - `qwen_edit.api.json` — 입력 이미지 1장 + 지시문으로 편집, 4스텝. 입력은 노드 `21`의 `image`, 지시문은 노드 `19`의 `prompt`.
+- `mouse_sketch_sdxl.api.json` — 아래 "실사풍 연필 그림" 기준 워크플로.
+
+## 실사풍 연필 그림 (2026-10-15 기준 스타일)
+
+`bevy/assets/temp/mouse_sketch_sdxl_sheet.png`의 실사풍 생쥐와 bc8 촛불·테이블이 이 조합으로 나왔다. 크림색 종이에 흑연/목탄, 모노톤.
+
+**모델:** `sd_xl_base_1.0.safetensors` 단독. LoRA 없음, VAE는 체크포인트 내장. Nova Animal XL이나 스케치 LoRA는 쓰지 않았다.
+
+**설정:** 1152×896, 4장, 시드 `20261012`, `dpmpp_2m` / `karras`, 28스텝, CFG 6.5, denoise 1.0.
+
+**그래프:** `CheckpointLoaderSimple(4)` → `CLIPTextEncode` 긍정(6)·부정(7) → `KSampler(3)` ← `EmptyLatentImage(5)` → `VAEDecode(8)` → `SaveImage(9)`.
+
+**긍정 프롬프트 (생쥐, 원문 그대로):**
+
+```
+rough charcoal and graphite life drawing of a single small real field mouse, naturalistic rodent anatomy, on all fours, strict side view facing right, short legs, small paws, long thin tail, round ears, the only human touch is a worried thoughtful expression in the eye and brow. loose gestural sketch, broken searching lines, smudged soft edges that fade into the paper, no clean outline, scribbled hatching, visible construction marks, unfinished atelier study, monochrome warm grey on cream drawing paper, full body, centered, plain empty background
+```
+
+**부정 프롬프트 (생쥐):**
+
+```
+bold outline, thick contour, clean lineart, ink, vector, sticker, cartoon, anime, cute mascot, standing upright, humanoid body, long limbs, clothes, color, photo, 3d render, text, signature, watermark, frame, border, multiple animals
+```
+
+**다른 대상에 쓰기 (bc8):** 긍정 프롬프트는 `rough charcoal and graphite life drawing of {대상}. {스타일}` 형태다. `{스타일}`은 위 프롬프트에서 `loose gestural sketch`부터 끝까지다. 부정 프롬프트는 생쥐 전용 항목(cute mascot, standing upright, humanoid body, long limbs, clothes)을 빼고, `multiple animals`를 `multiple objects`로 바꿨다. 설정과 시드는 생쥐와 같다.
+
+| 접두어 | `{대상}` |
+|---|---|
+| `bc8/candle` | `a lit candle, seen from the side` |
+| `bc8/table_round` | `a round table, seen from the side` |
+| `bc8/table_side` | `a table seen exactly from the side, so the shape of the tabletop cannot be seen` |
+
+**알아둘 점**
+- 결과물에 종이 바탕과 바닥 그림자가 함께 그려진다.
+- 매끈한 물체는 생쥐보다 선이 거칠게 나온다. 스타일 문구가 "loose gestural sketch, unfinished"이기 때문이다.
+- "완전히 옆에서 본" 구도는 프롬프트로 잘 지켜지지 않았다. 테이블 8장 모두 상판이 보였다.
 
 ## 검증 상태 (2026-10-12)
 
