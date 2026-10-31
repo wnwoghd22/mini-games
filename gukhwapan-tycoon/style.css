@@ -1,0 +1,275 @@
+:root {
+    --bg: #1b1b1b;
+    --panel: #2a2a2a;
+    --text: #eee;
+    --muted: #999;
+    --cook: #e0413a;
+    --warm: #4a7bd0;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+}
+
+.app {
+    width: min(100vw - 32px, 640px);
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.controls {
+    display: flex;
+    gap: 8px;
+}
+
+.btn {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 16px;
+    color: #fff;
+    background: var(--panel);
+    cursor: pointer;
+}
+
+.btn[data-mode="cook"] {
+    background: var(--cook);
+}
+
+.btn[data-mode="warm"] {
+    background: var(--warm);
+}
+
+.tool.selected {
+    outline: 2px solid var(--text);
+    outline-offset: -2px;
+    background: #444;
+}
+
+.board-wrap {
+    position: relative;
+}
+
+#board {
+    width: 100%;
+    /* 위 정사각형: 불판, 아래 띠: 예비 칸 */
+    aspect-ratio: 5 / 6;
+    display: block;
+    /* 스와이프가 페이지 스크롤로 먹히지 않게 */
+    touch-action: none;
+    user-select: none;
+}
+
+.toast {
+    position: absolute;
+    left: 50%;
+    top: 12px;
+    transform: translateX(-50%);
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.75);
+    font-size: 15px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.toast.show {
+    opacity: 1;
+}
+
+.hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.hud {
+    margin-left: auto;
+    align-self: center;
+    font-size: 16px;
+    white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.clock {
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.clock.closed {
+    color: var(--cook);
+}
+
+/* 손님 자리 3칸 */
+.counters {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.counter {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 132px;
+    cursor: pointer;
+    outline: 2px solid transparent;
+    outline-offset: -2px;
+}
+
+.counter.target {
+    outline-color: var(--text);
+}
+
+.counter.vacant {
+    cursor: default;
+    justify-content: center;
+    align-items: center;
+}
+
+.counter .empty {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.counter-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.order {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+    align-content: flex-start;
+}
+
+.chip {
+    border: none;
+    color: var(--text);
+    font-size: 14px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: #444;
+    cursor: pointer;
+}
+
+.chip.met {
+    background: #2f6b3d;
+}
+
+.chip.extra {
+    background: #4a4a6a;
+}
+
+.patience {
+    height: 6px;
+    border-radius: 3px;
+    background: #444;
+    overflow: hidden;
+}
+
+.patience-bar {
+    height: 100%;
+    width: 0;
+    background: var(--text);
+}
+
+.patience-bar.low {
+    background: var(--cook);
+}
+
+.serve {
+    background: #2f6b3d;
+    padding: 6px 8px;
+    font-size: 14px;
+}
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.overlay[hidden] {
+    display: none;
+}
+
+.card {
+    width: min(100%, 400px);
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.card h2,
+.card h3 {
+    margin: 0;
+}
+
+.card h3 {
+    font-size: 15px;
+    color: var(--muted);
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+    margin: 0;
+}
+
+.stats dd {
+    margin: 0;
+    text-align: right;
+}
+
+.shop {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.shop .btn {
+    background: #3a3a3a;
+    display: flex;
+    justify-content: space-between;
+}
+
+.shop .btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.next {
+    background: #2f6b3d;
+}

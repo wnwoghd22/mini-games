@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>국화빵 타이쿤</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app">
+        <div class="controls">
+            <button id="btn-mode" class="btn" data-mode="warm">보온 중</button>
+            <div id="hud" class="hud"><span id="clock" class="clock"></span><span id="money"></span></div>
+        </div>
+
+        <!-- 손님 자리 3칸. 칸을 탭해 고른 손님에게 빵이 담긴다 -->
+        <section id="counters" class="counters"></section>
+
+        <div id="toolbar" class="controls"></div>
+        <div class="board-wrap">
+            <canvas id="board"></canvas>
+            <div id="toast" class="toast"></div>
+        </div>
+
+        <p class="hint">도구를 고르고 칸을 탭하거나 문지르기 · 위로 스와이프: 뒤집기 · 아래로 스와이프: 예비 칸으로 꺼내기 / 불량 버리기 ·
+            손님 칸 탭(Q/W/E): 담을 손님 고르기 · 다 익은 빵이나 예비 칸 빵 탭: 고른 손님 쟁반에 담기 ·
+            주문 칩 탭: 그 빵 하나 예비 칸으로 · Enter: 고른 손님에게 건네기</p>
+    </div>
+
+    <!-- 하루 결산 + 상점 -->
+    <div id="summary" class="overlay" hidden>
+        <div class="card">
+            <h2 id="sum-title"></h2>
+            <dl id="sum-stats" class="stats"></dl>
+            <h3>상점</h3>
+            <div id="shop" class="shop"></div>
+            <button id="btn-next" class="btn next">다음 날 시작</button>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/layout.js"></script>
+    <script src="js/sim.js"></script>
+    <script src="js/customers.js"></script>
+    <script src="js/day.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
